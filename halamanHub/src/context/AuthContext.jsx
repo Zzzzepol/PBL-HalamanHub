@@ -1,7 +1,4 @@
-// ============================================================
-// HalamanHub — Auth Context
-// Manages JWT token + user state, persisted in localStorage.
-// ============================================================
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi, ApiError } from '../api/client';
 

@@ -1,6 +1,4 @@
-// ============================================================
-// HalamanHub — Specialized SVG Widgets (Tailwind CSS)
-// ============================================================
+
 import React from 'react';
 
 /* ── Water Tank Level Indicator ── */

@@ -1,6 +1,4 @@
-// ============================================================
-// HalamanHub — Chart Components (Chart.js via react-chartjs-2)
-// ============================================================
+
 import React from 'react';
 import {
   Chart as ChartJS,

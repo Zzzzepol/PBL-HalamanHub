@@ -1,7 +1,6 @@
-// ============================================================
 // HalamanHub Server — Database seed script
 // Run with: npm run seed  (from inside the server/ folder)
-// ============================================================
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const connectDB = require('../config/db');

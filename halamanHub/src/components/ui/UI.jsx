@@ -1,6 +1,5 @@
-// ============================================================
-// HalamanHub — Shared UI Components (Tailwind CSS)
-// ============================================================
+
+// HalamanHub — shared UI Components
 import React from 'react';
 
 /* ── Badge ── */

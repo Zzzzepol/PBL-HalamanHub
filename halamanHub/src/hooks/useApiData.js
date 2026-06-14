@@ -1,8 +1,4 @@
-// ============================================================
-// HalamanHub — useApiData hook
-// Fetches data from the backend using the current auth token,
-// with loading/error state and a refetch helper.
-// ============================================================
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 

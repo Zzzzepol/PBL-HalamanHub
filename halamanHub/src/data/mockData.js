@@ -1,15 +1,3 @@
-// ============================================================
-// HalamanHub — Chart history (mock)
-// All other data (sensors, products, orders, users, irrigation,
-// alerts, settings) is now served from MongoDB via /api/* routes
-// — see server/models and server/routes.
-//
-// This file retains only the historical chart series for
-// Analytics/Rainwater pages, since time-series history isn't
-// yet modeled as its own collection. Replace with a real
-// SensorReading time-series collection + aggregation route
-// for production use.
-// ============================================================
 
 export const chartData = {
   moistureTrend: {
