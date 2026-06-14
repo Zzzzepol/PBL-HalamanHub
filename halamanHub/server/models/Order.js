@@ -1,7 +1,4 @@
-// ============================================================
-// HalamanHub Server — Order model
-// Status flow: pending → confirmed → processing → ready → completed
-//              pending → cancelled
+
 
 const mongoose = require('mongoose');
 

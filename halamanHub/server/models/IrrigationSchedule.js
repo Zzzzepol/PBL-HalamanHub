@@ -1,6 +1,4 @@
-// ============================================================
-// HalamanHub Server — Irrigation Schedule model
-// ============================================================
+
 const mongoose = require('mongoose');
 
 const irrigationScheduleSchema = new mongoose.Schema(

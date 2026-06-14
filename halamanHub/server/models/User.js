@@ -1,7 +1,4 @@
-// ============================================================
-// HalamanHub Server — User model
-// Roles: admin, staff only (no customer accounts)
-// ============================================================
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
