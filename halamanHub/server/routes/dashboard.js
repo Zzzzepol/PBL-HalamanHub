@@ -1,8 +1,4 @@
-// ============================================================
-// HalamanHub Server — Dashboard summary route
-// Aggregates live data from MongoDB collections for the
-// dashboard overview cards.
-// ============================================================
+
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const Sensor = require('../models/Sensor');

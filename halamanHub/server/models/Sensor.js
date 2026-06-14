@@ -1,7 +1,4 @@
-// ============================================================
-// HalamanHub Server — Sensor model
-// Represents a single ESP32-connected sensor reading
-// ============================================================
+
 const mongoose = require('mongoose');
 
 const sensorSchema = new mongoose.Schema(

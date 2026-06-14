@@ -1,6 +1,4 @@
-// ============================================================
-// HalamanHub Server — Alert / notification routes
-// ============================================================
+
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const Alert = require('../models/Alert');

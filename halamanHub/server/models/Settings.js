@@ -1,7 +1,4 @@
-// ============================================================
-// HalamanHub Server — Settings model (singleton document)
-// Stores farm configuration, thresholds, and notification prefs.
-// ============================================================
+
 const mongoose = require('mongoose');
 
 const settingsSchema = new mongoose.Schema(
