@@ -93,3 +93,11 @@ To build for production:
 npm run build
 ```
 
+
+**For NEw PC dont neeed to seed:**
+git clone your-repo
+cd halamanHub
+npm install --legacy-peer-deps
+cd server && npm install && cd ..
+# create server/.env with your Atlas URI and JWT_SECRET
+npm run dev
