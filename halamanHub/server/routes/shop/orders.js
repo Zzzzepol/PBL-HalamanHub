@@ -11,6 +11,9 @@ const { sendOrderConfirmation } = require('../../utils/email');
 const router = express.Router();
 router.use(requireCustomer);
 
+// Self-healing check: flips a stale unpaid order to 'failed' once its
+// payment window has passed. Called whenever orders are read, so an order
+// gets cleaned up even if the customer closed the pending-payment tab.
 async function autoExpireIfStale(order) {
   const isExpired = order.payment === 'unpaid'
     && order.paymentExpiresAt
@@ -35,6 +38,7 @@ router.get('/', async (req, res) => {
   try {
     const orders = await ShopOrder.find({ customerId: req.customer.id })
       .sort({ orderDate: -1 });
+
     const checked = await Promise.all(orders.map(autoExpireIfStale));
     res.json(checked);
   } catch (err) {
@@ -77,24 +81,22 @@ router.post('/', async (req, res) => {
 
     const order = await ShopOrder.create({
       orderNumber,
-      customerId:      req.customer.id,
+      customerId:    req.customer.id,
       customer,
       customerEmail,
-      customerPhone:   customerPhone || '',
+      customerPhone: customerPhone || '',
       product,
-      items:           items || [],
-      quantity:        quantity || 1,
+      items:         items || [],
+      quantity:      quantity || 1,
       amount,
-      shippingFee:     shippingFee || 0,
-      note:            note || '',
+      shippingFee:   shippingFee || 0,
+      note:          note || '',
       fulfillmentType: fulfillmentType || 'delivery',
-      
-      // Handles pickupDate: converts to Date if pickup, otherwise stores null
-      pickupDate:      fulfillmentType === 'pickup' && pickupDate ? new Date(pickupDate) : null,
-      
-      payment:             payment || 'unpaid',
+      pickupDate:    pickupDate ? new Date(pickupDate) : null,
+      payment:       payment || 'unpaid',
       paymongoLinkId:      paymongoLinkId || '',
       paymongoCheckoutUrl: paymongoCheckoutUrl || '',
+      paymentExpiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15-minute payment window
       statusHistory: [{ status: 'pending', note: 'Order placed', changedBy: customer }],
     });
 
@@ -104,6 +106,68 @@ router.post('/', async (req, res) => {
     res.status(201).json(order);
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+});
+
+// PATCH /api/shop/orders/:id/expire
+// Called by the frontend when it notices the payment window (paymentExpiresAt)
+// has passed and the order is still unpaid — PayMongo doesn't send a webhook
+// for this case, so we mark it ourselves.
+router.patch('/:id/expire', async (req, res) => {
+  try {
+    const order = await ShopOrder.findOne({
+      _id:        req.params.id,
+      customerId: req.customer.id,
+    });
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    const isExpired = order.paymentExpiresAt && new Date() > new Date(order.paymentExpiresAt);
+
+    if (order.payment === 'unpaid' && isExpired) {
+      order.payment = 'failed';
+      order.status = 'cancelled';
+      order.statusHistory.push({
+        status: 'cancelled',
+        note: 'Payment window expired',
+        changedAt: new Date(),
+        changedBy: 'system',
+      });
+      await order.save();
+    }
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/shop/orders/:id/abandon
+// Called when the customer leaves the pending-payment screen (refresh, back
+// button, tab close, or manually clicking Cancel) before completing payment.
+// Cancels immediately — doesn't wait for the payment window to run out.
+router.patch('/:id/abandon', async (req, res) => {
+  try {
+    const order = await ShopOrder.findOne({
+      _id:        req.params.id,
+      customerId: req.customer.id,
+    });
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    if (order.payment === 'unpaid') {
+      order.payment = 'failed';
+      order.status = 'cancelled';
+      order.statusHistory.push({
+        status: 'cancelled',
+        note: 'Order abandoned before payment was completed',
+        changedAt: new Date(),
+        changedBy: 'system',
+      });
+      await order.save();
+    }
+
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

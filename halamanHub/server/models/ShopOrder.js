@@ -1,7 +1,4 @@
-// ============================================================
-// HalamanHub Server — ShopOrder model
-// Customer-facing orders with PayMongo payment tracking
-// ============================================================
+
 const mongoose = require('mongoose');
 
 const itemSchema = new mongoose.Schema({
@@ -41,11 +38,11 @@ const shopOrderSchema = new mongoose.Schema(
       enum: ['pending', 'confirmed', 'processing', 'ready', 'completed', 'cancelled'],
       default: 'pending',
     },
-    payment: {
-      type: String,
-      enum: ['unpaid', 'paid', 'refunded'],
-      default: 'unpaid',
-    },
+   payment: {
+  type: String,
+  enum: ['unpaid', 'paid', 'refunded', 'failed'],
+  default: 'unpaid',
+},
     // PayMongo fields
     paymongoLinkId:      { type: String, default: '' },
     paymongoCheckoutUrl: { type: String, default: '' },

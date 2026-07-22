@@ -50,6 +50,8 @@ export const shopOrdersApi = {
   getAll:    (token)        => request('/shop/orders',      { token }),
   getOne:    (id, token)    => request(`/shop/orders/${id}`,{ token }),
   reorder:   (id, token)    => request(`/shop/orders/${id}/reorder`, { method: 'POST', token }),
+  expire:    (id, token)    => request(`/shop/orders/${id}/expire`, { method: 'PATCH', token }),
+  abandon:   (id, token)    => request(`/shop/orders/${id}/abandon`, { method: 'PATCH', token }),
 };
 
 // PayMongo

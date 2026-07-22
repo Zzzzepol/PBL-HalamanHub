@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { Button, Spinner, Badge, orderStatusBadge } from '../components/ui/UI';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
+
 const OrderPendingPage = () => {
   const { id } = useParams();
   const { token } = useAuth();
@@ -15,8 +17,11 @@ const OrderPendingPage = () => {
   const [loading, setLoading] = useState(true);
   const [reordering, setReordering] = useState(false);
   const [reorderError, setReorderError] = useState('');
+  const [cancelling, setCancelling] = useState(false);
   const expireCheckedRef = useRef(false);
+  const orderRef = useRef(null); // always holds the latest order, for use in cleanup/unload handlers
 
+  // Poll every 5 seconds to check if payment went through
   useEffect(() => {
     if (!id || !token) { setLoading(false); return; }
 
@@ -24,8 +29,11 @@ const OrderPendingPage = () => {
       try {
         const data = await shopOrdersApi.getOne(id, token);
         setOrder(data);
+        orderRef.current = data;
         setLoading(false);
 
+        // If still unpaid and past its payment window, ask the server
+        // to mark it failed (PayMongo doesn't send a webhook for this case).
         const isExpired = data.payment === 'unpaid'
           && data.paymentExpiresAt
           && new Date() > new Date(data.paymentExpiresAt);
@@ -35,6 +43,7 @@ const OrderPendingPage = () => {
           try {
             const updated = await shopOrdersApi.expire(id, token);
             setOrder(updated);
+            orderRef.current = updated;
           } catch {
             expireCheckedRef.current = false;
           }
@@ -48,6 +57,56 @@ const OrderPendingPage = () => {
     const interval = setInterval(check, 5000);
     return () => clearInterval(interval);
   }, [id, token]);
+
+  // Detect the customer leaving before paying — refresh, tab close, or
+  // navigating elsewhere in the app — and cancel the order immediately.
+  useEffect(() => {
+    if (!id || !token) return;
+
+    const abandonUrl = `${API_BASE}/shop/orders/${id}/abandon`;
+
+    // Fires on actual browser refresh / tab close. `keepalive: true` lets
+    // the request finish even as the page unloads (unlike a normal fetch).
+    const handleBeforeUnload = () => {
+      if (orderRef.current?.payment === 'unpaid') {
+        fetch(abandonUrl, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      // Fires when the customer navigates to another page inside the app
+      // (back button, clicking a link) without paying.
+      if (orderRef.current?.payment === 'unpaid') {
+        shopOrdersApi.abandon(id, token).catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, token]);
+
+  const handleCancel = async () => {
+    if (!window.confirm('Cancel this order? This cannot be undone.')) return;
+    setCancelling(true);
+    try {
+      const updated = await shopOrdersApi.abandon(id, token);
+      setOrder(updated);
+      orderRef.current = updated;
+    } catch {
+      // ignore — order stays as-is, they can try again
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const handleReorder = async () => {
     setReordering(true);
@@ -164,9 +223,14 @@ const OrderPendingPage = () => {
               <Button variant="primary" icon="ti-package">Track your order</Button>
             </Link>
           ) : (
-            <Link to="/account/orders">
-              <Button variant="outline" icon="ti-package">View my orders</Button>
-            </Link>
+            <>
+              <Link to="/account/orders">
+                <Button variant="outline" icon="ti-package">View my orders</Button>
+              </Link>
+              <Button variant="danger" icon="ti-x" onClick={handleCancel} disabled={cancelling}>
+                {cancelling ? 'Cancelling…' : 'Cancel order'}
+              </Button>
+            </>
           )}
           <Link to="/shop">
             <Button variant="outline" icon="ti-shopping-bag">Continue shopping</Button>
