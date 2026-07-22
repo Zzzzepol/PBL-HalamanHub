@@ -12,6 +12,7 @@ const navItems = [
   { section: 'Commerce' },
   { path: '/products',label: 'Products',icon: 'ti-package'},
   { path: '/orders',label: 'Orders', icon: 'ti-shopping-cart', badge: 4 },
+  { path: '/schedule',label: 'Pickup schedule', icon: 'ti-calendar'},
   { section: 'Admin' },
   { path: '/users',label: 'Users',icon: 'ti-users'},
   { path: '/reports',label: 'Reports', icon: 'ti-file-analytics' },

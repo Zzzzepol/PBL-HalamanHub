@@ -6,13 +6,29 @@ import { ordersApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 
 // Status flow + labels
-const STATUS_FLOW = {
-  pending:    { label: 'Pending',    variant: 'warning', next: 'confirmed',  nextLabel: 'Confirm order',   icon: 'ti-clock' },
-  confirmed:  { label: 'Confirmed',  variant: 'blue',    next: 'processing', nextLabel: 'Start processing', icon: 'ti-circle-check' },
-  processing: { label: 'Processing', variant: 'purple',  next: 'ready',      nextLabel: 'Mark as ready',   icon: 'ti-loader' },
-  ready:      { label: 'Ready',      variant: 'amber',   next: 'completed',  nextLabel: 'Complete order',  icon: 'ti-package' },
-  completed:  { label: 'Completed',  variant: 'ok',      next: null,         nextLabel: null,              icon: 'ti-check' },
-  cancelled:  { label: 'Cancelled',  variant: 'error',   next: null,         nextLabel: null,              icon: 'ti-x' },
+// Status flow + labels — adapts wording based on pickup vs delivery
+const getStatusFlow = (order) => {
+  const isPickup = order?.fulfillmentType === 'pickup';
+  return {
+    pending:    { label: 'Pending',    variant: 'warning', next: 'confirmed',  nextLabel: 'Confirm order',   icon: 'ti-clock' },
+    confirmed:  { label: 'Confirmed',  variant: 'blue',    next: 'processing', nextLabel: 'Start processing', icon: 'ti-circle-check' },
+    processing: {
+      label: 'Processing', variant: 'purple', next: 'ready',
+      nextLabel: isPickup ? 'Mark ready for pickup' : 'Send out for delivery',
+      icon: 'ti-loader',
+    },
+    ready: isPickup
+      ? { label: 'Ready for pickup', variant: 'amber', next: 'completed', nextLabel: 'Mark as picked up', icon: 'ti-package' }
+      : { label: 'Out for delivery', variant: 'amber', next: 'completed', nextLabel: 'Mark as delivered', icon: 'ti-truck-delivery' },
+    completed:  { label: 'Completed',  variant: 'ok',    next: null, nextLabel: null, icon: 'ti-check' },
+    cancelled:  { label: 'Cancelled',  variant: 'error', next: null, nextLabel: null, icon: 'ti-x' },
+  };
+};
+
+// Generic labels for the status filter dropdown (not tied to one order)
+const STATUS_LABELS = {
+  pending: 'Pending', confirmed: 'Confirmed', processing: 'Processing',
+  ready: 'Ready', completed: 'Completed', cancelled: 'Cancelled',
 };
 
 const PAYMENT_BADGE = {
@@ -161,7 +177,7 @@ const OrdersPage = () => {
         </div>
         <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
           {statusFilters.map(s => (
-            <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_FLOW[s]?.label || s}</option>
+            <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABELS[s] || s}</option>
           ))}
         </Select>
         <Button variant="primary" icon="ti-plus" onClick={() => { setForm(emptyForm); setSaveError(''); setAddModalOpen(true); }}>
@@ -172,9 +188,9 @@ const OrdersPage = () => {
       {/* Table */}
       <Card className={ps.lastCard}>
         <CardHeader title="All orders" subtitle={loading ? 'Loading…' : `${filtered.length} order${filtered.length !== 1 ? 's' : ''}`} />
-        <Table headers={['Order ID', 'Customer', 'Product', 'Amount', 'Status', 'Payment', 'Date', 'Actions']}>
+<Table headers={['Order ID', 'Customer', 'Product', 'Amount', 'Fulfillment', 'Status', 'Payment', 'Date', 'Actions']}>
           {paged.map(o => {
-            const st = STATUS_FLOW[o.status];
+            const st = getStatusFlow(o)[o.status];
             const pm = PAYMENT_BADGE[o.payment];
             return (
               <tr key={o._id}>
@@ -182,6 +198,19 @@ const OrdersPage = () => {
                 <td>{o.customer}</td>
                 <td className="max-w-[180px] truncate">{o.product}</td>
                 <td>₱{o.amount}</td>
+                <td>
+                  {o.fulfillmentType === 'pickup' ? (
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <i className="ti ti-building-store text-brand-600" />
+                      <span>{o.pickupDate ? formatDate(o.pickupDate) : 'Pickup'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-sm text-text-secondary">
+                      <i className="ti ti-truck-delivery" />
+                      <span>Delivery</span>
+                    </div>
+                  )}
+                </td>
                 <td><Badge variant={st?.variant}>{st?.label}</Badge></td>
                 <td><Badge variant={pm?.variant}>{pm?.label}</Badge></td>
                 <td>{formatDate(o.orderDate)}</td>
@@ -202,7 +231,7 @@ const OrdersPage = () => {
             );
           })}
           {!loading && paged.length === 0 && (
-            <tr><td colSpan={8} className="text-center text-text-secondary py-6">No orders match your filters.</td></tr>
+            <tr><td colSpan={9} className="text-center text-text-secondary py-6">No orders match your filters.</td></tr>
           )}
         </Table>
 
@@ -233,7 +262,7 @@ const OrdersPage = () => {
               <div>
                 <span className={ps.modalTitle}>{detailOrder.orderNumber}</span>
                 <div className="mt-1 flex items-center gap-2">
-                  <Badge variant={STATUS_FLOW[detailOrder.status]?.variant}>{STATUS_FLOW[detailOrder.status]?.label}</Badge>
+                  <Badge variant={getStatusFlow(detailOrder)[detailOrder.status]?.variant}>{getStatusFlow(detailOrder)[detailOrder.status]?.label}</Badge>
                   <Badge variant={PAYMENT_BADGE[detailOrder.payment]?.variant}>{PAYMENT_BADGE[detailOrder.payment]?.label}</Badge>
                 </div>
               </div>
@@ -276,9 +305,9 @@ const OrdersPage = () => {
                     <Input id="action-note" value={actionNote} onChange={e => setActionNote(e.target.value)} placeholder="Add a note for this status change…" />
                   </FormField>
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    {STATUS_FLOW[detailOrder.status]?.next && (
-                      <Button variant="primary" icon="ti-arrow-right" onClick={() => advanceStatus(detailOrder, STATUS_FLOW[detailOrder.status].next)} disabled={actionLoading}>
-                        {STATUS_FLOW[detailOrder.status].nextLabel}
+                    {getStatusFlow(detailOrder)[detailOrder.status]?.next && (
+                      <Button variant="primary" icon="ti-arrow-right" onClick={() => advanceStatus(detailOrder, getStatusFlow(detailOrder)[detailOrder.status].next)} disabled={actionLoading}>
+                        {getStatusFlow(detailOrder)[detailOrder.status].nextLabel}
                       </Button>
                     )}
                     <Button variant="danger" icon="ti-x" onClick={() => cancelOrder(detailOrder)} disabled={actionLoading}>
