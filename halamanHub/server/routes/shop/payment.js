@@ -1,29 +1,19 @@
-// ============================================================
-// HalamanHub Server — PayMongo payment routes
-// /api/shop/payment/*
-// Sandbox mode — use PayMongo test keys
-//
-// Add to server/.env:
-//   PAYMONGO_SECRET_KEY=sk_test_xxxxxxxxxxxx
-//   PAYMONGO_PUBLIC_KEY=pk_test_xxxxxxxxxxxx
-//   PAYMONGO_WEBHOOK_SECRET=whsec_xxxxxxxxxxxx
-// ============================================================
 const express   = require('express');
 const ShopOrder = require('../../models/ShopOrder');
 const { requireCustomer } = require('./auth');
 const { sendOrderConfirmation } = require('../../utils/email');
-
+ 
 const router = express.Router();
-
+ 
 const PAYMONGO_SECRET = process.env.PAYMONGO_SECRET_KEY;
 const PAYMONGO_BASE   = 'https://api.paymongo.com/v1';
-
+ 
 // Helper — base64 encode secret key for Basic Auth
 const authHeader = () => ({
   Authorization: `Basic ${Buffer.from(PAYMONGO_SECRET + ':').toString('base64')}`,
   'Content-Type': 'application/json',
 });
-
+ 
 // Map our payment method strings to PayMongo method types
 const METHOD_MAP = {
   gcash:         'gcash',
@@ -31,7 +21,7 @@ const METHOD_MAP = {
   card:          'card',
   bank_transfer: 'dob',
 };
-
+ 
 // ── POST /api/shop/payment/create-link
 // Creates a PayMongo Payment Link
 router.post('/create-link', requireCustomer, async (req, res) => {
@@ -39,13 +29,13 @@ router.post('/create-link', requireCustomer, async (req, res) => {
     if (!PAYMONGO_SECRET) {
       return res.status(500).json({ message: 'PayMongo is not configured. Add PAYMONGO_SECRET_KEY to server/.env.' });
     }
-
+ 
     const { amount, description, remarks } = req.body;
-
+ 
     if (!amount || amount < 10000) { // minimum ₱100 (10000 centavos)
       return res.status(400).json({ message: 'Amount must be at least ₱100.' });
     }
-
+ 
     const response = await fetch(`${PAYMONGO_BASE}/links`, {
       method:  'POST',
       headers: authHeader(),
@@ -59,14 +49,14 @@ router.post('/create-link', requireCustomer, async (req, res) => {
         },
       }),
     });
-
+ 
     const data = await response.json();
-
+ 
     if (!response.ok) {
       const errMsg = data?.errors?.[0]?.detail || 'PayMongo error.';
       return res.status(400).json({ message: errMsg });
     }
-
+ 
     const link = data.data;
     res.json({
       linkId:          link.id,
@@ -78,7 +68,7 @@ router.post('/create-link', requireCustomer, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
+ 
 // ── POST /api/shop/payment/create-intent
 // Creates a PaymentIntent for card payments
 router.post('/create-intent', requireCustomer, async (req, res) => {
@@ -86,10 +76,10 @@ router.post('/create-intent', requireCustomer, async (req, res) => {
     if (!PAYMONGO_SECRET) {
       return res.status(500).json({ message: 'PayMongo is not configured.' });
     }
-
+ 
     const { amount, payMethod } = req.body;
     const methodType = METHOD_MAP[payMethod] || 'card';
-
+ 
     const response = await fetch(`${PAYMONGO_BASE}/payment_intents`, {
       method:  'POST',
       headers: authHeader(),
@@ -104,14 +94,14 @@ router.post('/create-intent', requireCustomer, async (req, res) => {
         },
       }),
     });
-
+ 
     const data = await response.json();
-
+ 
     if (!response.ok) {
       const errMsg = data?.errors?.[0]?.detail || 'PayMongo error.';
       return res.status(400).json({ message: errMsg });
     }
-
+ 
     res.json({
       intentId:  data.data.id,
       clientKey: data.data.attributes.client_key,
@@ -121,7 +111,7 @@ router.post('/create-intent', requireCustomer, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
+ 
 // ── POST /api/shop/payment/webhook
 // PayMongo sends payment events here
 router.post(
@@ -130,9 +120,9 @@ router.post(
   async (req, res) => {
     try {
       const WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET;
-
+ 
       console.log('[Webhook Received] Checking signature...');
-
+ 
       if (WEBHOOK_SECRET) {
         const signature = req.headers['paymongo-signature'];
         
@@ -140,17 +130,17 @@ router.post(
         const payload = Buffer.isBuffer(req.body)
           ? req.body.toString('utf8')
           : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
-
+ 
         const crypto = require('crypto');
         const parts = signature?.split(',') || [];
         const timestamp = parts.find((p) => p.startsWith('t='))?.replace('t=', '');
         const sigHash = parts.find((p) => p.startsWith('te='))?.replace('te=', '');
-
+ 
         const expected = crypto
           .createHmac('sha256', WEBHOOK_SECRET)
           .update(`${timestamp}.${payload}`)
           .digest('hex');
-
+ 
         if (sigHash !== expected) {
           console.error('[Webhook Fail] Signature mismatch!');
           console.error(' - Expected:', expected);
@@ -159,27 +149,44 @@ router.post(
           return res.status(400).json({ message: 'Invalid webhook signature.' });
         }
       }
-
+ 
       // Parse payload to JSON object
       const event = Buffer.isBuffer(req.body)
         ? JSON.parse(req.body.toString('utf8'))
         : (typeof req.body === 'string' ? JSON.parse(req.body) : req.body);
-
+ 
       const type = event?.data?.attributes?.type;
-      const attrs = event?.data?.attributes?.data?.attributes;
-
+      const nested = event?.data?.attributes?.data;
+      const attrs = nested?.attributes;
+ 
+      console.log('[Webhook Debug] type:', type, JSON.stringify(nested, null, 2));
+ 
       if (type === 'payment.paid' || type === 'link.payment.paid') {
-        const referenceNumber = attrs?.reference_number || attrs?.source?.id;
-        const paymentId = event?.data?.attributes?.data?.id;
-
-        if (referenceNumber) {
+        // 'link.payment.paid' -> nested object IS the Link resource itself,
+        //   so nested.id is the same "link_xxx" id we saved as paymongoLinkId
+        //   when the link was created in /create-link.
+        // 'payment.paid'      -> nested object is the Payment resource;
+        //   if it was paid through a Link, the link id usually shows up
+        //   under attrs.source.id (when source.type === 'link').
+        const linkId = type === 'link.payment.paid'
+          ? nested?.id // link_xxx
+          : (attrs?.source?.type === 'link' ? attrs?.source?.id : undefined);
+ 
+        const referenceNumber = attrs?.reference_number;
+        const paymentId = type === 'payment.paid'
+          ? nested?.id // pay_xxx
+          : attrs?.payments?.[0]?.data?.id || ''; // pull actual payment id out of the Link's payments array
+ 
+        const lookupValue = linkId || referenceNumber;
+ 
+        if (lookupValue) {
           const order = await ShopOrder.findOne({
             $or: [
-              { paymongoLinkId: referenceNumber },
-              { orderNumber: referenceNumber },
+              { paymongoLinkId: lookupValue },
+              { orderNumber: lookupValue },
             ],
           });
-
+ 
           if (order && order.payment !== 'paid') {
             order.payment = 'paid';
             order.paymongoPaymentId = paymentId || '';
@@ -190,13 +197,17 @@ router.post(
               changedBy: 'PayMongo',
             });
             await order.save();
-
+ 
             sendOrderConfirmation(order).catch(() => {});
             console.log(`[Webhook Success] Payment confirmed for order ${order.orderNumber}`);
+          } else if (!order) {
+            console.warn(`[Webhook Warning] No matching order found for lookup value: ${lookupValue}`);
           }
+        } else {
+          console.warn('[Webhook Warning] No link id or reference_number found on event payload — cannot match to an order.');
         }
       }
-
+ 
       res.json({ received: true });
     } catch (err) {
       console.error('[Webhook Error]:', err.message);
@@ -204,5 +215,5 @@ router.post(
     }
   }
 );
-
+ 
 module.exports = router;
