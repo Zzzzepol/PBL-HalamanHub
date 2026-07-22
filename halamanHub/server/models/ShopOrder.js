@@ -35,6 +35,7 @@ const shopOrderSchema = new mongoose.Schema(
     shippingFee:   { type: Number, default: 0 },
     note:          { type: String, default: '' },
     fulfillmentType: { type: String, enum: ['delivery', 'pickup'], default: 'delivery' },
+    pickupDate:      { type: Date, default: null }, // only used when fulfillmentType === 'pickup'
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'processing', 'ready', 'completed', 'cancelled'],

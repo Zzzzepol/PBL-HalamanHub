@@ -11,12 +11,32 @@ const { sendOrderConfirmation } = require('../../utils/email');
 const router = express.Router();
 router.use(requireCustomer);
 
+async function autoExpireIfStale(order) {
+  const isExpired = order.payment === 'unpaid'
+    && order.paymentExpiresAt
+    && new Date() > new Date(order.paymentExpiresAt);
+
+  if (!isExpired) return order;
+
+  order.payment = 'failed';
+  order.status = 'cancelled';
+  order.statusHistory.push({
+    status: 'cancelled',
+    note: 'Payment window expired',
+    changedAt: new Date(),
+    changedBy: 'system',
+  });
+  await order.save();
+  return order;
+}
+
 // GET /api/shop/orders — customer's own orders
 router.get('/', async (req, res) => {
   try {
     const orders = await ShopOrder.find({ customerId: req.customer.id })
       .sort({ orderDate: -1 });
-    res.json(orders);
+    const checked = await Promise.all(orders.map(autoExpireIfStale));
+    res.json(checked);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -25,11 +45,12 @@ router.get('/', async (req, res) => {
 // GET /api/shop/orders/:id
 router.get('/:id', async (req, res) => {
   try {
-    const order = await ShopOrder.findOne({
+    let order = await ShopOrder.findOne({
       _id:        req.params.id,
       customerId: req.customer.id,
     });
     if (!order) return res.status(404).json({ message: 'Order not found.' });
+    order = await autoExpireIfStale(order);
     res.json(order);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -42,7 +63,7 @@ router.post('/', async (req, res) => {
     const {
       customer, customerEmail, customerPhone,
       product, items, quantity, amount, shippingFee,
-      note, fulfillmentType, payment,
+      note, fulfillmentType, pickupDate, payment,
       paymongoLinkId, paymongoCheckoutUrl,
     } = req.body;
 
@@ -56,18 +77,22 @@ router.post('/', async (req, res) => {
 
     const order = await ShopOrder.create({
       orderNumber,
-      customerId:    req.customer.id,
+      customerId:      req.customer.id,
       customer,
       customerEmail,
-      customerPhone: customerPhone || '',
+      customerPhone:   customerPhone || '',
       product,
-      items:         items || [],
-      quantity:      quantity || 1,
+      items:           items || [],
+      quantity:        quantity || 1,
       amount,
-      shippingFee:   shippingFee || 0,
-      note:          note || '',
+      shippingFee:     shippingFee || 0,
+      note:            note || '',
       fulfillmentType: fulfillmentType || 'delivery',
-      payment:       payment || 'unpaid',
+      
+      // Handles pickupDate: converts to Date if pickup, otherwise stores null
+      pickupDate:      fulfillmentType === 'pickup' && pickupDate ? new Date(pickupDate) : null,
+      
+      payment:             payment || 'unpaid',
       paymongoLinkId:      paymongoLinkId || '',
       paymongoCheckoutUrl: paymongoCheckoutUrl || '',
       statusHistory: [{ status: 'pending', note: 'Order placed', changedBy: customer }],

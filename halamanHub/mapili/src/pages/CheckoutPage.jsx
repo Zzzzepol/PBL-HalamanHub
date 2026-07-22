@@ -8,6 +8,16 @@ import { Button, FormField, Input, Alert, StepIndicator } from '../components/ui
 const DELIVERY_FEE = 80;
 const PICKUP_FEE   = 0;
 
+const FARM_ADDRESS = 'Brgy. Caloocan, 24, Talisay, 4220 Batangas';
+const FARM_PHONE    = '0910 725 1811';
+const FARM_MAP_EMBED_URL = `https://www.google.com/maps?q=${encodeURIComponent(FARM_ADDRESS)}&output=embed`;
+
+const getMinPickupDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  return d.toISOString().split('T')[0];
+};
+
 const CheckoutPage = () => {
   const { items, total, clearCart } = useCart();
   const { user, token }             = useAuth();
@@ -22,11 +32,14 @@ const CheckoutPage = () => {
   const [form, setForm] = useState({
     name:    user?.name  || '',
     email:   user?.email || '',
-    phone:   '',
+    phone:   user?.phone || '',
     address: '',
     city:    '',
     note:    '',
+    pickupDate: '',
   });
+
+
   const [payMethod, setPayMethod] = useState('gcash'); // gcash | card | paymaya | bank_transfer
 
   const shippingFee = fulfillment === 'delivery' ? DELIVERY_FEE : PICKUP_FEE;
@@ -35,7 +48,7 @@ const CheckoutPage = () => {
   const f = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
   const canProceedStep0 = form.name && form.email && form.phone &&
-    (fulfillment === 'pickup' || (form.address && form.city));
+    (fulfillment === 'pickup' ? form.pickupDate : (form.address && form.city));
 
   // Step 0 → 1
   const handleDetailsSubmit = (e) => {
@@ -76,6 +89,7 @@ const CheckoutPage = () => {
         ].filter(Boolean).join(' | '),
         payment:         'unpaid',
         fulfillmentType: fulfillment,
+        pickupDate:      fulfillment === 'pickup' ? form.pickupDate : null,
         shippingFee,
         paymongoLinkId:  paymentData.linkId,
         paymongoCheckoutUrl: paymentData.checkoutUrl,
@@ -183,15 +197,44 @@ const CheckoutPage = () => {
                   </>
                 )}
 
-                {fulfillment === 'pickup' && (
-                  <div className="p-4 bg-brand-50 rounded-xl text-sm text-brand-800 flex items-start gap-2">
-                    <i className="ti ti-info-circle flex-shrink-0 mt-0.5" />
-                    <div>
-                      <strong>Farm pickup address:</strong><br />
-                      Mapili Plant Nursery, Barangay Sta. Rosa, Laguna<br />
-                      Available Mon–Sat, 7am–5pm. We'll notify you when your order is ready.
+            {fulfillment === 'pickup' && (
+                  <>
+                    <div className="rounded-xl overflow-hidden border border-gray-200">
+                      <iframe
+                        title="Mapili Plant Nursery location"
+                        src={FARM_MAP_EMBED_URL}
+                        width="100%"
+                        height="220"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
                     </div>
-                  </div>
+
+                    <div className="p-4 bg-brand-50 rounded-xl text-sm text-brand-800 flex items-start gap-2">
+                      <i className="ti ti-map-pin flex-shrink-0 mt-0.5" />
+                      <div>
+                        <strong>Mapili Plant Nursery</strong><br />
+                        {FARM_ADDRESS}<br />
+                        <i className="ti ti-phone text-xs" /> {FARM_PHONE}<br />
+                        Available Mon–Sun, Opens from 7am–5pm.
+                      </div>
+                    </div>
+
+                    <FormField label="Preferred pickup date" id="pickupDate" required>
+                      <Input
+                        id="pickupDate"
+                        type="date"
+                        min={getMinPickupDate()}
+                        value={form.pickupDate}
+                        onChange={e => f('pickupDate', e.target.value)}
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        Pickup dates start 3 days from today, so our team has time to prepare your order.
+                      </p>
+                    </FormField>
+                  </>
                 )}
 
                 <FormField label="Order note (optional)" id="note">
