@@ -36,15 +36,14 @@ export const dashboardApi = {
 export const sensorsApi = {
   getAll:     (token) => request('/sensors', { token }),
   getSummary: (token) => request('/sensors/summary', { token }),
+  getHistory: (token, hours) => request(`/sensors/history?hours=${hours || 24}`, { token }),
 };
 
 export const irrigationApi = {
-  getZones:       (token)         => request('/irrigation/zones', { token }),
-  toggleZone:     (zoneId, token) => request(`/irrigation/zones/${zoneId}/toggle`, { method: 'PATCH', token }),
-  getSchedules:   (token)         => request('/irrigation/schedules', { token }),
-  createSchedule: (data, token)   => request('/irrigation/schedules', { method: 'POST', body: data, token }),
-  updateSchedule: (id, data, token) => request(`/irrigation/schedules/${id}`, { method: 'PUT', body: data, token }),
-  deleteSchedule: (id, token)     => request(`/irrigation/schedules/${id}`, { method: 'DELETE', token }),
+  getSettings: (token)       => request('/irrigation/settings', { token }),
+  updateSettings:(data, token) => request('/irrigation/settings', { method: 'PUT', body: data, token }),
+  getLogs: (token, limit, hours) =>
+    request(`/irrigation/logs?limit=${limit || 50}${hours ? `&hours=${hours}` : ''}`, { token }),
 };
 
 export const alertsApi = {

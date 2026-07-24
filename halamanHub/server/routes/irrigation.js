@@ -1,7 +1,8 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const IrrigationZone = require('../models/IrrigationZone');
-const IrrigationSchedule = require('../models/IrrigationSchedule');
+const IrrigationSettings = require('../models/IrrigationSettings');
+const IrrigationLog = require('../models/IrrigationLog');
 const log = require('../utils/logger');
 
 const router = express.Router();
@@ -54,77 +55,61 @@ router.patch('/zones/:zoneId/toggle', async (req, res) => {
 
 // ---- Schedules ----
 
-// GET /api/irrigation/schedules
-router.get('/schedules', async (req, res) => {
+// ---- Settings (thresholds + mode) ----
+
+// GET /api/irrigation/settings
+router.get('/settings', async (req, res) => {
   try {
-    const schedules = await IrrigationSchedule.find().sort({ createdAt: 1 });
-    res.json(schedules);
+    let settings = await IrrigationSettings.findOne();
+    if (!settings) settings = await IrrigationSettings.create({});
+    res.json(settings);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// POST /api/irrigation/schedules
-router.post('/schedules', async (req, res) => {
+// PUT /api/irrigation/settings
+router.put('/settings', async (req, res) => {
   try {
-    const { time, zone, frequency, status, duration } = req.body;
-    if (!time || !zone || !frequency || !duration) {
-      return res.status(400).json({ message: 'time, zone, frequency, and duration are required.' });
+    let settings = await IrrigationSettings.findOne();
+    if (!settings) settings = await IrrigationSettings.create({});
+
+    const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid } = req.body;
+
+    if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;
+    if (moistureWetThreshold !== undefined) settings.moistureWetThreshold = moistureWetThreshold;
+    if (mode !== undefined) settings.mode = mode;
+    if (manualPump !== undefined) settings.manualPump = manualPump;
+    if (manualSolenoid !== undefined) settings.manualSolenoid = manualSolenoid;
+    settings.updatedBy = req.user.name;
+
+    await settings.save();
+
+    await log({
+      user: req.user.name,
+      userId: req.user.id,
+      action: `Updated irrigation settings (mode: ${settings.mode})`,
+      category: 'irrigation',
+    });
+
+    res.json(settings);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// ---- Logs ----
+// GET /api/irrigation/logs?limit=50&hours=24
+router.get('/logs', async (req, res) => {
+  try {
+    const query = {};
+    if (req.query.hours) {
+      const hours = Math.min(Number(req.query.hours) || 24, 24 * 90);
+      query.occurredAt = { $gte: new Date(Date.now() - hours * 60 * 60 * 1000) };
     }
-    const schedule = await IrrigationSchedule.create({ time, zone, frequency, status, duration });
-
-    await log({
-      user: req.user.name,
-      userId: req.user.id,
-      action: `Added irrigation schedule for ${zone} at ${time}`,
-      category: 'irrigation',
-    });
-
-    res.status(201).json(schedule);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// PUT /api/irrigation/schedules/:id
-router.put('/schedules/:id', async (req, res) => {
-  try {
-    const { time, zone, frequency, status, duration } = req.body;
-    const schedule = await IrrigationSchedule.findByIdAndUpdate(
-      req.params.id,
-      { time, zone, frequency, status, duration },
-      { new: true, runValidators: true }
-    );
-    if (!schedule) return res.status(404).json({ message: 'Schedule not found.' });
-
-    await log({
-      user: req.user.name,
-      userId: req.user.id,
-      action: `Updated irrigation schedule for ${schedule.zone} at ${schedule.time}`,
-      category: 'irrigation',
-    });
-
-    res.json(schedule);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-});
-
-// DELETE /api/irrigation/schedules/:id
-router.delete('/schedules/:id', async (req, res) => {
-  try {
-    const schedule = await IrrigationSchedule.findByIdAndDelete(req.params.id);
-    if (!schedule) return res.status(404).json({ message: 'Schedule not found.' });
-
-
-    await log({
-      user: req.user.name,
-      userId: req.user.id,
-      action: `Deleted irrigation schedule for ${schedule.zone} at ${schedule.time}`,
-      category: 'irrigation',
-    });
-
-    res.json({ message: 'Schedule deleted.', id: req.params.id });
+    const limit = Math.min(Number(req.query.limit) || 50, 500);
+    const logs = await IrrigationLog.find(query).sort({ occurredAt: -1 }).limit(limit);
+    res.json(logs);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

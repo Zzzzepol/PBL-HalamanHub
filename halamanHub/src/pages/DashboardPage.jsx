@@ -1,22 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardBody, Badge, Button, PulseDot, StatCard } from '../components/ui/UI';
-import { WaterTank, NPKRing, SensorReadingRow } from '../components/charts/Widgets';
+import { NPKRing, SensorReadingRow } from '../components/charts/Widgets';
 import { MoistureTrendChart } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
-import { dashboardApi, sensorsApi, irrigationApi, alertsApi, ApiError } from '../api/client';
-import { chartData } from '../data/mockData'; // historical trend data (not yet modeled in MongoDB)
+import { dashboardApi, sensorsApi, alertsApi, ApiError } from '../api/client';
 import * as s from './pageStyles';
+
+const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
 const sensorStatusToPercent = (sensor) => {
   if (sensor.numericValue == null) return 0;
-  // Rough visual scaling per sensor type for the progress bar
   if (sensor.type === 'pH') return Math.min((sensor.numericValue / 14) * 100, 100);
-  if (sensor.type === 'EC') return Math.min((sensor.numericValue / 5) * 100, 100);
+  if (sensor.type === 'EC') return Math.min((sensor.numericValue / 2000) * 100, 100); // uS/cm scale
   if (sensor.type === 'Temperature') return Math.min((sensor.numericValue / 50) * 100, 100);
   return Math.min(sensor.numericValue, 100);
 };
 
 const formatTime = (iso) => {
+  if (!iso) return '—';
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (diffSec < 60) return `${diffSec}s ago`;
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
@@ -24,21 +26,33 @@ const formatTime = (iso) => {
 };
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
   const [range, setRange] = useState('24h');
 
   const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary);
   const { data: sensors, refetch: refetchSensors } = useApiData(sensorsApi.getAll);
-  const { data: zones } = useApiData(irrigationApi.getZones);
   const { data: alerts } = useApiData(alertsApi.getAll, [4]);
+  const { data: history } = useApiData(
+    (token) => sensorsApi.getHistory(token, RANGE_HOURS[range]),
+    [range]
+  );
 
-  const zoneAList = (sensors || []).filter(s => s.zone === 'Zone A' && s.type !== 'NPK');
-  const zoneA = (zones || []).find(z => z.zoneId === 'zone-a');
-  const zoneB = (zones || []).find(z => z.zoneId === 'zone-b');
+  const liveSensors = (sensors || []).filter(sn => sn.zone === 'Main System' && sn.type !== 'NPK');
+
+  const moistureTrend = useMemo(() => {
+    const points = history || [];
+    return {
+      labels: points.map(p => new Date(p.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+      values: points.map(p => p.soilMoisture ?? null),
+    };
+  }, [history]);
 
   const handleRefresh = () => {
     refetchSummary();
     refetchSensors();
   };
+
+  const irrigation = summary?.irrigation;
 
   return (
     <div>
@@ -51,12 +65,12 @@ const DashboardPage = () => {
 
       {/* KPI Stats */}
       <div className={s.grid.stats}>
-        <StatCard icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="All systems normal" trendDir="ok" />
-        <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend="Since yesterday" trendDir="up" />
-        <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend="Optimal range" trendDir="ok" />
-        <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} mS` : '—'} label="EC level" trend="Since 8am" trendDir="dn" />
-        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Soil temperature" trend="Normal range" trendDir="ok" />
-        <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend="Stable" trendDir="ok" />
+        <StatCard icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="Live" trendDir="ok" />
+        <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend="Live" trendDir="ok" />
+        <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend="Live" trendDir="ok" />
+        <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend="Live" trendDir="ok" />
+        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Soil temperature" trend="Live" trendDir="ok" />
+        <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend="Live" trendDir="ok" />
       </div>
 
       {/* Live sensor feed + Right column */}
@@ -65,22 +79,22 @@ const DashboardPage = () => {
         <Card>
           <CardHeader
             title="Live sensor feed"
-            subtitle={zoneAList[0] ? `Updated ${formatTime(zoneAList[0].lastReadingAt)}` : 'Loading…'}
+            subtitle={liveSensors[0] ? `Updated ${formatTime(liveSensors[0].lastReadingAt)}` : 'Loading…'}
             actions={<Button variant="ghost" size="sm" icon="ti-refresh" aria-label="Refresh" onClick={handleRefresh} />}
           />
           <CardBody>
-            {zoneAList.map(sensor => (
+            {liveSensors.map(sensor => (
               <SensorReadingRow
                 key={sensor._id}
-                name={sensor.type === 'Soil moisture' ? 'Soil moisture — Zone A' : `${sensor.type} sensor`}
+                name={`${sensor.type} sensor`}
                 value={sensor.value}
                 percent={sensorStatusToPercent(sensor)}
                 status={sensor.status}
                 time={formatTime(sensor.lastReadingAt)}
               />
             ))}
-            {zoneAList.length === 0 && (
-              <div className="text-center text-text-secondary py-4 text-sm">Loading sensor readings…</div>
+            {liveSensors.length === 0 && (
+              <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
             )}
           </CardBody>
         </Card>
@@ -89,46 +103,42 @@ const DashboardPage = () => {
         <div className={s.grid.colStack}>
           {/* Irrigation status */}
           <Card>
-            <CardHeader title="Irrigation status" />
+            <CardHeader title="Irrigation status" actions={<Badge variant={irrigation?.mode === 'manual' ? 'warning' : 'ok'}>{irrigation?.mode === 'manual' ? 'Manual' : 'Auto'}</Badge>} />
             <CardBody>
-              {zoneA && (
-                <div className={s.irrRow}>
-                  <div className={zoneA.status === 'active' ? s.irrOn : s.irrOff}>
-                    <PulseDot active={zoneA.status === 'active'} /> Zone A — {zoneA.status === 'active' ? 'Active' : 'Idle'}
-                  </div>
-                  {zoneA.status === 'active' && <Button variant="danger" size="sm" icon="ti-player-stop">Stop</Button>}
+              <div className={`${s.irrRow} !mb-1.5`}>
+                <div className={irrigation?.pumpActive ? s.irrOn : s.irrOff}>
+                  <PulseDot active={!!irrigation?.pumpActive} /> Pump — {irrigation?.pumpActive ? 'Running' : 'Off'}
                 </div>
-              )}
-              {zoneB && (
-                <div className={`${zoneB.status === 'active' ? s.irrOn : s.irrOff} mb-3`}>
-                  <PulseDot active={zoneB.status === 'active'} /> Zone B — {zoneB.status === 'active' ? 'Active' : 'Idle'}
-                </div>
-              )}
-              <div className={s.btnRow}>
-                <Button variant="default" size="sm" icon="ti-calendar">View schedule</Button>
-                <Button variant="primary" size="sm" icon="ti-player-play">Start Zone B</Button>
               </div>
-              {zoneA && <div className={s.irrMeta}>{zoneA.lastRunSummary}</div>}
+              <div className={`${s.irrRow} mb-3`}>
+                <div className={irrigation?.solenoidActive ? s.irrOn : s.irrOff}>
+                  <PulseDot active={!!irrigation?.solenoidActive} /> Solenoid — {irrigation?.solenoidActive ? 'Open' : 'Closed'}
+                </div>
+              </div>
+              <div className={s.btnRow}>
+                <Button variant="primary" size="sm" icon="ti-settings" onClick={() => navigate('/irrigation')}>
+                  Manage irrigation
+                </Button>
+              </div>
+              <div className={s.irrMeta}>Last update: {formatTime(irrigation?.lastUpdated)}</div>
             </CardBody>
           </Card>
 
           {/* Water tank */}
           <Card>
-            <CardHeader title="Water tank" subtitle={`${summary?.waterTank.capacity ?? 1200} L total capacity`} />
+            <CardHeader title="Water tank" subtitle="Live level sensor" />
             <CardBody>
-              <div className={s.tankRow}>
-                <WaterTank percent={summary?.waterTank.value ?? 0} sublabel={`${summary?.waterTank.litres ?? 0} L`} />
-                <div className={s.tankInfo}>
-                  <div className={s.tankVal}>{summary?.waterTank.litres ?? '—'} L</div>
-                  <div className={s.tankSub}>of {summary?.waterTank.capacity ?? '—'} L available</div>
-                  <div className={s.tankMeta}>
-                    Source: <strong className={s.greenText}>Rainwater</strong>
-                  </div>
-                  <div className={s.tankMeta}>Refill est. <strong>2 days</strong></div>
-                  <Badge variant="ok" className={s.tankBadge}>
-                    <i className="ti ti-cloud-rain" aria-hidden="true" /> Harvest active
-                  </Badge>
-                </div>
+              <div className="flex items-center gap-3">
+                <Badge variant={summary?.waterTank.available ? 'ok' : 'error'}>
+                  <i className={`ti ${summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
+                  {summary?.waterTank.available ? 'Water available' : 'Tank low'}
+                </Badge>
+              </div>
+              <div className="text-sm text-text-secondary mt-2.5">
+                Raw sensor reading: <strong>{summary?.waterTank.raw ?? '—'}</strong>
+              </div>
+              <div className="text-sm text-text-secondary mt-1">
+                No flow meter is installed, so litres can't be calculated yet — this reflects the tank sensor's on/off threshold only.
               </div>
             </CardBody>
           </Card>
@@ -139,17 +149,12 @@ const DashboardPage = () => {
       <div className={s.grid.twoCol}>
         {/* NPK */}
         <Card>
-          <CardHeader title="NPK nutrient levels" subtitle="Zone A soil analysis" />
+          <CardHeader title="NPK nutrient levels" subtitle="Live soil analysis" />
           <CardBody>
             <div className={s.npkRow}>
               <NPKRing symbol="N" value={summary?.npk.nitrogen ?? 0} max={100} name="Nitrogen" unit="mg/kg" />
               <NPKRing symbol="P" value={summary?.npk.phosphorus ?? 0} max={80} name="Phosphorus" unit="mg/kg" />
               <NPKRing symbol="K" value={summary?.npk.potassium ?? 0} max={80} name="Potassium" unit="mg/kg" />
-            </div>
-            <div className={s.npkLegend}>
-              <span><i className="ti ti-check text-[#27a85a]" aria-hidden="true" /> N: optimal</span>
-              <span><i className="ti ti-check text-[#27a85a]" aria-hidden="true" /> P: optimal</span>
-              <span><i className="ti ti-alert-triangle text-[#f0b429]" aria-hidden="true" /> K: slightly high</span>
             </div>
           </CardBody>
         </Card>
@@ -179,8 +184,8 @@ const DashboardPage = () => {
       {/* Soil moisture chart */}
       <Card className={s.lastCard}>
         <CardHeader
-          title="Soil moisture trend — today"
-          subtitle="All zones, 24-hour view"
+          title="Soil moisture trend"
+          subtitle="Live system"
           actions={
             <div className={s.btnRow}>
               {['24h', '7d', '30d'].map(r => (
@@ -192,7 +197,7 @@ const DashboardPage = () => {
           }
         />
         <CardBody>
-          <MoistureTrendChart labels={chartData.moistureTrend.labels} zoneA={chartData.moistureTrend.zoneA} zoneB={chartData.moistureTrend.zoneB} />
+          <MoistureTrendChart labels={moistureTrend.labels} values={moistureTrend.values} />
         </CardBody>
       </Card>
     </div>

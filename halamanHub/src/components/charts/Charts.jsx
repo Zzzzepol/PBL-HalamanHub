@@ -80,23 +80,14 @@ const barDataset = (label, data, color) => ({
 });
 
 /* ── Soil Moisture Trend (dashboard) ── */
-export const MoistureTrendChart = ({ labels, zoneA, zoneB, height = 160 }) => (
+export const MoistureTrendChart = ({ labels, values, height = 160 }) => (
   <div style={{ height, position: 'relative' }}>
     <Line
       data={{
         labels,
-        datasets: [
-          lineDataset('Zone A', zoneA, COLORS.green, true),
-          lineDataset('Zone B', zoneB, COLORS.blue),
-        ],
+        datasets: [lineDataset('Soil moisture', values, COLORS.green, true)],
       }}
-      options={{
-        ...baseOptions(null, 40, 90, v => v + '%'),
-        plugins: {
-          ...baseOptions().plugins,
-          legend: { display: true, position: 'top', align: 'end', labels: { boxWidth: 10, font: { size: 11 }, color: COLORS.tick } },
-        },
-      }}
+      options={baseOptions(null, 0, 100, v => v + '%')}
     />
   </div>
 );
@@ -112,11 +103,22 @@ export const PHTrendChart = ({ labels, values, height = 110 }) => (
 );
 
 /* ── EC Trend ── */
+/* ── EC Trend ── */
 export const ECTrendChart = ({ labels, values, height = 110 }) => (
   <div style={{ height, position: 'relative' }}>
     <Line
       data={{ labels, datasets: [lineDataset('EC', values, COLORS.blue, true)] }}
-      options={baseOptions('mS/cm', 0, 3)}
+      options={baseOptions('uS/cm', 0, undefined)}
+    />
+  </div>
+);
+
+/* ── Water Tank Level (raw ADC trend) ── */
+export const WaterLevelTrendChart = ({ labels, values, height = 160 }) => (
+  <div style={{ height, position: 'relative' }}>
+    <Line
+      data={{ labels, datasets: [lineDataset('Raw sensor reading', values, COLORS.blue, true)] }}
+      options={baseOptions('ADC value', 0, 4095)}
     />
   </div>
 );
@@ -155,14 +157,14 @@ export const NPKTrendChart = ({ labels, nitrogen, phosphorus, potassium, height 
 );
 
 /* ── Irrigation History (grouped bar) ── */
-export const IrrigationHistoryChart = ({ labels, zoneA, zoneB, height = 160 }) => (
+export const IrrigationHistoryChart = ({ labels, pump, solenoid, height = 160 }) => (
   <div style={{ height, position: 'relative' }}>
     <Bar
       data={{
         labels,
         datasets: [
-          barDataset('Zone A', zoneA, COLORS.greenDark),
-          barDataset('Zone B', zoneB, COLORS.blue),
+          barDataset('Pump', pump, COLORS.greenDark),
+          barDataset('Solenoid', solenoid, COLORS.blue),
         ],
       }}
       options={{

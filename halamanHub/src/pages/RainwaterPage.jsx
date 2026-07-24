@@ -1,106 +1,96 @@
-import React, { useState } from 'react';
-import { Card, CardHeader, CardBody, StatCard, Badge, Toggle } from '../components/ui/UI';
-import { RainForecastChart } from '../components/charts/Charts';
-import { chartData } from '../data/mockData';
+import React, { useState, useMemo } from 'react';
+import { Card, CardHeader, CardBody, StatCard, Badge } from '../components/ui/UI';
+import { WaterLevelTrendChart } from '../components/charts/Charts';
+import { useApiData } from '../hooks/useApiData';
+import { sensorsApi, dashboardApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 
+const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
+
+const formatTime = (iso) => {
+  if (!iso) return '—';
+  const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  return `${Math.floor(diffSec / 3600)}h ago`;
+};
+
 const RainwaterPage = () => {
-  const [autoSwitch, setAutoSwitch] = useState(true);
+  const [range, setRange] = useState('24h');
+  const hours = RANGE_HOURS[range];
+
+  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary);
+  const { data: history, error: historyError, refetch: refetchHistory } =
+    useApiData((token) => sensorsApi.getHistory(token, hours), [hours]);
+
+  const points = history || [];
+
+  const chart = useMemo(() => ({
+    labels: points.map(p =>
+      hours <= 24
+        ? new Date(p.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : new Date(p.recordedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    ),
+    values: points.map(p => p.waterRawADC ?? null),
+  }), [points, hours]);
+
+  const availablePct = useMemo(() => {
+    if (points.length === 0) return null;
+    const availableCount = points.filter(p => p.waterAvailable).length;
+    return Math.round((availableCount / points.length) * 100);
+  }, [points]);
+
+  const hasError = summaryError || historyError;
 
   return (
     <div>
+      {hasError && (
+        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
+          Failed to load tank data. {hasError instanceof ApiError ? hasError.message : 'Check that the backend and MongoDB are running.'}{' '}
+          <button className="underline" onClick={() => { refetchSummary(); refetchHistory(); }}>Retry</button>
+        </div>
+      )}
+
       {/* Stats */}
       <div className={ps.grid.stats4}>
-        <StatCard icon="ti-cloud-rain" iconVariant="green" value="984 L" label="Tank level" />
-        <StatCard icon="ti-droplets" iconVariant="blue" value="120 L" label="Collected tonight" />
-        <StatCard icon="ti-leaf" iconVariant="green" value="Rainwater" label="Active source" />
-        <StatCard icon="ti-chart-pie" iconVariant="amber" value="860 L" label="Used this week" />
+        <StatCard
+          icon={summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}
+          iconVariant={summary?.waterTank.available ? 'green' : 'red'}
+          value={summary?.waterTank.available ? 'OK' : 'LOW'}
+          label="Tank status"
+        />
+        <StatCard icon="ti-gauge" iconVariant="blue" value={summary?.waterTank.raw ?? '—'} label="Raw ADC reading" />
+        <StatCard icon="ti-chart-line" iconVariant="teal" value={availablePct != null ? `${availablePct}%` : '—'} label={`Time available (${range})`} />
+        <StatCard icon="ti-clock" iconVariant="amber" value={formatTime(summary?.irrigation.lastUpdated)} label="Last reading" />
       </div>
 
-      <div className={ps.grid.twoCol}>
-        {/* Source control */}
-        <Card>
-          <CardHeader title="Water source control" subtitle="Manage which source feeds the irrigation network" />
-          <CardBody>
-            <div className="flex items-center gap-2.5 pb-3 mb-3 border-b-[0.5px] border-border">
-              <i className="ti ti-cloud-rain text-xl text-green-600" aria-hidden="true" />
-              <div className="flex-1">
-                <div className="text-base font-medium">Rainwater tank</div>
-                <div className="text-sm text-text-secondary">Primary — 984 L available</div>
-              </div>
-              <Badge variant="ok">Active</Badge>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <i className="ti ti-droplet text-xl text-text-secondary" aria-hidden="true" />
-              <div className="flex-1">
-                <div className="text-base font-medium">Municipal water</div>
-                <div className="text-sm text-text-secondary">Backup source</div>
-              </div>
-              <Badge>Standby</Badge>
-            </div>
-            <div className="mt-4">
-              <Toggle id="auto-switch" checked={autoSwitch} onChange={() => setAutoSwitch(!autoSwitch)} label="Auto-switch to municipal when tank below 20%" />
-            </div>
-          </CardBody>
-        </Card>
-
-        {/* Forecast */}
-        <Card>
-          <CardHeader title="Collection forecast" subtitle="Based on local weather data" />
-          <CardBody>
-            <RainForecastChart
-              labels={chartData.rainForecast.labels}
-              values={chartData.rainForecast.values}
-              forecast={chartData.rainForecast.forecast}
-            />
-            <div className="text-sm text-text-secondary mt-2.5 flex items-start gap-1.5">
-              <i className="ti ti-info-circle flex-shrink-0 mt-0.5" aria-hidden="true" />
-              <span>Rain expected Thursday–Saturday. Estimated 280 L harvest based on forecast data.</span>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* Consumption breakdown */}
+      {/* Trend */}
       <Card className={ps.lastCard}>
-        <CardHeader title="Water consumption — this week" subtitle="Source breakdown by zone" />
+        <CardHeader
+          title="Tank sensor trend"
+          subtitle="Raw ADC value over time — higher generally means more water"
+          actions={
+            <div className={ps.btnRow}>
+              {['24h', '7d', '30d'].map(r => (
+                <button
+                  key={r}
+                  className={`px-2.5 py-1 rounded-md text-sm ${range === r ? 'bg-primary text-white' : 'bg-bg-tertiary'}`}
+                  onClick={() => setRange(r)}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          }
+        />
         <CardBody>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            <div>
-              <div className="text-sm text-text-secondary mb-2">By zone</div>
-              {[
-                { zone: 'Zone A', litres: 420, pct: 49 },
-                { zone: 'Zone B', litres: 310, pct: 36 },
-                { zone: 'Zone C', litres: 130, pct: 15 },
-              ].map(z => (
-                <div key={z.zone} className="mb-2.5">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{z.zone}</span>
-                    <span className="font-medium">{z.litres} L</span>
-                  </div>
-                  <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-green-600" style={{ width: `${z.pct}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div>
-              <div className="text-sm text-text-secondary mb-2">By source</div>
-              {[
-                { source: 'Rainwater tank', litres: 730, pct: 85, color: 'bg-green-600' },
-                { source: 'Municipal water', litres: 130, pct: 15, color: 'bg-blue-700' },
-              ].map(item => (
-                <div key={item.source} className="mb-2.5">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>{item.source}</span>
-                    <span className="font-medium">{item.litres} L ({item.pct}%)</span>
-                  </div>
-                  <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${item.color}`} style={{ width: `${item.pct}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
+          <WaterLevelTrendChart labels={chart.labels} values={chart.values} />
+          <div className="text-sm text-text-secondary mt-2.5 flex items-start gap-1.5">
+            <i className="ti ti-info-circle flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <span>
+              This reflects only the on/off water-level sensor on your tank (threshold-based). There's no flow meter or rain
+              gauge installed, so litres collected/used and rainfall forecasts aren't something this system can measure yet.
+            </span>
           </div>
         </CardBody>
       </Card>

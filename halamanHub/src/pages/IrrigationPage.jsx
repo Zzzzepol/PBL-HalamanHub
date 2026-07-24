@@ -1,64 +1,71 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardBody, Button, Badge, PulseDot, SectionLabel, RangeInput, Toggle, FormField, Input, Select } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, Button, Badge, PulseDot, SectionLabel, RangeInput, Toggle } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { irrigationApi, settingsApi, ApiError } from '../api/client';
+import { irrigationApi, dashboardApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 
-const emptyForm = { time: '', zone: 'Zone A', frequency: 'Daily', status: 'active', duration: 15 };
+const reasonLabel = {
+  auto_dry: { label: 'Auto — soil dry', variant: 'default' },
+  auto_wet: { label: 'Auto — soil wet', variant: 'ok' },
+  manual: { label: 'Manual', variant: 'default' },
+  safety_tank_empty: { label: 'Safety — tank empty', variant: 'warning' },
+};
+
+const formatDateTime = (iso) => {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 
 const IrrigationPage = () => {
   const { token } = useAuth();
-  const { data: zones, error: zonesError, refetch: refetchZones, setData: setZones } = useApiData(irrigationApi.getZones);
-  const { data: schedules, error: schedulesError, refetch: refetchSchedules, setData: setSchedules } = useApiData(irrigationApi.getSchedules);
-  const { data: settings, refetch: refetchSettings } = useApiData(settingsApi.get);
+  const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } = useApiData(irrigationApi.getSettings);
+  const { data: logs, error: logsError, refetch: refetchLogs } = useApiData((t) => irrigationApi.getLogs(t, 50));
+  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary);
 
-  const [autoEnabled, setAutoEnabled] = useState(true);
-  const [startThreshold, setStartThreshold] = useState(40);
-  const [stopThreshold, setStopThreshold] = useState(80);
-  const [maxDuration, setMaxDuration] = useState(30);
+  const [dryThreshold, setDryThreshold] = useState(30);
+  const [wetThreshold, setWetThreshold] = useState(60);
   const [savingThresholds, setSavingThresholds] = useState(false);
   const [thresholdSaved, setThresholdSaved] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyForm);
-  const [saveError, setSaveError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  // Sync local threshold state once settings load
+  // Sync local threshold sliders once settings load
   useEffect(() => {
     if (settings) {
-      setAutoEnabled(settings.autoIrrigationEnabled);
-      setStartThreshold(settings.thresholds.irrigationStart);
-      setStopThreshold(settings.thresholds.irrigationStop);
-      setMaxDuration(settings.thresholds.maxIrrigationDuration);
+      setDryThreshold(settings.moistureDryThreshold);
+      setWetThreshold(settings.moistureWetThreshold);
     }
   }, [settings]);
 
-  const toggleZone = async (zoneId) => {
+  const irrigation = summary?.irrigation;
+
+  const applySettingsPatch = async (patch) => {
+    setToggling(true);
     try {
-      const updated = await irrigationApi.toggleZone(zoneId, token);
-      setZones((zones || []).map(z => z.zoneId === zoneId ? updated : z));
+      const updated = await irrigationApi.updateSettings(patch, token);
+      setSettings(updated);
+      refetchSummary();
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to toggle irrigation.');
+      alert(err instanceof ApiError ? err.message : 'Failed to update irrigation settings.');
+    } finally {
+      setToggling(false);
     }
   };
+
+  const setMode = (mode) => applySettingsPatch({ mode });
+  const toggleManualPump = () => applySettingsPatch({ manualPump: !settings.manualPump });
+  const toggleManualSolenoid = () => applySettingsPatch({ manualSolenoid: !settings.manualSolenoid });
 
   const saveThresholds = async () => {
     setSavingThresholds(true);
     setThresholdSaved(false);
     try {
-      await settingsApi.update({
-        autoIrrigationEnabled: autoEnabled,
-        thresholds: {
-          irrigationStart: startThreshold,
-          irrigationStop: stopThreshold,
-          maxIrrigationDuration: maxDuration,
-        },
+      const updated = await irrigationApi.updateSettings({
+        moistureDryThreshold: dryThreshold,
+        moistureWetThreshold: wetThreshold,
       }, token);
+      setSettings(updated);
       setThresholdSaved(true);
-      refetchSettings();
       setTimeout(() => setThresholdSaved(false), 2000);
     } catch (err) {
       alert(err instanceof ApiError ? err.message : 'Failed to save thresholds.');
@@ -67,104 +74,72 @@ const IrrigationPage = () => {
     }
   };
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm); setSaveError(''); setModalOpen(true); };
-  const openEdit = (item) => {
-    setEditing(item);
-    setForm({ time: item.time, zone: item.zone, frequency: item.frequency, status: item.status, duration: item.duration });
-    setSaveError('');
-    setModalOpen(true);
-  };
-
-  const saveSchedule = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setSaveError('');
-    const payload = { ...form, duration: Number(form.duration) };
-    try {
-      if (editing) {
-        const updated = await irrigationApi.updateSchedule(editing._id, payload, token);
-        setSchedules((schedules || []).map(s => s._id === editing._id ? updated : s));
-      } else {
-        const created = await irrigationApi.createSchedule(payload, token);
-        setSchedules([...(schedules || []), created]);
-      }
-      setModalOpen(false);
-    } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : 'Failed to save schedule.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteSchedule = async (id) => {
-    try {
-      await irrigationApi.deleteSchedule(id, token);
-      setSchedules((schedules || []).filter(s => s._id !== id));
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to delete schedule.');
-    }
-  };
-
   return (
     <div>
-      {(zonesError || schedulesError) && (
+      {(settingsError || logsError) && (
         <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
           Failed to load irrigation data. Check that the backend and MongoDB are running.{' '}
-          <button className="underline" onClick={() => { refetchZones(); refetchSchedules(); }}>Retry</button>
+          <button className="underline" onClick={() => { refetchSettings(); refetchLogs(); }}>Retry</button>
         </div>
       )}
 
       <div className={ps.grid.twoCol}>
-        {/* Manual control */}
+        {/* Live status + manual control */}
         <Card>
-          <CardHeader title="Manual control" subtitle="Override automatic scheduling per zone" />
+          <CardHeader
+            title="System control"
+            subtitle="Your single pump/solenoid system"
+            actions={<Badge variant={settings?.mode === 'manual' ? 'warning' : 'ok'}>{settings?.mode === 'manual' ? 'Manual mode' : 'Auto mode'}</Badge>}
+          />
           <CardBody>
-            {(zones || []).map((zone, i) => (
-              <div key={zone.zoneId} className={i > 0 ? 'pt-3.5 mt-2 border-t-[0.5px] border-border' : ''}>
-                <SectionLabel>{zone.name}</SectionLabel>
-                <div className={`${ps.irrRow} !mb-1.5`}>
-                  <div className={zone.status === 'active' ? ps.irrOn : ps.irrOff}>
-                    <PulseDot active={zone.status === 'active'} />
-                    {zone.status === 'active' ? 'Currently irrigating' : 'Idle'}
-                  </div>
-                  {zone.status === 'active' ? (
-                    <Button variant="danger" size="sm" icon="ti-player-stop" onClick={() => toggleZone(zone.zoneId)}>Stop now</Button>
-                  ) : (
-                    <Button variant="primary" size="sm" icon="ti-player-play" onClick={() => toggleZone(zone.zoneId)}>Start now</Button>
-                  )}
-                </div>
-                <div className={ps.irrMeta}>{zone.lastRunSummary}</div>
+            {/* Mode switch */}
+            <div className="flex items-center gap-2 pb-3.5 mb-3.5 border-b-[0.5px] border-border">
+              <Button size="sm" variant={settings?.mode === 'auto' ? 'primary' : 'default'} onClick={() => setMode('auto')} disabled={toggling}>Auto</Button>
+              <Button size="sm" variant={settings?.mode === 'manual' ? 'primary' : 'default'} onClick={() => setMode('manual')} disabled={toggling}>Manual</Button>
+            </div>
+
+            {/* Live state */}
+            <SectionLabel>Current state</SectionLabel>
+            <div className={`${ps.irrRow} !mb-1.5`}>
+              <div className={irrigation?.pumpActive ? ps.irrOn : ps.irrOff}>
+                <PulseDot active={!!irrigation?.pumpActive} /> Pump — {irrigation?.pumpActive ? 'Running' : 'Off'}
               </div>
-            ))}
+            </div>
+            <div className={`${ps.irrRow} mb-3.5`}>
+              <div className={irrigation?.solenoidActive ? ps.irrOn : ps.irrOff}>
+                <PulseDot active={!!irrigation?.solenoidActive} /> Solenoid — {irrigation?.solenoidActive ? 'Open' : 'Closed'}
+              </div>
+            </div>
+
+            {/* Manual switches */}
+            <SectionLabel>Manual override {settings?.mode !== 'manual' && '(switch to Manual mode to use)'}</SectionLabel>
+            <div className={`${settings?.mode !== 'manual' ? 'opacity-50 pointer-events-none' : ''} space-y-2`}>
+              <Toggle id="manual-pump" checked={!!settings?.manualPump} onChange={toggleManualPump} label="Pump on" />
+              <Toggle id="manual-solenoid" checked={!!settings?.manualSolenoid} onChange={toggleManualSolenoid} label="Solenoid open" />
+            </div>
+            <div className="text-sm text-text-secondary mt-3">
+              The tank-empty safety switch always applies, even in Manual mode — the pump will never run dry.
+            </div>
           </CardBody>
         </Card>
 
         {/* Auto-trigger thresholds */}
         <Card>
-          <CardHeader title="Auto-trigger thresholds" subtitle="Irrigation starts automatically when conditions are met" />
+          <CardHeader title="Auto-trigger thresholds" subtitle="Used when the system is in Auto mode" />
           <CardBody>
             <RangeInput
               label="Soil moisture trigger (irrigate below)"
               min={10} max={80} unit="%"
-              value={startThreshold}
-              onChange={setStartThreshold}
+              value={dryThreshold}
+              onChange={setDryThreshold}
             />
             <RangeInput
               label="Stop irrigation when moisture reaches"
-              min={50} max={100} unit="%"
-              value={stopThreshold}
-              onChange={setStopThreshold}
+              min={20} max={100} unit="%"
+              value={wetThreshold}
+              onChange={setWetThreshold}
             />
-            <RangeInput
-              label="Maximum irrigation duration"
-              min={5} max={90} unit="m"
-              value={maxDuration}
-              onChange={setMaxDuration}
-            />
-            <div className="flex items-center mt-1 mb-3.5">
-              <Toggle id="auto-irr" checked={autoEnabled} onChange={() => setAutoEnabled(!autoEnabled)} label="Auto-irrigation enabled" />
-            </div>
-            <Button variant="primary" className="w-full justify-center" onClick={saveThresholds} disabled={savingThresholds}>
+            <Button variant="primary" className="w-full justify-center mt-2" onClick={saveThresholds} disabled={savingThresholds}>
               {savingThresholds ? 'Saving…' : 'Save threshold settings'}
             </Button>
             {thresholdSaved && (
@@ -176,76 +151,34 @@ const IrrigationPage = () => {
         </Card>
       </div>
 
-      {/* Schedule */}
+      {/* Irrigation logs — replaces the old schedule */}
       <Card className={ps.lastCard}>
-        <CardHeader title="Irrigation schedule" subtitle="Configured automatic watering times" actions={<Button size="sm" variant="primary" icon="ti-plus" onClick={openAdd}>Add schedule</Button>} />
+        <CardHeader
+          title="Irrigation logs"
+          subtitle="Real history of every time the pump/solenoid turned on or off"
+          actions={<Button variant="ghost" size="sm" icon="ti-refresh" aria-label="Refresh" onClick={refetchLogs} />}
+        />
         <CardBody>
-          {(schedules || []).map(item => (
-            <div key={item._id} className={ps.schedItem}>
-              <span className={ps.schedTime}>{item.time}</span>
-              <span className={ps.schedZone}>{item.zone} · {item.frequency}</span>
-              <div className={ps.schedRight}>
-                <Badge variant={item.status === 'active' ? 'ok' : 'default'}>{item.status === 'active' ? 'Active' : 'Paused'}</Badge>
-                <span className={ps.schedDur}>{item.duration} min</span>
-                <Button size="sm" icon="ti-edit" onClick={() => openEdit(item)}>Edit</Button>
-                <Button size="sm" icon="ti-trash" onClick={() => deleteSchedule(item._id)} aria-label="Delete schedule" />
+          {(logs || []).map(item => {
+            const reason = reasonLabel[item.reason] || reasonLabel.manual;
+            return (
+              <div key={item._id} className={ps.schedItem}>
+                <span className={ps.schedTime}>{formatDateTime(item.occurredAt)}</span>
+                <span className={ps.schedZone}>
+                  {item.source === 'PUMP' ? 'Pump' : 'Solenoid'} · {item.moistureAtEvent != null ? `${item.moistureAtEvent}% moisture` : '—'}
+                </span>
+                <div className={ps.schedRight}>
+                  <Badge variant={item.action === 'ON' ? 'ok' : 'default'}>{item.action}</Badge>
+                  <Badge variant={reason.variant}>{reason.label}</Badge>
+                </div>
               </div>
-            </div>
-          ))}
-          {(!schedules || schedules.length === 0) && (
-            <div className="text-center text-text-secondary py-6 text-sm">No schedules configured.</div>
+            );
+          })}
+          {(!logs || logs.length === 0) && (
+            <div className="text-center text-text-secondary py-6 text-sm">No irrigation events recorded yet.</div>
           )}
         </CardBody>
       </Card>
-
-      {/* Add/Edit schedule modal */}
-      {modalOpen && (
-        <div className={ps.modalOverlay} onClick={() => setModalOpen(false)}>
-          <div className={ps.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="sched-modal-title">
-            <div className={ps.modalHeader}>
-              <span className={ps.modalTitle} id="sched-modal-title">{editing ? 'Edit schedule' : 'Add schedule'}</span>
-              <button className={ps.modalClose} onClick={() => setModalOpen(false)} aria-label="Close"><i className="ti ti-x" aria-hidden="true" /></button>
-            </div>
-            <form onSubmit={saveSchedule}>
-              <div className={ps.modalBody}>
-                <div className={ps.grid.formRow}>
-                  <FormField label="Time" id="sc-time">
-                    <Input id="sc-time" placeholder="e.g. 07:00 AM" value={form.time} onChange={e => setForm({ ...form, time: e.target.value })} required />
-                  </FormField>
-                  <FormField label="Zone" id="sc-zone">
-                    <Select id="sc-zone" value={form.zone} onChange={e => setForm({ ...form, zone: e.target.value })}>
-                      <option>Zone A</option>
-                      <option>Zone B</option>
-                      <option>Zone C</option>
-                    </Select>
-                  </FormField>
-                </div>
-                <div className={ps.grid.formRow}>
-                  <FormField label="Frequency" id="sc-freq">
-                    <Input id="sc-freq" placeholder="e.g. Daily, Mon / Wed / Fri" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value })} required />
-                  </FormField>
-                  <FormField label="Duration (min)" id="sc-dur">
-                    <Input id="sc-dur" type="number" min="1" value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} required />
-                  </FormField>
-                </div>
-                <FormField label="Status" id="sc-status">
-                  <Select id="sc-status" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                  </Select>
-                </FormField>
-                {saveError && (
-                  <div className="mt-3 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">{saveError}</div>
-                )}
-              </div>
-              <div className={ps.modalFooter}>
-                <Button variant="default" type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
-                <Button variant="primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Add schedule'}</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

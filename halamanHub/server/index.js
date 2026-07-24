@@ -17,9 +17,11 @@ const orderRoutes = require('./routes/orders');
 const userRoutes = require('./routes/users');
 const sensorRoutes = require('./routes/sensors');
 const irrigationRoutes = require('./routes/irrigation');
+const irrigationControlRoutes = require('./routes/irrigationControl');
 const alertRoutes = require('./routes/alerts');
 const settingsRoutes = require('./routes/settings');
 const logRoutes = require('./routes/logs');
+const sensorDataRoutes = require('./routes/sensorData');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -49,10 +51,12 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/sensors', sensorRoutes);
+app.use('/api/irrigation/control', irrigationControlRoutes);
 app.use('/api/irrigation', irrigationRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/logs', logRoutes);
+app.use('/api/sensor-data', sensorDataRoutes);
 
 // Customer Side Shop Routes
 app.use('/api/shop/auth', shopAuthRoutes);

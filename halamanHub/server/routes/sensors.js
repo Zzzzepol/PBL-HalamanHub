@@ -1,9 +1,7 @@
-// ============================================================
-// HalamanHub Server — Sensor routes
-// ============================================================
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const Sensor = require('../models/Sensor');
+const SensorReading = require('../models/SensorReading');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -23,6 +21,23 @@ router.get('/summary', async (req, res) => {
     Sensor.countDocuments(),
   ]);
   res.json({ ok, warning, offline, total });
+});
+
+// GET /api/sensors/history?hours=24 — raw readings over time, for trend charts
+router.get('/history', async (req, res) => {
+  try {
+    const hours = Math.min(Number(req.query.hours) || 24, 24 * 30); // cap at 30 days
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const readings = await SensorReading
+      .find({ recordedAt: { $gte: since } })
+      .sort({ recordedAt: 1 }) // oldest first, for left-to-right charts
+      .limit(2000);
+
+    res.json(readings);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 // PATCH /api/sensors/:id — update reading (used by ESP32 ingestion in production)
