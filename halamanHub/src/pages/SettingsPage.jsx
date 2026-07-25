@@ -7,7 +7,7 @@ import * as ps from './pageStyles';
 
 const SettingsPage = () => {
   const { token } = useAuth();
-  const { data: settings, loading, error, refetch } = useApiData(settingsApi.get);
+  const { data: settings, loading, error, refetch } = useApiData(settingsApi.get, [], 30000);
 
   const [farmName, setFarmName] = useState('');
   const [location, setLocation] = useState('');

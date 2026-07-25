@@ -16,7 +16,7 @@ const emptyForm = { name: '', category: 'Grafted Fruit Bearing Trees', price: ''
 
 const ProductsPage = () => {
   const { token } = useAuth();
-  const { data: products, loading, error, refetch, setData: setProducts } = useApiData(productsApi.getAll);
+  const { data: products, loading, error, refetch, setData: setProducts } = useApiData(productsApi.getAll, [], 15000);
 
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);

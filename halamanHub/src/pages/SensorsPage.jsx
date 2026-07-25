@@ -19,7 +19,7 @@ const formatTime = (iso) => {
 };
 
 const SensorsPage = () => {
-  const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll);
+  const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 5000);
   const [search, setSearch] = useState('');
   const [zoneFilter, setZoneFilter] = useState('All zones');
   const [statusFilter, setStatusFilter] = useState('All statuses');

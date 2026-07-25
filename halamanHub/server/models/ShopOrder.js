@@ -47,6 +47,7 @@ const shopOrderSchema = new mongoose.Schema(
     paymongoLinkId:      { type: String, default: '' },
     paymongoCheckoutUrl: { type: String, default: '' },
     paymongoPaymentId:   { type: String, default: '' },
+    paymentExpiresAt:     { type: Date, default: null },
     statusHistory: { type: [statusHistorySchema], default: [] },
     orderDate:     { type: Date, default: Date.now },
   },

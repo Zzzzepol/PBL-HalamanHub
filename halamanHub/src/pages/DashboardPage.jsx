@@ -29,12 +29,13 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const [range, setRange] = useState('24h');
 
-  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary);
-  const { data: sensors, refetch: refetchSensors } = useApiData(sensorsApi.getAll);
-  const { data: alerts } = useApiData(alertsApi.getAll, [4]);
+  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 5000);
+  const { data: sensors, refetch: refetchSensors } = useApiData(sensorsApi.getAll, [], 5000);
+  const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
   const { data: history } = useApiData(
     (token) => sensorsApi.getHistory(token, RANGE_HOURS[range]),
-    [range]
+    [range],
+    20000
   );
 
   const liveSensors = (sensors || []).filter(sn => sn.zone === 'Main System' && sn.type !== 'NPK');

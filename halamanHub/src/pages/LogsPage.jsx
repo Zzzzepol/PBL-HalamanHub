@@ -24,7 +24,7 @@ const formatDate = (iso) => new Date(iso).toLocaleString('en-US', {
 });
 
 const LogsPage = () => {
-  const { data: logs, loading, error, refetch } = useApiData(logsApi.getAll);
+  const { data: logs, loading, error, refetch } = useApiData(logsApi.getAll, [], 10000);
 
   const [search, setSearch]       = useState('');
   const [catFilter, setCatFilter] = useState('all');

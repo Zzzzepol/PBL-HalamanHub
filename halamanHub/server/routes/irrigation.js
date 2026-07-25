@@ -76,11 +76,17 @@ router.put('/settings', async (req, res) => {
 
     const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid } = req.body;
 
-    if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;
+if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;
     if (moistureWetThreshold !== undefined) settings.moistureWetThreshold = moistureWetThreshold;
     if (mode !== undefined) settings.mode = mode;
     if (manualPump !== undefined) settings.manualPump = manualPump;
     if (manualSolenoid !== undefined) settings.manualSolenoid = manualSolenoid;
+
+    const { tankEmptyDistanceCm, tankFullDistanceCm, tankLowThresholdPercent } = req.body;
+    if (tankEmptyDistanceCm !== undefined) settings.tankEmptyDistanceCm = tankEmptyDistanceCm;
+    if (tankFullDistanceCm !== undefined) settings.tankFullDistanceCm = tankFullDistanceCm;
+    if (tankLowThresholdPercent !== undefined) settings.tankLowThresholdPercent = tankLowThresholdPercent;
+
     settings.updatedBy = req.user.name;
 
     await settings.save();

@@ -31,6 +31,8 @@ router.post('/', async (req, res) => {
     const pumpActive     = watering.pumpActive === true;
     const solenoidActive = watering.solenoidActive === true;
     const waterAvailable = watering.tankWaterLevel === 'OK';
+    const levelPercent    = watering.levelPercent;
+    const distanceCm      = watering.distanceCm;
 
     // ---- 1. Update live snapshots (Dashboard / Sensors page) ----
     await Promise.all([
@@ -40,7 +42,7 @@ router.post('/', async (req, res) => {
       upsertSensor('LIVE-004', 'pH', ZONE, `${soil.ph ?? 0}`, soil.ph, deviceId),
       upsertSensor('LIVE-005', 'NPK', ZONE, `N:${soil.nitrogen ?? 0} P:${soil.phosphorus ?? 0} K:${soil.potassium ?? 0}`, undefined, deviceId),
       upsertSensor('LIVE-006', 'Humidity', ZONE, `${air.humidity ?? 0}%`, air.humidity, deviceId),
-      upsertSensor('LIVE-007', 'Water level', TANK_ZONE, waterAvailable ? 'OK' : 'LOW', watering.waterRawADC, deviceId, waterAvailable ? 'ok' : 'warning'),
+      upsertSensor('LIVE-007', 'Water level', TANK_ZONE, `${levelPercent ?? 0}%`, levelPercent, deviceId, waterAvailable ? 'ok' : 'warning'),
     ]);
 
     // ---- 2. Save history record (Analytics charts) ----
@@ -57,7 +59,8 @@ router.post('/', async (req, res) => {
       potassium: soil.potassium,
       airTemp: air.temperature,
       airHumidity: air.humidity,
-      waterRawADC: watering.waterRawADC,
+      distanceCm,
+      levelPercent,
       waterAvailable,
       pumpActive,
       solenoidActive,

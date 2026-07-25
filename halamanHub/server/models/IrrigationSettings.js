@@ -19,6 +19,13 @@ const irrigationSettingsSchema = new mongoose.Schema(
     manualPump:     { type: Boolean, default: false },
     manualSolenoid: { type: Boolean, default: false },
 
+    // Ultrasonic tank sensor calibration — distance (cm) from the mounted
+    // sensor down to the water surface. Admin-adjustable so recalibrating
+    // after remounting the sensor never requires reflashing the ESP32.
+    tankEmptyDistanceCm:    { type: Number, default: 100 }, // reading when tank is empty (max distance)
+    tankFullDistanceCm:     { type: Number, default: 10 },  // reading when tank is full (min distance)
+    tankLowThresholdPercent:{ type: Number, default: 20, min: 0, max: 100 }, // below this % counts as "LOW" for the safety switch
+
     updatedBy: { type: String, default: '' }, // admin name, for the activity log
   },
   { timestamps: true }

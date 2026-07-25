@@ -1,19 +1,13 @@
-// ============================================================
-// HalamanHub Server — Shop orders routes
-// /api/shop/orders/*
-// ============================================================
 const express   = require('express');
 const ShopOrder = require('../../models/ShopOrder');
 const Product   = require('../../models/Product');
 const { requireCustomer } = require('./auth');
 const { sendOrderConfirmation } = require('../../utils/email');
+const { validateStockForItems } = require('../../utils/stock');
 
 const router = express.Router();
 router.use(requireCustomer);
 
-// Self-healing check: flips a stale unpaid order to 'failed' once its
-// payment window has passed. Called whenever orders are read, so an order
-// gets cleaned up even if the customer closed the pending-payment tab.
 async function autoExpireIfStale(order) {
   const isExpired = order.payment === 'unpaid'
     && order.paymentExpiresAt
@@ -61,6 +55,20 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// POST /api/shop/orders/validate-stock
+// Checks cart items against LIVE stock before proceeding to payment —
+// catches items that sold out (or dropped below the requested qty)
+// while sitting in someone's cart.
+router.post('/validate-stock', async (req, res) => {
+  try {
+    const { items } = req.body;
+    const result = await validateStockForItems(items || []);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/shop/orders — create new order
 router.post('/', async (req, res) => {
   try {
@@ -73,6 +81,18 @@ router.post('/', async (req, res) => {
 
     if (!customer || !product || amount == null) {
       return res.status(400).json({ message: 'customer, product, and amount are required.' });
+    }
+
+    // Final server-side safety net — re-check live stock right before creating
+    // the order, in case anything changed since the frontend's own check.
+    if (items && items.length > 0) {
+      const stockCheck = await validateStockForItems(items);
+      if (!stockCheck.valid) {
+        return res.status(409).json({
+          message: 'Some items in your cart are no longer available in the requested quantity.',
+          insufficient: stockCheck.insufficient,
+        });
+      }
     }
 
     // Auto-generate order number

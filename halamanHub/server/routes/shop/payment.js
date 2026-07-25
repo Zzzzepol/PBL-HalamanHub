@@ -3,6 +3,7 @@ const crypto    = require('crypto');
 const ShopOrder = require('../../models/ShopOrder');
 const { requireCustomer } = require('./auth');
 const { sendOrderConfirmation } = require('../../utils/email');
+const { decrementStockForOrder } = require('../../utils/stock');
 
 const router = express.Router();
 
@@ -187,6 +188,8 @@ router.post(
               changedBy: 'PayMongo',
             });
             await order.save();
+
+            await decrementStockForOrder(order);
 
             sendOrderConfirmation(order).catch(() => {});
             console.log(`[Webhook Success] Payment confirmed for order ${order.orderNumber}`);

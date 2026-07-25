@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const ShopOrder = require('../models/ShopOrder');
 const log = require('../utils/logger');
+const { decrementStockForOrder } = require('../utils/stock');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -112,6 +113,7 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+
 // PATCH /api/admin/shop-orders/:id/payment
 router.patch('/:id/payment', async (req, res) => {
   try {
@@ -119,8 +121,21 @@ router.patch('/:id/payment', async (req, res) => {
     if (!['unpaid', 'paid', 'refunded'].includes(payment)) {
       return res.status(400).json({ message: 'Invalid payment status.' });
     }
-    const order = await ShopOrder.findByIdAndUpdate(req.params.id, { payment }, { new: true });
+
+    const order = await ShopOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    // Only decrement the first time an order transitions INTO paid —
+    // re-saving payment:'paid' again (or toggling paid -> refunded -> paid)
+    // must never double-deduct stock.
+    const isNewlyPaid = payment === 'paid' && order.payment !== 'paid';
+
+    order.payment = payment;
+    await order.save();
+
+    if (isNewlyPaid) {
+      await decrementStockForOrder(order);
+    }
 
     await log({
       user: req.user.name,

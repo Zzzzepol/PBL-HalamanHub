@@ -58,12 +58,29 @@ const CheckoutPage = () => {
   };
 
   // Step 1 → 2 (create PayMongo link then order)
+// Step 1 → 2 (validate stock, then create PayMongo link, then order)
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
+      // Check live stock BEFORE touching payment at all — catches items
+      // that sold out (or dropped below the requested qty) while sitting
+      // in the cart, so we never send someone to pay for something
+      // that's no longer actually available.
+      const cartItems = items.map(i => ({ productId: i._id, name: i.name, qty: i.qty }));
+      const stockCheck = await shopOrdersApi.validateStock(cartItems, token);
+
+      if (!stockCheck.valid) {
+        const names = stockCheck.insufficient.map(
+          i => `${i.name} (only ${i.available} left, ${i.requested} requested)`
+        ).join(', ');
+        setError(`Some items in your cart are no longer available: ${names}. Please update your cart and try again.`);
+        setLoading(false);
+        return;
+      }
+
       // Build line items description
       const itemsDesc = items.map(i => `${i.name} x${i.qty}`).join(', ');
 

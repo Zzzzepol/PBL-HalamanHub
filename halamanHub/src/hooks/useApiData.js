@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
  * @param {(token: string) => Promise<any>} fetcher
  * @param {any[]} deps - extra dependencies that should trigger a refetch
  */
-export function useApiData(fetcher, deps = []) {
+export function useApiData(fetcher, deps = [], intervalMs = null) {
   const { token } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,10 +27,19 @@ export function useApiData(fetcher, deps = []) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, ...deps]);
 
-  useEffect(() => {
+useEffect(() => {
     refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refetch]);
+
+  // auto-refresh
+  useEffect(() => {
+    if (!intervalMs) return undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') refetch();
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [refetch, intervalMs]);
 
   return { data, loading, error, refetch, setData };
 }

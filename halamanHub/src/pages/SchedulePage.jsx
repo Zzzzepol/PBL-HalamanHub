@@ -21,7 +21,7 @@ const STATUS_BADGE = {
 };
 
 const SchedulePage = () => {
-  const { data: orders, loading, error, refetch } = useApiData(ordersApi.getAll);
+  const { data: orders, loading, error, refetch } = useApiData(ordersApi.getAll, [], 8000);
 
   const grouped = useMemo(() => {
     const list = (orders || []).filter(o =>

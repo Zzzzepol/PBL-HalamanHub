@@ -30,9 +30,9 @@ const AnalyticsPage = () => {
   const hours = RANGE_HOURS[range];
 
   const { data: history, error: historyError, refetch: refetchHistory } =
-    useApiData((token) => sensorsApi.getHistory(token, hours), [hours]);
+    useApiData((token) => sensorsApi.getHistory(token, hours), [hours], 20000);
   const { data: logs, error: logsError, refetch: refetchLogs } =
-    useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours]);
+    useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours], 20000);
 
   const points = history || [];
 

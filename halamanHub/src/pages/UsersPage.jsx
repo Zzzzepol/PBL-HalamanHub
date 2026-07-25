@@ -24,7 +24,7 @@ const formatDate = (iso) => {
 
 const UsersPage = () => {
   const { token, user: currentUser } = useAuth();
-  const { data: users, loading, error, refetch, setData: setUsers } = useApiData(usersApi.getAll);
+  const { data: users, loading, error, refetch, setData: setUsers } = useApiData(usersApi.getAll, [], 20000);
 
   const [search, setSearch]         = useState('');
   const [roleFilter, setRoleFilter] = useState('All roles');

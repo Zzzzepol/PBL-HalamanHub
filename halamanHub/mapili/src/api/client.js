@@ -1,7 +1,5 @@
-// ============================================================
 // Mapili Shop — API client
 // Connects to the same HalamanHub backend (port 4000)
-// ============================================================
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
 
@@ -46,12 +44,13 @@ export const customerAuthApi = {
 
 // Orders
 export const shopOrdersApi = {
-  create:    (data, token)  => request('/shop/orders',      { method: 'POST', body: data, token }),
-  getAll:    (token)        => request('/shop/orders',      { token }),
-  getOne:    (id, token)    => request(`/shop/orders/${id}`,{ token }),
-  reorder:   (id, token)    => request(`/shop/orders/${id}/reorder`, { method: 'POST', token }),
-  expire:    (id, token)    => request(`/shop/orders/${id}/expire`, { method: 'PATCH', token }),
-  abandon:   (id, token)    => request(`/shop/orders/${id}/abandon`, { method: 'PATCH', token }),
+  create:       (data, token)  => request('/shop/orders',      { method: 'POST', body: data, token }),
+  getAll:       (token)        => request('/shop/orders',      { token }),
+  getOne:       (id, token)    => request(`/shop/orders/${id}`,{ token }),
+  reorder:      (id, token)    => request(`/shop/orders/${id}/reorder`, { method: 'POST', token }),
+  expire:       (id, token)    => request(`/shop/orders/${id}/expire`, { method: 'PATCH', token }),
+  abandon:      (id, token)    => request(`/shop/orders/${id}/abandon`, { method: 'PATCH', token }),
+  validateStock:(items, token) => request('/shop/orders/validate-stock', { method: 'POST', body: { items }, token }),
 };
 
 // PayMongo

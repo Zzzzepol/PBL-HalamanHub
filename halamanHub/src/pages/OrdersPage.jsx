@@ -45,7 +45,7 @@ const emptyForm = { customer: '', customerEmail: '', customerPhone: '', product:
 
 const OrdersPage = () => {
   const { token } = useAuth();
-  const { data: orders, loading, error, refetch, setData: setOrders } = useApiData(ordersApi.getAll);
+  const { data: orders, loading, error, refetch, setData: setOrders } = useApiData(ordersApi.getAll, [], 8000);
 
   const [search, setSearch]           = useState('');
   const [statusFilter, setStatusFilter] = useState('All');

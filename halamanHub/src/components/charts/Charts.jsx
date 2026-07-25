@@ -113,12 +113,13 @@ export const ECTrendChart = ({ labels, values, height = 110 }) => (
   </div>
 );
 
-/* ── Water Tank Level (raw ADC trend) ── */
+
+/* ── Water Tank Level (fill %) ── */
 export const WaterLevelTrendChart = ({ labels, values, height = 160 }) => (
   <div style={{ height, position: 'relative' }}>
     <Line
-      data={{ labels, datasets: [lineDataset('Raw sensor reading', values, COLORS.blue, true)] }}
-      options={baseOptions('ADC value', 0, 4095)}
+      data={{ labels, datasets: [lineDataset('Tank fill level', values, COLORS.blue, true)] }}
+      options={baseOptions(null, 0, 100, v => v + '%')}
     />
   </div>
 );

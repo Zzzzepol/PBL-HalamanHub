@@ -19,9 +19,9 @@ const formatDateTime = (iso) => {
 
 const IrrigationPage = () => {
   const { token } = useAuth();
-  const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } = useApiData(irrigationApi.getSettings);
-  const { data: logs, error: logsError, refetch: refetchLogs } = useApiData((t) => irrigationApi.getLogs(t, 50));
-  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary);
+  const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } = useApiData(irrigationApi.getSettings, [], 10000);
+  const { data: logs, error: logsError, refetch: refetchLogs } = useApiData((t) => irrigationApi.getLogs(t, 50), [], 5000);
+  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 5000);
 
   const [dryThreshold, setDryThreshold] = useState(30);
   const [wetThreshold, setWetThreshold] = useState(60);

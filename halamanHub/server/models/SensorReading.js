@@ -19,7 +19,8 @@ const sensorReadingSchema = new mongoose.Schema(
     airTemp:        { type: Number },
     airHumidity:    { type: Number },
 
-    waterRawADC:    { type: Number },
+    distanceCm:     { type: Number }, // raw ultrasonic reading
+    levelPercent:   { type: Number }, // calculated fill percentage
     waterAvailable: { type: Boolean },
 
     pumpActive:     { type: Boolean, default: false },

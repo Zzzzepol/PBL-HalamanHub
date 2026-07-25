@@ -48,7 +48,7 @@ router.get('/summary', async (req, res) => {
     ec: { value: ec?.numericValue ?? null, unit: 'uS/cm', status: ec?.status },
     temperature: { value: temperature?.numericValue ?? null, unit: '°C', status: temperature?.status },
     humidity: { value: humidity?.numericValue ?? null, unit: '%', status: humidity?.status },
-    waterTank: { available: waterLevel?.value === 'OK', raw: waterLevel?.numericValue ?? null },
+    waterTank: { available: waterLevel?.status === 'ok', percent: waterLevel?.numericValue ?? null },
     npk: npkValues,
     irrigation: {
       pumpActive: latestReading?.pumpActive ?? false,
