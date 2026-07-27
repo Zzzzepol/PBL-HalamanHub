@@ -22,6 +22,7 @@ const alertRoutes = require('./routes/alerts');
 const settingsRoutes = require('./routes/settings');
 const logRoutes = require('./routes/logs');
 const sensorDataRoutes = require('./routes/sensorData');
+const reportRoutes = require('./routes/reports');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -57,6 +58,7 @@ app.use('/api/alerts', alertRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/sensor-data', sensorDataRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Customer Side Shop Routes
 app.use('/api/shop/auth', shopAuthRoutes);
@@ -70,6 +72,10 @@ app.use((req, res) => {
 });
 
 connectDB().then(() => {
+  const { checkSensorHealth } = require('./utils/sensorHealth');
+  const { checkProductStock } = require('./utils/productHealth');
+  setInterval(checkSensorHealth, 60 * 1000);  // check every minute
+  setInterval(checkProductStock, 60 * 1000);  // check every minute
   app.listen(PORT, () => {
     console.log(`HalamanHub server running on http://localhost:${PORT}`);
     console.log(`Allowing requests from: ${CLIENT_ORIGIN}`);

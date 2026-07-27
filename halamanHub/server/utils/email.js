@@ -1,8 +1,7 @@
-// ============================================================
+
 // HalamanHub Server — Email service (nodemailer)
 // Sends order confirmation emails to customers
 // Configure SMTP in server/.env
-// ============================================================
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
@@ -193,4 +192,106 @@ async function sendWelcomeEmail(customer) {
   }
 }
 
-module.exports = { sendOrderConfirmation, sendWelcomeEmail };
+async function sendPasswordReset(user, tempPassword) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log('[Email] SMTP not configured — skipping password reset email.');
+    return;
+  }
+  if (!user.email) return;
+
+  const html = `
+<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;color:#1f2937;">
+  <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:32px 36px;text-align:center;">
+      <span style="color:white;font-size:18px;font-weight:700;">HalamanHub</span>
+    </div>
+    <div style="padding:36px;">
+      <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">Your password was reset</h1>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">
+        Hi ${user.name}, an administrator reset your HalamanHub account password. Use the temporary password below to log in, then change it right away.
+      </p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px 20px;">
+        <div style="font-size:12px;color:#16a34a;font-weight:600;text-transform:uppercase;">Temporary password</div>
+        <div style="font-size:20px;font-weight:700;color:#14532d;font-family:monospace;">${tempPassword}</div>
+      </div>
+      <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;">If you didn't expect this, contact your administrator immediately.</p>
+    </div>
+  </div>
+</body></html>`;
+
+  try {
+    await transporter.sendMail({
+      from: FROM,
+      to: user.email,
+      subject: 'Your HalamanHub password was reset',
+      html,
+    });
+    console.log(`[Email] Password reset email sent to ${user.email}`);
+  } catch (err) {
+    console.error('[Email] Failed to send password reset email:', err.message);
+  }
+}
+
+const STATUS_TEMPLATES = {
+  confirmed: {
+    subject: 'Your order has been confirmed',
+    headline: () => 'Order confirmed ✅',
+    body: (o) => `Hi ${o.customer}, we've confirmed your order ${o.orderNumber} and are getting it ready.`,
+  },
+  ready: {
+    subject: 'Your order is ready',
+    headline: (o) => o.fulfillmentType === 'pickup' ? 'Ready for pickup! 📦' : 'Out for delivery! 🚚',
+    body: (o) => o.fulfillmentType === 'pickup'
+      ? `Hi ${o.customer}, your order ${o.orderNumber} is ready for pickup at Mapili Plant Nursery.`
+      : `Hi ${o.customer}, your order ${o.orderNumber} is out for delivery and should arrive soon.`,
+  },
+  completed: {
+    subject: 'Order completed — thank you!',
+    headline: () => 'Order completed 🎉',
+    body: (o) => `Hi ${o.customer}, your order ${o.orderNumber} is complete. Thanks for shopping with us!`,
+  },
+  cancelled: {
+    subject: 'Your order was cancelled',
+    headline: () => 'Order cancelled',
+    body: (o) => `Hi ${o.customer}, your order ${o.orderNumber} has been cancelled. If this seems wrong, please get in touch.`,
+  },
+};
+
+async function sendOrderStatusUpdate(order, status) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log('[Email] SMTP not configured — skipping status update email.');
+    return;
+  }
+  if (!order.customerEmail) return;
+
+  const template = STATUS_TEMPLATES[status];
+  if (!template) return; // not a milestone we email for (e.g. "processing")
+
+  const html = `
+<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;color:#1f2937;">
+  <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:32px 36px;text-align:center;">
+      <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
+    </div>
+    <div style="padding:36px;">
+      <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">${template.headline(order)}</h1>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">${template.body(order)}</p>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px 20px;">
+        <div style="font-size:12px;color:#16a34a;font-weight:600;text-transform:uppercase;">Order number</div>
+        <div style="font-size:20px;font-weight:700;color:#14532d;">${order.orderNumber}</div>
+      </div>
+    </div>
+  </div>
+</body></html>`;
+
+  try {
+    await transporter.sendMail({ from: FROM, to: order.customerEmail, subject: template.subject, html });
+    console.log(`[Email] Status update (${status}) sent for order ${order.orderNumber}`);
+  } catch (err) {
+    console.error('[Email] Failed to send status update:', err.message);
+  }
+}
+
+module.exports = { sendOrderConfirmation, sendWelcomeEmail, sendPasswordReset, sendOrderStatusUpdate };

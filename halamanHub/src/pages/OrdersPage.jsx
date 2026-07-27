@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardHeader, Table, Badge, StatCard, SearchBar, Select, Button, FormField, Input } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
@@ -32,9 +33,8 @@ const STATUS_LABELS = {
 };
 
 const PAYMENT_BADGE = {
-  unpaid:   { variant: 'error',   label: 'Unpaid' },
-  paid:     { variant: 'ok',      label: 'Paid' },
-  refunded: { variant: 'default', label: 'Refunded' },
+  unpaid: { variant: 'error', label: 'Unpaid' },
+  paid:   { variant: 'ok',    label: 'Paid' },
 };
 
 const PAGE_SIZE = 6;
@@ -47,7 +47,8 @@ const OrdersPage = () => {
   const { token } = useAuth();
   const { data: orders, loading, error, refetch, setData: setOrders } = useApiData(ordersApi.getAll, [], 8000);
 
-  const [search, setSearch]           = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch]           = useState(searchParams.get('q') || '');  
   const [statusFilter, setStatusFilter] = useState('All');
   const [page, setPage]               = useState(1);
   const [detailOrder, setDetailOrder] = useState(null);
@@ -111,7 +112,7 @@ const OrdersPage = () => {
 
   // Toggle payment
   const togglePayment = async (order) => {
-    const next = order.payment === 'unpaid' ? 'paid' : order.payment === 'paid' ? 'refunded' : 'unpaid';
+    const next = order.payment === 'unpaid' ? 'paid' : 'unpaid';
     try {
       const updated = await ordersApi.updatePayment(order._id, next, token);
       setOrders(list.map(o => o._id === updated._id ? updated : o));
@@ -314,7 +315,7 @@ const OrdersPage = () => {
                       Cancel order
                     </Button>
                     <Button icon="ti-credit-card" onClick={() => togglePayment(detailOrder)} disabled={actionLoading}>
-                      {detailOrder.payment === 'unpaid' ? 'Mark as paid' : detailOrder.payment === 'paid' ? 'Mark as refunded' : 'Mark as unpaid'}
+                      {detailOrder.payment === 'unpaid' ? 'Mark as paid' : 'Mark as unpaid'}
                     </Button>
                   </div>
                 </div>
@@ -324,7 +325,7 @@ const OrdersPage = () => {
               {detailOrder.status === 'completed' && detailOrder.payment !== 'paid' && (
                 <div className="mb-4">
                   <Button icon="ti-credit-card" onClick={() => togglePayment(detailOrder)}>
-                    {detailOrder.payment === 'unpaid' ? 'Mark as paid' : 'Mark as refunded'}
+                    {detailOrder.payment === 'unpaid' ? 'Mark as paid' : 'Mark as unpaid'}
                   </Button>
                 </div>
               )}

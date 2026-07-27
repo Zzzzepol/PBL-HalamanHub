@@ -110,6 +110,9 @@ router.post('/:id/reset-password', async (req, res) => {
     await user.setPassword(tempPassword);
     await user.save();
 
+    const { sendPasswordReset } = require('../utils/email');
+    sendPasswordReset(user, tempPassword).catch(() => {}); // non-blocking
+
     await log({
       user: req.user.name,
       userId: req.user.id,

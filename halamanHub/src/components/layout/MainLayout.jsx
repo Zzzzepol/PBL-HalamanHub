@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import { useApiData } from '../../hooks/useApiData';
-import { alertsApi } from '../../api/client';
+import { alertsApi, ordersApi } from '../../api/client';
 
 const formatTime = (iso) => {
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -17,7 +17,8 @@ const MainLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const { data: alerts } = useApiData(token => alertsApi.getAll(token, 5));
+  const { data: alerts, refetch: refetchAlerts } = useApiData(token => alertsApi.getAll(token, 5), [], 10000);
+  const { data: orderSummary } = useApiData(ordersApi.getSummary, [], 15000);
 
   const notifications = (alerts || []).map(a => ({
     id: a._id,
@@ -39,10 +40,10 @@ const MainLayout = () => {
         />
       )}
 
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} mobileOpen={mobileOpen} />
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} mobileOpen={mobileOpen} pendingOrders={orderSummary?.pending} />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <TopBar onMenuToggle={() => setMobileOpen(!mobileOpen)} notifications={notifications} />
+        <TopBar onMenuToggle={() => setMobileOpen(!mobileOpen)} notifications={notifications} onNotificationsChanged={refetchAlerts} />
         <div className="p-5 pb-8 flex-1 max-md:p-3.5 max-md:pb-7 max-sm:p-2.5 max-sm:pb-6">
           <div className="animate-fade-in">
             <Outlet />

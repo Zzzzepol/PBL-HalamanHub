@@ -60,6 +60,8 @@ export const productsApi = {
 
 export const ordersApi = {
   getAll:        (token)            => request('/orders', { token }),
+  getSummary:    (token)            => request('/orders/summary', { token }),
+  createPOSSale: (data, token)      => request('/orders/pos', { method: 'POST', body: data, token }),
   getOne:        (id, token)        => request(`/orders/${id}`, { token }),
   create:        (data, token)      => request('/orders', { method: 'POST', body: data, token }),
   updateStatus:  (id, status, note, token) => request(`/orders/${id}/status`, { method: 'PATCH', body: { status, note }, token }),
@@ -79,6 +81,25 @@ export const usersApi = {
 export const settingsApi = {
   get:    (token)        => request('/settings', { token }),
   update: (data, token)  => request('/settings', { method: 'PUT', body: data, token }),
+};
+
+export const reportsApi = {
+  generate: async (params, token) => {
+    const query = new URLSearchParams(params).toString();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(`${API_BASE}/reports/generate?${query}`, { headers });
+
+    if (!res.ok) {
+      let msg = `Request failed (${res.status})`;
+      try { const data = await res.json(); msg = data.message || msg; } catch { /* no JSON body */ }
+      throw new ApiError(msg, res.status);
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="(.+)"/);
+    return { blob, filename: match ? match[1] : 'report' };
+  },
 };
 
 export const logsApi = {

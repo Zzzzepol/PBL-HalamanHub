@@ -11,7 +11,8 @@ const navItems = [
   { path: '/rainwater',label: 'Rainwater harvesting',icon: 'ti-cloud-rain'},
   { section: 'Commerce' },
   { path: '/products',label: 'Products',icon: 'ti-package'},
-  { path: '/orders',label: 'Orders', icon: 'ti-shopping-cart', badge: 4 },
+  { path: '/orders',label: 'Orders', icon: 'ti-shopping-cart' },
+  { path: '/pos',label: 'Point of sale', icon: 'ti-cash-register' },
   { path: '/schedule',label: 'Pickup schedule', icon: 'ti-calendar'},
   { section: 'Admin' },
   { path: '/users',label: 'Users',icon: 'ti-users'},
@@ -20,7 +21,7 @@ const navItems = [
   { path: '/logs', label: 'Activity logs', icon: 'ti-clipboard-list' },
 ];
 
-const Sidebar = ({ collapsed, onToggle, mobileOpen }) => {
+const Sidebar = ({ collapsed, onToggle, mobileOpen, pendingOrders }) => {
   const location = useLocation();
 
   return (
@@ -72,6 +73,8 @@ const Sidebar = ({ collapsed, onToggle, mobileOpen }) => {
             ? location.pathname === '/'
             : location.pathname.startsWith(item.path);
 
+      const badgeValue = item.path === '/orders' ? pendingOrders : null;
+
           return (
             <NavLink
               key={item.path}
@@ -88,14 +91,14 @@ const Sidebar = ({ collapsed, onToggle, mobileOpen }) => {
             >
               <i className={`ti ${item.icon} text-[17px] w-5 text-center flex-shrink-0`} aria-hidden="true" />
               {!collapsed && <span className="flex-1 overflow-hidden text-ellipsis">{item.label}</span>}
-              {!collapsed && item.badge && (
+              {!collapsed && !!badgeValue && (
                 <span className="ml-auto bg-red-100 text-red-800 text-[10px] px-[7px] py-0.5 rounded-full font-medium">
-                  {item.badge}
+                  {badgeValue}
                 </span>
               )}
-              {collapsed && item.badge && (
+              {collapsed && !!badgeValue && (
                 <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-600 rounded-full text-[8px] text-white flex items-center justify-center">
-                  {item.badge}
+                  {badgeValue}
                 </span>
               )}
             </NavLink>

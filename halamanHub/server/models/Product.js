@@ -10,10 +10,10 @@ const productSchema = new mongoose.Schema(
     unit: { type: String, enum: ['kg', 'bundle', 'head', 'piece'], default: 'kg' },
     stock: { type: Number, required: true, min: 0, default: 0 },
     imageUrl: { type: String, default: '' },
+    lowStockAlerted: { type: Boolean, default: false }, // internal flag — prevents alert spam
   },
   { timestamps: true }
 );
-
 // Derived status based on stock level — not stored, computed on read
 productSchema.virtual('status').get(function () {
   if (this.stock === 0) return 'out-of-stock';

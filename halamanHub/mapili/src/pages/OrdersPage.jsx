@@ -19,7 +19,6 @@ const OrderCard = ({ order, onReorder, reordering }) => {
   const paymentColor = {
     unpaid:   'text-red-600',
     paid:     'text-green-600',
-    refunded: 'text-gray-500',
   }[order.payment] || 'text-gray-500';
 
   return (

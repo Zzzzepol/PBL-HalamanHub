@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { SearchBar, Avatar } from '../ui/UI';
 import { useAuth } from '../../context/AuthContext';
+import { alertsApi } from '../../api/client';
 
 const pageTitles = {
   '/':           { title: 'Dashboard',             sub: 'Farm overview & live readings' },
@@ -11,6 +12,7 @@ const pageTitles = {
   '/rainwater':  { title: 'Rainwater harvesting',  sub: 'Tank levels & collection data' },
   '/products':   { title: 'Products',              sub: 'Inventory management'          },
   '/orders':     { title: 'Orders',                sub: 'Customer order management'     },
+  '/pos':        { title: 'Point of sale',          sub: 'Walk-in customer sales'        },
   '/users':      { title: 'Users',                 sub: 'Account & access management'   },
   '/reports':    { title: 'Reports & export',      sub: 'Generate and download reports' },
   '/settings':   { title: 'Settings',              sub: 'System configuration'          },
@@ -22,10 +24,16 @@ const notifIconBg = {
   ok:      'bg-green-50 text-green-800',
 };
 
-const TopBar = ({ onMenuToggle, notifications = [] }) => {
+// Very small heuristic: if the search text looks like it's about sensors,
+// send them to Sensor Monitoring; otherwise Orders (by far the most common
+// thing an admin searches for — order number or customer name) is the
+// better default landing spot.
+const SENSOR_KEYWORDS = ['moisture', 'temp', 'ph', 'ec', 'humid', 'npk', 'nitrogen', 'phosphorus', 'potassium', 'water', 'tank', 'sensor'];
+
+const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const [search, setSearch] = useState('');
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -35,6 +43,33 @@ const TopBar = ({ onMenuToggle, notifications = [] }) => {
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const q = search.trim();
+    if (!q) return;
+    const looksLikeSensor = SENSOR_KEYWORDS.some(kw => q.toLowerCase().includes(kw));
+    navigate(looksLikeSensor ? '/sensors' : `/orders?q=${encodeURIComponent(q)}`);
+  };
+
+  const markOneRead = async (id) => {
+    try {
+      await alertsApi.markRead(id, token);
+      onNotificationsChanged?.();
+    } catch {
+      // silent — worst case the dot just stays until the next background refresh
+    }
+  };
+
+  const markAllRead = async () => {
+    const unread = notifications.filter(n => !n.read);
+    try {
+      await Promise.all(unread.map(n => alertsApi.markRead(n.id, token)));
+      onNotificationsChanged?.();
+    } catch {
+      // silent — same as above
+    }
   };
 
   return (
@@ -56,9 +91,9 @@ const TopBar = ({ onMenuToggle, notifications = [] }) => {
 
       <div className="flex items-center gap-2.5 ml-auto flex-shrink-0">
         {/* Search */}
-        <div className="w-60 max-lg:w-44 max-md:hidden">
-          <SearchBar value={search} onChange={setSearch} placeholder="Search sensors, orders…" />
-        </div>
+        <form className="w-60 max-lg:w-44 max-md:hidden" onSubmit={handleSearchSubmit}>
+          <SearchBar value={search} onChange={setSearch} placeholder="Search orders, sensors… (Enter)" />
+        </form>
 
         {/* Notifications */}
         <div className="relative">
@@ -77,12 +112,23 @@ const TopBar = ({ onMenuToggle, notifications = [] }) => {
             <div className="absolute top-[calc(100%+8px)] right-0 w-80 max-h-96 overflow-y-auto bg-bg-primary border-[0.5px] border-border rounded-lg shadow-lg z-50" role="dialog" aria-label="Notifications">
               <div className="flex items-center justify-between px-3.5 py-3 border-b-[0.5px] border-border text-base font-medium sticky top-0 bg-bg-primary">
                 <span>Notifications</span>
-                <button className="bg-transparent border-none text-text-secondary cursor-pointer text-base flex" onClick={() => setShowNotifs(false)} aria-label="Close">
-                  <i className="ti ti-x" aria-hidden="true" />
-                </button>
+                <div className="flex items-center gap-2.5">
+                  {unreadCount > 0 && (
+                    <button className="bg-transparent border-none text-primary text-xs cursor-pointer" onClick={markAllRead}>
+                      Mark all read
+                    </button>
+                  )}
+                  <button className="bg-transparent border-none text-text-secondary cursor-pointer text-base flex" onClick={() => setShowNotifs(false)} aria-label="Close">
+                    <i className="ti ti-x" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               {notifications.slice(0, 5).map(n => (
-                <div key={n.id} className="flex gap-2.5 px-3.5 py-2.5 border-b-[0.5px] border-border last:border-b-0 items-start">
+                <button
+                  key={n.id}
+                  className={`flex gap-2.5 px-3.5 py-2.5 border-b-[0.5px] border-border last:border-b-0 items-start w-full text-left bg-transparent border-x-0 border-t-0 cursor-pointer hover:bg-bg-secondary ${!n.read ? 'bg-bg-secondary/40' : ''}`}
+                  onClick={() => !n.read && markOneRead(n.id)}
+                >
                   <div className={`w-7 h-7 rounded-sm flex items-center justify-center flex-shrink-0 text-sm ${notifIconBg[n.type] || notifIconBg.ok}`}>
                     <i className={`ti ${n.icon}`} aria-hidden="true" />
                   </div>
@@ -90,8 +136,11 @@ const TopBar = ({ onMenuToggle, notifications = [] }) => {
                     <div className="text-sm text-text-primary leading-snug">{n.message}</div>
                     <div className="text-xs text-text-secondary mt-0.5">{n.time}</div>
                   </div>
-                </div>
+                </button>
               ))}
+              {notifications.length === 0 && (
+                <div className="px-3.5 py-6 text-center text-sm text-text-secondary">No notifications yet.</div>
+              )}
             </div>
           )}
         </div>

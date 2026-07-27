@@ -5,6 +5,8 @@
   "dependencies": {
     "ajv": "^8.12.0",
     "chart.js": "^4.4.1",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.19.1",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
@@ -20,10 +22,10 @@
     "dev": "concurrently -n SERVER,CLIENT -c blue,green \"npm run server\" \"npm start\""
   },
   "devDependencies": {
+    "autoprefixer": "^10.4.18",
     "concurrently": "^8.2.2",
-    "tailwindcss": "^3.4.1",
     "postcss": "^8.4.35",
-    "autoprefixer": "^10.4.18"
+    "tailwindcss": "^3.4.1"
   },
   "eslintConfig": {
     "extends": [

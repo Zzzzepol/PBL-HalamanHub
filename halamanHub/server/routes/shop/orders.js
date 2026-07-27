@@ -4,8 +4,20 @@ const Product   = require('../../models/Product');
 const { requireCustomer } = require('./auth');
 const { sendOrderConfirmation } = require('../../utils/email');
 const { validateStockForItems } = require('../../utils/stock');
+const { createAlertIfEnabled } = require('../../utils/alerts');
 
 const router = express.Router();
+
+router.post('/validate-stock', async (req, res) => {
+  try {
+    const { items } = req.body;
+    const result = await validateStockForItems(items || []);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.use(requireCustomer);
 
 async function autoExpireIfStale(order) {
@@ -50,20 +62,6 @@ router.get('/:id', async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order not found.' });
     order = await autoExpireIfStale(order);
     res.json(order);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// POST /api/shop/orders/validate-stock
-// Checks cart items against LIVE stock before proceeding to payment —
-// catches items that sold out (or dropped below the requested qty)
-// while sitting in someone's cart.
-router.post('/validate-stock', async (req, res) => {
-  try {
-    const { items } = req.body;
-    const result = await validateStockForItems(items || []);
-    res.json(result);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -122,6 +120,12 @@ router.post('/', async (req, res) => {
 
     // Send order confirmation email (non-blocking)
     sendOrderConfirmation(order).catch(() => {});
+
+    await createAlertIfEnabled('orders', {
+      type: 'ok',
+      icon: 'ti-shopping-cart',
+      message: `New order ${order.orderNumber} placed by ${order.customer} (₱${order.amount}).`,
+    });
 
     res.status(201).json(order);
   } catch (err) {

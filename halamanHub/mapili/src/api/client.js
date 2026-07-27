@@ -50,7 +50,7 @@ export const shopOrdersApi = {
   reorder:      (id, token)    => request(`/shop/orders/${id}/reorder`, { method: 'POST', token }),
   expire:       (id, token)    => request(`/shop/orders/${id}/expire`, { method: 'PATCH', token }),
   abandon:      (id, token)    => request(`/shop/orders/${id}/abandon`, { method: 'PATCH', token }),
-  validateStock:(items, token) => request('/shop/orders/validate-stock', { method: 'POST', body: { items }, token }),
+ validateStock:(items) => request('/shop/orders/validate-stock', { method: 'POST', body: { items } }),
 };
 
 // PayMongo

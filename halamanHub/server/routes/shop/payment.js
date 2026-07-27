@@ -4,6 +4,7 @@ const ShopOrder = require('../../models/ShopOrder');
 const { requireCustomer } = require('./auth');
 const { sendOrderConfirmation } = require('../../utils/email');
 const { decrementStockForOrder } = require('../../utils/stock');
+const { createAlertIfEnabled } = require('../../utils/alerts');
 
 const router = express.Router();
 
@@ -190,6 +191,12 @@ router.post(
             await order.save();
 
             await decrementStockForOrder(order);
+
+            await createAlertIfEnabled('orders', {
+              type: 'ok',
+              icon: 'ti-cash',
+              message: `Payment received for order ${order.orderNumber} (₱${order.amount}).`,
+            });
 
             sendOrderConfirmation(order).catch(() => {});
             console.log(`[Webhook Success] Payment confirmed for order ${order.orderNumber}`);

@@ -4,6 +4,7 @@ const Sensor = require('../models/Sensor');
 const SensorReading = require('../models/SensorReading');
 const IrrigationLog = require('../models/IrrigationLog');
 const IrrigationSettings = require('../models/IrrigationSettings');
+const { createAlertIfEnabled } = require('../utils/alerts');
 
 const router = express.Router();
 
@@ -93,10 +94,41 @@ router.post('/', async (req, res) => {
       events.push({ source: 'SOLENOID', action: solenoidActive ? 'ON' : 'OFF', reason });
     }
 
-    if (events.length > 0) {
+if (events.length > 0) {
       await IrrigationLog.insertMany(
         events.map(e => ({ ...e, device: deviceId, moistureAtEvent: moisture }))
       );
+
+      // Notify admin whenever the pump/solenoid actually turns ON —
+      // OFF events are quieter/expected, so we don't double up on noise.
+      for (const e of events) {
+        if (e.action !== 'ON') continue;
+        await createAlertIfEnabled('irrigation', {
+          type: 'warning',
+          icon: e.source === 'PUMP' ? 'ti-droplet' : 'ti-valve',
+          message: `${e.source === 'PUMP' ? 'Pump' : 'Solenoid'} turned ON (${e.reason.replace('_', ' ')}) — soil moisture ${moisture ?? '—'}%.`,
+        });
+      }
+    }
+
+    // ---- Low moisture crossing (fires once, right when it first drops below threshold) ----
+    const prevMoisture = previous?.soilMoisture;
+    if (moisture !== null && moisture < dryThreshold && (prevMoisture == null || prevMoisture >= dryThreshold)) {
+      await createAlertIfEnabled('lowMoisture', {
+        type: 'warning',
+        icon: 'ti-droplet-off',
+        message: `Soil moisture dropped to ${moisture}% — below the ${dryThreshold}% threshold.`,
+      });
+    }
+
+    // ---- Water tank low crossing (fires once, right when it first drops below threshold) ----
+    const prevWaterAvailable = previous?.waterAvailable;
+    if (!waterAvailable && (prevWaterAvailable == null || prevWaterAvailable === true)) {
+      await createAlertIfEnabled('waterTank', {
+        type: 'error',
+        icon: 'ti-alert-triangle',
+        message: `Water tank level is low${levelPercent != null ? ` (${levelPercent}%)` : ''} — irrigation may switch to backup.`,
+      });
     }
 
     res.status(201).json({ status: 'ok', readingId: reading._id });

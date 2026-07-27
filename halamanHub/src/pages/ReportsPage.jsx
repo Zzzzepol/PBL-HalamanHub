@@ -1,44 +1,75 @@
 import React, { useState } from 'react';
 import { Card, CardHeader, CardBody, Button, FormField, Input, Select } from '../components/ui/UI';
+import { useAuth } from '../context/AuthContext';
+import { reportsApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 
+const downloadBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
+
 const ReportsPage = () => {
-  const [fromDate, setFromDate] = useState('2026-06-01');
-  const [toDate, setToDate] = useState('2026-06-11');
+  const { token } = useAuth();
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [dataType, setDataType] = useState('All sensor data');
   const [format, setFormat] = useState('PDF');
   const [generating, setGenerating] = useState(false);
   const [done, setDone] = useState(false);
+  const [genError, setGenError] = useState('');
+
+  const runReport = async (type, fmt, from, to) => {
+    setGenerating(true);
+    setGenError('');
+    setDone(false);
+    try {
+      const { blob, filename } = await reportsApi.generate({ dataType: type, format: fmt, from: from || '', to: to || '' }, token);
+      downloadBlob(blob, filename);
+      setDone(true);
+      setTimeout(() => setDone(false), 3000);
+    } catch (err) {
+      setGenError(err instanceof ApiError ? err.message : 'Failed to generate report.');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const generate = (e) => {
     e.preventDefault();
-    setGenerating(true);
-    setDone(false);
-    setTimeout(() => { setGenerating(false); setDone(true); }, 1200);
+    runReport(dataType, format, fromDate, toDate);
   };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
     <div>
       {/* Quick export cards */}
       <div className={ps.grid.threeCol}>
         <Card>
-          <div className={ps.reportCard} onClick={() => alert('Generating daily crop report (PDF)…')}>
+          <div className={ps.reportCard} onClick={() => runReport('All sensor data', 'PDF', todayStr, todayStr)}>
             <div className={`${ps.reportIcon} bg-red-50 text-red-800`}>
               <i className="ti ti-file-text" aria-hidden="true" />
             </div>
             <div className={ps.reportTitle}>Daily crop report</div>
-            <div className={ps.reportDesc}>Sensors, irrigation, and alerts summary</div>
-            <Button size="sm" icon="ti-file-download">Export PDF</Button>
+            <div className={ps.reportDesc}>Today's sensor readings, as a PDF</div>
+            <Button size="sm" icon="ti-file-download" disabled={generating}>Export PDF</Button>
           </div>
         </Card>
         <Card>
-          <div className={ps.reportCard} onClick={() => alert('Generating sensor data export (Excel)…')}>
+          <div className={ps.reportCard} onClick={() => runReport('All sensor data', 'Excel (.xlsx)')}>
             <div className={`${ps.reportIcon} bg-green-50 text-green-800`}>
               <i className="ti ti-file-spreadsheet" aria-hidden="true" />
             </div>
             <div className={ps.reportTitle}>Sensor data export</div>
-            <div className={ps.reportDesc}>Raw readings across all zones</div>
-            <Button size="sm" icon="ti-file-download">Export Excel</Button>
+            <div className={ps.reportDesc}>Last 30 days of raw readings</div>
+            <Button size="sm" icon="ti-file-download" disabled={generating}>Export Excel</Button>
           </div>
         </Card>
         <Card>
@@ -46,7 +77,7 @@ const ReportsPage = () => {
             <div className={`${ps.reportIcon} bg-blue-50 text-blue-700`}>
               <i className="ti ti-printer" aria-hidden="true" />
             </div>
-            <div className={ps.reportTitle}>Print report</div>
+            <div className={ps.reportTitle}>Print this page</div>
             <div className={ps.reportDesc}>Formatted for A4 / Letter paper</div>
             <Button size="sm" icon="ti-printer">Print</Button>
           </div>
@@ -54,8 +85,8 @@ const ReportsPage = () => {
       </div>
 
       {/* Custom date range */}
-      <Card>
-        <CardHeader title="Custom date range report" subtitle="Generate historical reports for any period" />
+      <Card className={ps.lastCard}>
+        <CardHeader title="Custom date range report" subtitle="Generate real reports for any period, pulled from your live data" />
         <CardBody>
           <form onSubmit={generate}>
             <div className={ps.grid.formRow}>
@@ -92,31 +123,13 @@ const ReportsPage = () => {
             {done && (
               <div className="mt-2.5 text-sm text-green-800 flex items-center gap-1.5">
                 <i className="ti ti-check" aria-hidden="true" />
-                Report generated: {dataType} ({format}), {fromDate} to {toDate}
+                Downloaded: {dataType} ({format}){fromDate && toDate ? `, ${fromDate} to ${toDate}` : ', last 30 days'}
               </div>
             )}
+            {genError && (
+              <div className="mt-2.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">{genError}</div>
+            )}
           </form>
-        </CardBody>
-      </Card>
-
-      {/* Recent reports */}
-      <Card className={ps.lastCard}>
-        <CardHeader title="Recent reports" subtitle="Previously generated exports" />
-        <CardBody>
-          {[
-            { name: 'Weekly sensor summary', date: 'Jun 8 – Jun 11, 2026', format: 'PDF', icon: 'ti-file-text', color: 'text-red-800' },
-            { name: 'Irrigation history — Zone A', date: 'Jun 1 – Jun 11, 2026', format: 'Excel', icon: 'ti-file-spreadsheet', color: 'text-green-800' },
-            { name: 'Monthly sales report', date: 'May 2026', format: 'PDF', icon: 'ti-file-text', color: 'text-red-800' },
-          ].map((r, i) => (
-            <div key={i} className={`flex items-center gap-3 py-2.5 ${i < 2 ? 'border-b-[0.5px] border-border' : ''}`}>
-              <i className={`ti ${r.icon} text-lg ${r.color}`} aria-hidden="true" />
-              <div className="flex-1">
-                <div className="text-base">{r.name}</div>
-                <div className="text-xs text-text-secondary">{r.date} · {r.format}</div>
-              </div>
-              <Button size="sm" icon="ti-download">Download</Button>
-            </div>
-          ))}
         </CardBody>
       </Card>
     </div>

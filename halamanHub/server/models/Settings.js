@@ -25,6 +25,7 @@ const settingsSchema = new mongoose.Schema(
       sensorFailure: { type: Boolean, default: true },
       irrigation: { type: Boolean, default: true },
       orders: { type: Boolean, default: false },
+      lowStock: { type: Boolean, default: true },
     },
 
     autoIrrigationEnabled: { type: Boolean, default: true },

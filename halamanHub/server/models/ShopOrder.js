@@ -40,7 +40,7 @@ const shopOrderSchema = new mongoose.Schema(
     },
    payment: {
   type: String,
-  enum: ['unpaid', 'paid', 'refunded', 'failed'],
+  enum: ['unpaid', 'paid', 'failed'],
   default: 'unpaid',
 },
     // PayMongo fields
