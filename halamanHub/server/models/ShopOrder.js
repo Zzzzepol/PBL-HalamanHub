@@ -23,7 +23,7 @@ const shopOrderSchema = new mongoose.Schema(
     orderNumber:   { type: String, required: true, unique: true },
     customerId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
     customer:      { type: String, required: true },
-    customerEmail: { type: String, required: true },
+    customerEmail: { type: String, default: '' },
     customerPhone: { type: String, default: '' },
     product:       { type: String, required: true }, // summary string
     items:         { type: [itemSchema], default: [] },

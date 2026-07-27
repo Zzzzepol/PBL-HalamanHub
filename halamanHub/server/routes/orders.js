@@ -76,6 +76,7 @@ router.post('/pos', async (req, res) => {
     const order = await Order.create({
       orderNumber,
       customer: customer?.trim() || 'Walk-in customer',
+      customerEmail: '',
       product: productSummary,
       items: resolvedItems,
       quantity: resolvedItems.reduce((sum, i) => sum + i.qty, 0),

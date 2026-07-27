@@ -181,9 +181,7 @@ const OrdersPage = () => {
             <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABELS[s] || s}</option>
           ))}
         </Select>
-        <Button variant="primary" icon="ti-plus" onClick={() => { setForm(emptyForm); setSaveError(''); setAddModalOpen(true); }}>
-          New order
-        </Button>
+    
       </div>
 
       {/* Table */}
