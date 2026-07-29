@@ -3,6 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { customerAuthApi } from '../api/client';
 import { Button, FormField, Input, Alert } from '../components/ui/UI';
+import AddressManager from '../components/AddressManager';
+
+const PH_PHONE_REGEX = /^\+639\d{9}$/;
 
 const AccountPage = () => {
   const { user, token, updateUser, logout } = useAuth();
@@ -24,8 +27,14 @@ const AccountPage = () => {
 
   const handleProfileSave = async (e) => {
     e.preventDefault();
-    setSaving(true);
     setProfileMsg(null);
+
+    if (form.phone && !PH_PHONE_REGEX.test(form.phone)) {
+      setProfileMsg({ type: 'error', text: 'Phone number must look like +639171234567 — starts with +63, then 9, then 9 more digits.' });
+      return;
+    }
+
+    setSaving(true);
     try {
       const updated = await customerAuthApi.update({ name: form.name, phone: form.phone }, token);
       updateUser(updated.user);
@@ -103,14 +112,24 @@ const AccountPage = () => {
               <Input id="email" type="email" value={form.email} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
               <p className="text-xs text-gray-400 mt-1">Email cannot be changed.</p>
             </FormField>
-            <FormField label="Phone number" id="phone">
-              <Input id="phone" type="tel" value={form.phone} onChange={e => f('phone', e.target.value)} placeholder="+63 9XX XXX XXXX" />
+           <FormField label="Phone number" id="phone">
+              <Input
+                id="phone"
+                type="tel"
+                value={form.phone}
+                onChange={e => f('phone', e.target.value.replace(/[\s-]/g, ''))}
+                placeholder="+639171234567"
+              />
+              <p className="text-xs text-gray-400 mt-1">Format: +63 followed by your 10-digit mobile number starting with 9.</p>
             </FormField>
             <Button variant="primary" type="submit" disabled={saving} className="self-start">
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </form>
         </div>
+
+        {/* Saved addresses */}
+        <AddressManager token={token} />
 
         {/* Password card */}
         <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 mb-5">

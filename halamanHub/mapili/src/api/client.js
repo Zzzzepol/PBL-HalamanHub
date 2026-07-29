@@ -42,6 +42,15 @@ export const customerAuthApi = {
   changePassword: (data, token) => request('/shop/auth/change-password', { method: 'PUT', body: data, token }),
 };
 
+// Saved addresses
+export const addressesApi = {
+  getAll:      (token)             => request('/shop/auth/addresses', { token }),
+  add:         (data, token)       => request('/shop/auth/addresses', { method: 'POST', body: data, token }),
+  update:      (id, data, token)   => request(`/shop/auth/addresses/${id}`, { method: 'PUT', body: data, token }),
+  remove:      (id, token)         => request(`/shop/auth/addresses/${id}`, { method: 'DELETE', token }),
+  setPrimary:  (id, token)         => request(`/shop/auth/addresses/${id}/primary`, { method: 'PATCH', token }),
+};
+
 // Orders
 export const shopOrdersApi = {
   create:       (data, token)  => request('/shop/orders',      { method: 'POST', body: data, token }),

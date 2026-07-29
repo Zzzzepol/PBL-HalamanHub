@@ -1,7 +1,5 @@
-// ============================================================
 // HalamanHub Server — Shop customer auth routes
 // /api/shop/auth/*
-// ============================================================
 const express   = require('express');
 const jwt       = require('jsonwebtoken');
 const Customer  = require('../../models/Customer');
@@ -101,6 +99,11 @@ router.get('/verify', requireCustomer, (req, res) => {
 router.put('/profile', requireCustomer, async (req, res) => {
   try {
     const { name, phone } = req.body;
+
+    if (phone && !/^\+639\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: 'Phone number must be a valid PH mobile number, e.g. +639171234567.' });
+    }
+
     const customer = await Customer.findByIdAndUpdate(
       req.customer.id,
       { name, phone },
@@ -134,6 +137,105 @@ router.put('/change-password', requireCustomer, async (req, res) => {
     await customer.setPassword(newPassword);
     await customer.save();
     res.json({ message: 'Password updated successfully.' });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// ── Saved addresses ──────────────────────────────────────────────
+
+// GET /api/shop/auth/addresses
+router.get('/addresses', requireCustomer, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.customer.id);
+    if (!customer) return res.status(404).json({ message: 'Account not found.' });
+    res.json({ addresses: customer.addresses });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/shop/auth/addresses — add a new address
+router.post('/addresses', requireCustomer, async (req, res) => {
+  try {
+    const { label, address, city } = req.body;
+    if (!address || !city) {
+      return res.status(400).json({ message: 'Address and city are required.' });
+    }
+
+    const customer = await Customer.findById(req.customer.id);
+    if (!customer) return res.status(404).json({ message: 'Account not found.' });
+
+    // First address a customer ever adds becomes primary automatically
+    const isFirst = customer.addresses.length === 0;
+    customer.addresses.push({ label: label || 'Home', address, city, isPrimary: isFirst });
+    await customer.save();
+
+    res.status(201).json({ addresses: customer.addresses });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// PUT /api/shop/auth/addresses/:addressId — edit an address
+router.put('/addresses/:addressId', requireCustomer, async (req, res) => {
+  try {
+    const { label, address, city } = req.body;
+    const customer = await Customer.findById(req.customer.id);
+    if (!customer) return res.status(404).json({ message: 'Account not found.' });
+
+    const addr = customer.addresses.id(req.params.addressId);
+    if (!addr) return res.status(404).json({ message: 'Address not found.' });
+
+    if (label !== undefined)   addr.label = label;
+    if (address !== undefined) addr.address = address;
+    if (city !== undefined)    addr.city = city;
+
+    await customer.save();
+    res.json({ addresses: customer.addresses });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// DELETE /api/shop/auth/addresses/:addressId
+router.delete('/addresses/:addressId', requireCustomer, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.customer.id);
+    if (!customer) return res.status(404).json({ message: 'Account not found.' });
+
+    const addr = customer.addresses.id(req.params.addressId);
+    if (!addr) return res.status(404).json({ message: 'Address not found.' });
+
+    const wasPrimary = addr.isPrimary;
+    addr.deleteOne();
+
+    // If the deleted address was the primary one, promote another so
+    // there's always a primary as long as at least one address exists.
+    if (wasPrimary && customer.addresses.length > 0) {
+      customer.addresses[0].isPrimary = true;
+    }
+
+    await customer.save();
+    res.json({ addresses: customer.addresses });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// PATCH /api/shop/auth/addresses/:addressId/primary — set as primary
+router.patch('/addresses/:addressId/primary', requireCustomer, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.customer.id);
+    if (!customer) return res.status(404).json({ message: 'Account not found.' });
+
+    const target = customer.addresses.id(req.params.addressId);
+    if (!target) return res.status(404).json({ message: 'Address not found.' });
+
+    customer.addresses.forEach(a => { a.isPrimary = a._id.equals(target._id); });
+
+    await customer.save();
+    res.json({ addresses: customer.addresses });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
