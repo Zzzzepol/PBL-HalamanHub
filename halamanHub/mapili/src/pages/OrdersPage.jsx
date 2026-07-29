@@ -12,9 +12,21 @@ const formatTime = (iso) => new Date(iso).toLocaleTimeString('en-US', {
   hour: 'numeric', minute: '2-digit',
 });
 
-const OrderCard = ({ order, onReorder, reordering }) => {
+const OrderCard = ({ order, onReorder, reordering, token }) => {
   const [expanded, setExpanded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const sb = orderStatusBadge[order.status] || orderStatusBadge.pending;
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await shopOrdersApi.viewReceipt(order._id, token);
+    } catch {
+      // stays clickable to retry
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const paymentColor = {
     unpaid:   'text-red-600',
@@ -57,6 +69,9 @@ const OrderCard = ({ order, onReorder, reordering }) => {
           {expanded ? 'Hide details' : 'View details'}
         </button>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" size="sm" icon="ti-download" onClick={handleDownload} disabled={downloading}>
+            {downloading ? '…' : 'Receipt'}
+          </Button>
           {['pending', 'confirmed', 'processing', 'ready'].includes(order.status) && (
             <span className="text-xs text-gray-400 flex items-center gap-1">
               <i className="ti ti-clock" /> In progress
@@ -241,7 +256,7 @@ const OrdersPage = () => {
         ) : (
           <div className="flex flex-col gap-4">
             {filtered.map(order => (
-              <OrderCard key={order._id} order={order} onReorder={handleReorder} reordering={reordering} />
+              <OrderCard key={order._id} order={order} onReorder={handleReorder} reordering={reordering} token={token} />
             ))}
           </div>
         )}

@@ -9,6 +9,19 @@ const OrderSuccessPage = () => {
   const { token } = useAuth();
   const [order, setOrder]   = useState(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!order) return;
+    setDownloading(true);
+    try {
+      await shopOrdersApi.viewReceipt(order._id, token);
+    } catch {
+      // silently fail is fine here — button just stays clickable to retry
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     if (!id || !token) { setLoading(false); return; }
@@ -64,7 +77,10 @@ const OrderSuccessPage = () => {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <div className="flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
+          <Button variant="outline" icon="ti-download" onClick={handleDownload} disabled={downloading}>
+            {downloading ? 'Downloading…' : 'Download receipt'}
+          </Button>
           <Link to="/account/orders">
             <Button variant="primary" icon="ti-package">Track your order</Button>
           </Link>

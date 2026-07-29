@@ -62,3 +62,22 @@ img {
   outline: 2px solid #27a85a;
   outline-offset: 2px;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #walkin-receipt, #walkin-receipt * {
+    visibility: visible;
+  }
+  #walkin-receipt {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+}

@@ -3,6 +3,7 @@ import { Card, CardHeader, CardBody, Button, SearchBar, Input, Badge, EmptyState
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { productsApi, ordersApi, ApiError } from '../api/client';
+import WalkInReceipt from '../components/WalkInReceipt';
 
 const POSPage = () => {
   const { token } = useAuth();
@@ -165,12 +166,17 @@ const POSPage = () => {
                 <i className="ti ti-circle-check text-4xl text-green-700" aria-hidden="true" />
                 <div className="text-lg font-medium mt-2">Sale complete</div>
                 <div className="text-sm text-text-secondary">{receipt.orderNumber} · ₱{receipt.amount}</div>
-                <Button variant="primary" className="mt-4" onClick={clearSale}>Start new sale</Button>
+                <Button variant="default" className="mt-4" icon="ti-printer" onClick={() => window.print()}>
+                  Print receipt
+                </Button>
+                <Button variant="primary" className="mt-2" onClick={clearSale}>Start new sale</Button>
               </div>
             )}
           </CardBody>
         </Card>
       </div>
+
+      <WalkInReceipt order={receipt} />
     </div>
   );
 };

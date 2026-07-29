@@ -1,4 +1,5 @@
 const express   = require('express');
+const PDFDocument = require('pdfkit');
 const ShopOrder = require('../../models/ShopOrder');
 const Product   = require('../../models/Product');
 const { requireCustomer } = require('./auth');
@@ -67,6 +68,123 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// GET /api/shop/orders/:id/receipt — downloadable/viewable PDF e-receipt
+router.get('/:id/receipt', async (req, res) => {
+  try {
+    const order = await ShopOrder.findOne({
+      _id:        req.params.id,
+      customerId: req.customer.id,
+    });
+    if (!order) return res.status(404).json({ message: 'Order not found.' });
+
+    const doc = new PDFDocument({ margin: 0, size: 'A4' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="receipt-${order.orderNumber}.pdf"`);
+    doc.pipe(res);
+
+    const PAGE_WIDTH = doc.page.width;
+    const MARGIN = 40;
+    const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+    const BRAND = '#15803d';
+    const BRAND_DARK = '#166534';
+    const GRAY = '#6b7280';
+    const LIGHT_ROW = '#f0fdf4';
+
+    //Header banner
+    doc.rect(0, 0, PAGE_WIDTH, 110).fill(BRAND);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(24).text('Mapili Plant Nursery', MARGIN, 34);
+    doc.font('Helvetica').fontSize(10).fillColor('#dcfce7')
+      .text('Talisay, Batangas, Philippines', MARGIN, 64);
+    doc.font('Helvetica-Bold').fontSize(12).fillColor('#ffffff')
+      .text('E-RECEIPT', PAGE_WIDTH - MARGIN - 150, 34, { width: 150, align: 'right' });
+    doc.font('Helvetica').fontSize(10).fillColor('#dcfce7')
+      .text(order.orderNumber, PAGE_WIDTH - MARGIN - 150, 52, { width: 150, align: 'right' });
+
+    // ── Order info block ───────────────────────────────────────────
+    let y = 140;
+    doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10).text('BILLED TO', MARGIN, y);
+    doc.font('Helvetica-Bold').fontSize(10).text('ORDER INFO', MARGIN + CONTENT_WIDTH / 2, y);
+    y += 16;
+
+    doc.font('Helvetica').fontSize(10).fillColor('#374151');
+    doc.text(order.customer, MARGIN, y, { width: CONTENT_WIDTH / 2 - 10 });
+    doc.text(`Date: ${new Date(order.orderDate || order.createdAt).toLocaleString('en-PH')}`, MARGIN + CONTENT_WIDTH / 2, y, { width: CONTENT_WIDTH / 2 });
+    y += 14;
+    doc.text(order.customerEmail, MARGIN, y, { width: CONTENT_WIDTH / 2 - 10 });
+    doc.text(`Fulfillment: ${order.fulfillmentType || 'delivery'}`, MARGIN + CONTENT_WIDTH / 2, y, { width: CONTENT_WIDTH / 2 });
+    y += 14;
+    if (order.customerPhone) {
+      doc.text(order.customerPhone, MARGIN, y, { width: CONTENT_WIDTH / 2 - 10 });
+    }
+    const paymentColor = order.payment === 'paid' ? BRAND : '#b91c1c';
+    doc.fillColor(paymentColor).font('Helvetica-Bold')
+      .text(`Payment: ${order.payment.toUpperCase()}`, MARGIN + CONTENT_WIDTH / 2, y, { width: CONTENT_WIDTH / 2 });
+    y += 28;
+
+    //Items table header
+    const col = { item: MARGIN, qty: MARGIN + 260, price: MARGIN + 330, total: MARGIN + 420 };
+    doc.rect(MARGIN, y, CONTENT_WIDTH, 24).fill(BRAND_DARK);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9);
+    doc.text('ITEM', col.item + 10, y + 7);
+    doc.text('QTY', col.qty, y + 7, { width: 50, align: 'right' });
+    doc.text('PRICE', col.price, y + 7, { width: 70, align: 'right' });
+    doc.text('SUBTOTAL', col.total, y + 7, { width: CONTENT_WIDTH - (col.total - MARGIN) - 10, align: 'right' });
+    y += 24;
+
+    // ── Items rows ────────────────────────────────────────────────
+    (order.items || []).forEach((item, idx) => {
+      const rowHeight = 22;
+      if (idx % 2 === 0) {
+        doc.rect(MARGIN, y, CONTENT_WIDTH, rowHeight).fill(LIGHT_ROW);
+      }
+      doc.fillColor('#111827').font('Helvetica').fontSize(9);
+      doc.text(item.name, col.item + 10, y + 6, { width: col.qty - col.item - 15 });
+      doc.text(`${item.qty} ${item.unit || ''}`, col.qty, y + 6, { width: 50, align: 'right' });
+      doc.text(`PHP ${Number(item.price).toFixed(2)}`, col.price, y + 6, { width: 70, align: 'right' });
+      doc.font('Helvetica-Bold').text(
+        `PHP ${(item.price * item.qty).toFixed(2)}`,
+        col.total, y + 6, { width: CONTENT_WIDTH - (col.total - MARGIN) - 10, align: 'right' }
+      );
+      y += rowHeight;
+    });
+
+    doc.moveTo(MARGIN, y).lineTo(PAGE_WIDTH - MARGIN, y).strokeColor('#e5e7eb').lineWidth(1).stroke();
+    y += 16;
+
+    //Totals
+    const totalsX = PAGE_WIDTH - MARGIN - 220;
+    const subtotal = order.amount - (order.shippingFee || 0);
+
+    doc.font('Helvetica').fontSize(10).fillColor('#374151');
+    doc.text('Subtotal', totalsX, y, { width: 130 });
+    doc.text(`PHP ${subtotal.toFixed(2)}`, totalsX + 130, y, { width: 90, align: 'right' });
+    y += 16;
+
+    if (order.shippingFee) {
+      doc.text('Shipping fee', totalsX, y, { width: 130 });
+      doc.text(`PHP ${order.shippingFee.toFixed(2)}`, totalsX + 130, y, { width: 90, align: 'right' });
+      y += 16;
+    }
+
+    doc.moveTo(totalsX, y).lineTo(PAGE_WIDTH - MARGIN, y).strokeColor('#d1d5db').lineWidth(1).stroke();
+    y += 10;
+
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(BRAND_DARK);
+    doc.text('Total Paid', totalsX, y, { width: 130 });
+    doc.text(`PHP ${order.amount.toFixed(2)}`, totalsX + 130, y, { width: 90, align: 'right' });
+
+    // ── Footer ────────────────────────────────────────────────────
+    const footerY = doc.page.height - 90;
+    doc.moveTo(MARGIN, footerY).lineTo(PAGE_WIDTH - MARGIN, footerY).strokeColor('#e5e7eb').lineWidth(1).stroke();
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(BRAND)
+      .text('Thank you for shopping with HalamanHub!', MARGIN, footerY + 14, { width: CONTENT_WIDTH, align: 'center' });
+
+    doc.end();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/shop/orders — create new order
 router.post('/', async (req, res) => {
   try {
@@ -124,7 +242,7 @@ router.post('/', async (req, res) => {
     await createAlertIfEnabled('orders', {
       type: 'ok',
       icon: 'ti-shopping-cart',
-      message: `New order ${order.orderNumber} placed by ${order.customer} (₱${order.amount}).`,
+      message: `New order ${order.orderNumber} placed by ${order.customer} (PHP ${order.amount}).`,
     });
 
     res.status(201).json(order);

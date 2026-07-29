@@ -51,6 +51,19 @@ export const shopOrdersApi = {
   expire:       (id, token)    => request(`/shop/orders/${id}/expire`, { method: 'PATCH', token }),
   abandon:      (id, token)    => request(`/shop/orders/${id}/abandon`, { method: 'PATCH', token }),
  validateStock:(items) => request('/shop/orders/validate-stock', { method: 'POST', body: { items } }),
+  viewReceipt: async (id, token) => {
+    const res = await fetch(`${API_BASE}/shop/orders/${id}/receipt`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new ApiError('Failed to load receipt.', res.status);
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Don't revoke immediately — the new tab needs the URL to still be valid
+    // while it loads. Clean it up after a delay instead.
+    setTimeout(() => window.URL.revokeObjectURL(url), 30000);
+  },
 };
 
 // PayMongo
