@@ -5,7 +5,7 @@ import { customerAuthApi } from '../api/client';
 import { Button, FormField, Input, Alert } from '../components/ui/UI';
 import AddressManager from '../components/AddressManager';
 
-const PH_PHONE_REGEX = /^\+639\d{9}$/;
+const PH_PHONE_REGEX = /^09\d{9}$/;
 
 const AccountPage = () => {
   const { user, token, updateUser, logout } = useAuth();
@@ -30,7 +30,7 @@ const AccountPage = () => {
     setProfileMsg(null);
 
     if (form.phone && !PH_PHONE_REGEX.test(form.phone)) {
-      setProfileMsg({ type: 'error', text: 'Phone number must look like +639171234567 — starts with +63, then 9, then 9 more digits.' });
+      setProfileMsg({ type: 'error', text: 'Phone number must look like 09171234567 — starts with 09, followed by 9 more digits, 11 digits total.' });
       return;
     }
 
@@ -118,9 +118,10 @@ const AccountPage = () => {
                 type="tel"
                 value={form.phone}
                 onChange={e => f('phone', e.target.value.replace(/[\s-]/g, ''))}
-                placeholder="+639171234567"
+                placeholder="09171234567"
+                maxLength={11}
               />
-              <p className="text-xs text-gray-400 mt-1">Format: +63 followed by your 10-digit mobile number starting with 9.</p>
+              <p className="text-xs text-gray-400 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
             </FormField>
             <Button variant="primary" type="submit" disabled={saving} className="self-start">
               {saving ? 'Saving…' : 'Save changes'}

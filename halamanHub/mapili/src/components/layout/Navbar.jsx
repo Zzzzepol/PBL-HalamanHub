@@ -3,18 +3,9 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 
-// ============================================================
-// LOGO — Replace the logo here easily
-// Option 1: Use an image file — put your logo in /public/logo.png
-//           and change Logo to: <img src="/logo.png" alt="Mapili" className="h-10" />
-// Option 2: Keep the text logo below
-// ============================================================
 const Logo = () => (
   <Link to="/" className="flex items-center gap-2.5 group">
-    {/* Replace this div with <img src="/logo.png" className="h-10" alt="Mapili Plant Nursery" /> */}
-    <div className="w-10 h-10 bg-brand-700 rounded-xl flex items-center justify-center group-hover:bg-brand-800 transition-colors flex-shrink-0">
-      <i className="ti ti-plant text-white text-xl" aria-hidden="true" />
-    </div>
+    <img src="/logo.jpg" alt="Mapili_Plant" className="h-10 w-10 rounded-xl object-cover flex-shrink-0" />
     <div className="flex flex-col leading-none">
       <span className="font-display font-bold text-brand-800 text-lg leading-tight">Mapili</span>
       <span className="text-xs text-brand-600 font-medium tracking-wide">Plant Nursery</span>
@@ -46,8 +37,7 @@ const Navbar = () => {
   };
 
   const navLinks = [
-    { to: '/shop',  label: 'Shop' },
-    { to: '/about', label: 'About' },
+
   ];
 
   return (

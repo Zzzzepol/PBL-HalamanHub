@@ -63,9 +63,9 @@ const ProductCard = ({ product }) => {
 };
 
 const features = [
-  { icon: 'ti-leaf',          title: 'Organically grown',     desc: 'No harmful pesticides — fresh from our IoT-monitored farm.' },
-  { icon: 'ti-truck-delivery',title: 'Fast delivery',         desc: 'Same-day delivery available within our service area.' },
-  { icon: 'ti-building-store',title: 'Farm pickup',           desc: 'Pick up directly from our nursery and save on delivery.' },
+  { icon: 'ti-leaf',          title: 'Healthy plants',        desc: 'Carefully grown and nurtured for a beautiful, thriving garden.' },
+  { icon: 'ti-truck-delivery',title: 'Delivery',              desc: 'Delivery service available within our service area.' },
+  { icon: 'ti-building-store',title: 'Nursery pickup',        desc: 'Pick up directly from our nursery and explore our latest selections.' },
   { icon: 'ti-shield-check',  title: 'Secure payments',       desc: 'Pay securely via GCash, Maya, cards, or online banking.' },
 ];
 
@@ -86,25 +86,19 @@ const HomePage = () => {
       <section className="hero-gradient text-white py-24 md:py-36 px-4 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, #4ade80 0, transparent 50%), radial-gradient(circle at 80% 20%, #86efac 0, transparent 40%)' }} />
         <div className="max-w-4xl mx-auto text-center relative z-10">
-          <Badge variant="success" className="mb-4">
-            <i className="ti ti-sparkles" /> Fresh harvest every week
-          </Badge>
           <h1 className="font-display text-4xl md:text-6xl font-bold leading-tight mb-6">
-            Farm-fresh plants &amp; produce<br />
-            <span className="text-brand-300">delivered to your door</span>
+            Plants for your home garden<br />
+            <span className="text-brand-300">and farm </span>
           </h1>
           <p className="text-brand-100 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-            Mapili Plant Nursery grows fresh, organic vegetables and plants using smart IoT-powered irrigation. 
-            Order online for delivery or farm pickup.
+            Mapili Plant Nursery offers healthy plants, greenery, and gardening essentials grown with care.
+            Order online for delivery or nursery pickup.
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link to="/shop">
               <Button variant="white" size="lg" icon="ti-shopping-bag">Shop now</Button>
             </Link>
             <Link to="/about">
-              <Button variant="outline" size="lg" className="border-white text-white hover:bg-white/10">
-                Learn more
-              </Button>
             </Link>
           </div>
         </div>
@@ -157,7 +151,7 @@ const HomePage = () => {
             <i className="ti ti-truck-delivery text-3xl text-brand-700" aria-hidden="true" />
           </div>
           <h2 className="font-display text-3xl font-bold text-gray-800 mb-4">Ready to order?</h2>
-          <p className="text-gray-500 mb-8 text-lg">Create a free account and get fresh produce delivered or pick up from our farm.</p>
+          <p className="text-gray-500 mb-8 text-lg">Create a free account and get plants delivered or pick up directly from our nursery.</p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link to="/register"><Button variant="primary" size="lg" icon="ti-user-plus">Create free account</Button></Link>
             <Link to="/shop"><Button variant="outline" size="lg" icon="ti-shopping-bag">Browse products</Button></Link>

@@ -22,8 +22,8 @@ const customerSchema = new mongoose.Schema(
       default: '',
       trim: true,
       validate: {
-        validator: (v) => v === '' || /^\+639\d{9}$/.test(v),
-        message: 'Phone number must be a valid PH mobile number, e.g. +639171234567.',
+        validator: (v) => v === '' || /^09\d{9}$/.test(v),
+        message: 'Phone number must be a valid PH mobile number, e.g. 09171234567.',
       },
     },
     addresses:    { type: [addressSchema], default: [] },

@@ -32,6 +32,10 @@ function requireCustomer(req, res, next) {
 router.post('/register', async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
+
+    if (phone && !/^09\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: 'Phone number must be a valid PH mobile number, e.g. 09171234567.' });
+    }
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'name, email, and password are required.' });
     }
@@ -100,8 +104,8 @@ router.put('/profile', requireCustomer, async (req, res) => {
   try {
     const { name, phone } = req.body;
 
-    if (phone && !/^\+639\d{9}$/.test(phone)) {
-      return res.status(400).json({ message: 'Phone number must be a valid PH mobile number, e.g. +639171234567.' });
+    if (phone && !/^09\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: 'Phone number must be a valid PH mobile number, e.g. 09171234567.' });
     }
 
     const customer = await Customer.findByIdAndUpdate(

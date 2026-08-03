@@ -59,7 +59,7 @@ export const LoginPage = () => {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <FormField label="Email address" id="email" required>
-              <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="juan@email.com" autoComplete="email" required />
+              <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@email.com" autoComplete="email" required />
             </FormField>
 
             <FormField label="Password" id="password" required>
@@ -111,9 +111,16 @@ export const RegisterPage = () => {
       setError('Password must be at least 8 characters.');
       return;
     }
+    if (form.phone && !/^09\d{9}$/.test(form.phone)) {
+      setError('Phone number must look like 09171234567 — starts with 09, 11 digits total.');
+      return;
+    }
     setLoading(true);
     try {
-      await register({ name: form.name, email: form.email, phone: form.phone, password: form.password });
+      if (form.phone && !/^09\d{9}$/.test(form.phone)) {
+      setError('Phone number must look like 09171234567 — starts with 09, 11 digits total.');
+      return;
+    }
       navigate('/');
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -135,15 +142,24 @@ export const RegisterPage = () => {
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <FormField label="Full name" id="name" required>
-              <Input id="name" value={form.name} onChange={e => f('name', e.target.value)} placeholder="Juan dela Cruz" autoComplete="name" required />
+              <Input id="name" value={form.name} onChange={e => f('name', e.target.value)} autoComplete="name" required />
             </FormField>
 
             <FormField label="Email address" id="email" required>
-              <Input id="email" type="email" value={form.email} onChange={e => f('email', e.target.value)} placeholder="juan@email.com" autoComplete="email" required />
+              <Input id="email" type="email" value={form.email} onChange={e => f('email', e.target.value)} placeholder="example@email.com" autoComplete="email" required />
             </FormField>
 
             <FormField label="Phone number" id="phone">
-              <Input id="phone" type="tel" value={form.phone} onChange={e => f('phone', e.target.value)} placeholder="+63 9XX XXX XXXX" autoComplete="tel" />
+              <Input
+                id="phone"
+                type="tel"
+                value={form.phone}
+                onChange={e => f('phone', e.target.value.replace(/[\s-]/g, ''))}
+                placeholder="09171234567"
+                maxLength={11}
+                autoComplete="tel"
+              />
+              <p className="text-xs text-gray-400 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
             </FormField>
 
             <FormField label="Password" id="password" required>

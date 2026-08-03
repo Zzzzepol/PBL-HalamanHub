@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { shopOrdersApi, paymongoApi } from '../api/client';
+import { shopOrdersApi, paymongoApi, addressesApi } from '../api/client';
 import { Button, FormField, Input, Alert, StepIndicator } from '../components/ui/UI';
 
-const DELIVERY_FEE = 80;
+const DELIVERY_FEE = 0;
 const PICKUP_FEE   = 0;
 
 const FARM_ADDRESS = 'Brgy. Caloocan, 24, Talisay, 4220 Batangas';
@@ -27,6 +27,11 @@ const CheckoutPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedSavedAddressId, setSelectedSavedAddressId] = useState('');
+  const [showCustomAddress, setShowCustomAddress] = useState(false);
+  const [saveAddressPermanently, setSaveAddressPermanently] = useState(false);
+
   // Form state
   const [fulfillment, setFulfillment] = useState('delivery'); // delivery | pickup
   const [form, setForm] = useState({
@@ -47,28 +52,81 @@ const CheckoutPage = () => {
 
   const f = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
+  useEffect(() => {
+    if (!token || !user || fulfillment !== 'delivery') {
+      setSavedAddresses([]);
+      setSelectedSavedAddressId('');
+      setShowCustomAddress(false);
+      return;
+    }
+
+    addressesApi.getAll(token)
+      .then((res) => {
+        const addresses = res.addresses || [];
+        setSavedAddresses(addresses);
+
+        if (addresses.length === 0) {
+          setSelectedSavedAddressId('');
+          setShowCustomAddress(true);
+          return;
+        }
+
+        const primary = addresses.find(addr => addr.isPrimary) || addresses[0];
+        setSelectedSavedAddressId(primary._id);
+        setShowCustomAddress(false);
+        setForm(prev => ({ ...prev, address: primary.address, city: primary.city }));
+      })
+      .catch(() => {
+        setSavedAddresses([]);
+        setSelectedSavedAddressId('');
+        setShowCustomAddress(true);
+      });
+  }, [token, user, fulfillment]);
+
   const canProceedStep0 = form.name && form.email && form.phone &&
     (fulfillment === 'pickup' ? form.pickupDate : (form.address && form.city));
 
+  const handleSavedAddressSelect = (addressId) => {
+    setSelectedSavedAddressId(addressId);
+
+    if (!addressId) {
+      setShowCustomAddress(true);
+      setSaveAddressPermanently(false);
+      setForm(prev => ({ ...prev, address: '', city: '' }));
+      return;
+    }
+
+    const chosen = savedAddresses.find(addr => addr._id === addressId);
+    if (chosen) {
+      setShowCustomAddress(false);
+      setForm(prev => ({ ...prev, address: chosen.address, city: chosen.city }));
+      setSaveAddressPermanently(false);
+    }
+  };
+
   // Step 0 → 1
-  const handleDetailsSubmit = (e) => {
+  const handleDetailsSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (fulfillment === 'delivery' && showCustomAddress && form.address && form.city && token && saveAddressPermanently) {
+      try {
+        await addressesApi.add({ label: 'Delivery', address: form.address, city: form.city }, token);
+      } catch (err) {
+        setError(err.message || 'Unable to save the address permanently.');
+        return;
+      }
+    }
+
     setStep(1);
   };
 
-  // Step 1 → 2 (create PayMongo link then order)
-// Step 1 → 2 (validate stock, then create PayMongo link, then order)
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // Check live stock BEFORE touching payment at all — catches items
-      // that sold out (or dropped below the requested qty) while sitting
-      // in the cart, so we never send someone to pay for something
-      // that's no longer actually available.
       const cartItems = items.map(i => ({ productId: i._id, name: i.name, qty: i.qty }));
       const stockCheck = await shopOrdersApi.validateStock(cartItems, token);
 
@@ -171,8 +229,8 @@ const CheckoutPage = () => {
                   <label className="text-sm font-medium text-gray-700 mb-3 block">How would you like to receive your order?</label>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { value: 'delivery', label: 'Home delivery', icon: 'ti-truck-delivery', desc: `+₱${DELIVERY_FEE} delivery fee` },
-                      { value: 'pickup',   label: 'Farm pickup',   icon: 'ti-building-store', desc: 'Free — pick up at our farm'   },
+                      { value: 'delivery', label: 'Home delivery', icon: 'ti-truck-delivery', desc: 'Delivery available' },
+                      { value: 'pickup',   label: 'Farm pickup',   icon: 'ti-building-store', desc: 'Free — pick up at our nursery' },
                     ].map(opt => (
                       <button
                         key={opt.value}
@@ -199,18 +257,76 @@ const CheckoutPage = () => {
                   </FormField>
                 </div>
                 <FormField label="Phone number" id="phone" required>
-                  <Input id="phone" type="tel" value={form.phone} onChange={e => f('phone', e.target.value)} placeholder="+63 9XX XXX XXXX" required />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={form.phone}
+                    onChange={e => f('phone', e.target.value.replace(/[\s-]/g, ''))}
+                    placeholder="09171234567"
+                    maxLength={11}
+                    required
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
                 </FormField>
 
                 {/* Address — only for delivery */}
                 {fulfillment === 'delivery' && (
                   <>
-                    <FormField label="Delivery address" id="address" required>
-                      <Input id="address" value={form.address} onChange={e => f('address', e.target.value)} placeholder="House/Unit No., Street, Barangay" required />
-                    </FormField>
-                    <FormField label="City / Municipality" id="city" required>
-                      <Input id="city" value={form.city} onChange={e => f('city', e.target.value)} placeholder="e.g. Sta. Rosa, Laguna" required />
-                    </FormField>
+                    {savedAddresses.length > 0 && (
+                      <div className="space-y-2">
+                        <label htmlFor="savedAddress" className="text-sm font-medium text-gray-700">Saved addresses</label>
+                        <select
+                          id="savedAddress"
+                          value={selectedSavedAddressId}
+                          onChange={(e) => handleSavedAddressSelect(e.target.value)}
+                          className="input-base w-full"
+                        >
+                          <option value="">Use a new address</option>
+                          {savedAddresses.map(addr => (
+                            <option key={addr._id} value={addr._id}>
+                              {addr.label} — {addr.address}, {addr.city}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {(showCustomAddress || savedAddresses.length === 0) && (
+                      <>
+                        <FormField label="Delivery address" id="address" required>
+                          <Input id="address" value={form.address} onChange={e => f('address', e.target.value)} placeholder="House/Unit No., Street, Barangay" required />
+                        </FormField>
+                        <FormField label="City / Municipality" id="city" required>
+                          <Input id="city" value={form.city} onChange={e => f('city', e.target.value)} placeholder="e.g. Sta. Rosa, Laguna" required />
+                        </FormField>
+
+                        {user && token && (
+                          <div className="rounded-xl bg-gray-50 p-3">
+                            <div className="text-sm font-medium text-gray-700 mb-2">Save this address permanently?</div>
+                            <div className="flex gap-4 flex-wrap">
+                              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input
+                                  type="radio"
+                                  name="saveAddressPermanently"
+                                  checked={saveAddressPermanently === true}
+                                  onChange={() => setSaveAddressPermanently(true)}
+                                />
+                                Yes
+                              </label>
+                              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input
+                                  type="radio"
+                                  name="saveAddressPermanently"
+                                  checked={saveAddressPermanently === false}
+                                  onChange={() => setSaveAddressPermanently(false)}
+                                />
+                                No, use temporarily
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </>
                 )}
 
@@ -280,12 +396,6 @@ const CheckoutPage = () => {
                   </button>
                   <h2 className="font-semibold text-gray-800 text-lg">Choose payment method</h2>
                 </div>
-
-                <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-700 flex items-center gap-2">
-                  <i className="ti ti-info-circle flex-shrink-0" />
-                  PayMongo sandbox mode — use test credentials, no real money charged.
-                </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   {payMethods.map(m => (
                     <button
@@ -316,7 +426,7 @@ const CheckoutPage = () => {
                       <span>Subtotal</span><span>₱{total.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm text-gray-600">
-                      <span>{fulfillment === 'delivery' ? 'Delivery fee' : 'Pickup (free)'}</span>
+                      <span>{fulfillment === 'delivery' ? 'Delivery' : 'Pickup'}</span>
                       <span>{shippingFee === 0 ? 'Free' : `₱${shippingFee}`}</span>
                     </div>
                     <div className="flex justify-between font-bold text-gray-800 text-base mt-1">
