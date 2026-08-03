@@ -6,15 +6,35 @@ import { Button, FormField, Input, Alert } from '../components/ui/UI';
 // ── Brand logo in auth pages
 const AuthLogo = () => (
   <Link to="/" className="flex items-center gap-2.5 justify-center mb-8">
-    <div className="w-10 h-10 bg-brand-700 rounded-xl flex items-center justify-center">
-      <i className="ti ti-plant text-white text-xl" aria-hidden="true" />
-    </div>
+    <img src="/logo.jpg" alt="Mapili Plant Nursery logo" className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
     <div className="flex flex-col leading-none">
       <span className="font-display font-bold text-brand-800 text-lg">Mapili</span>
       <span className="text-xs text-brand-600 font-medium">Plant Nursery</span>
     </div>
   </Link>
 );
+
+const getPasswordStrength = (password = '') => {
+  if (!password) {
+    return { score: 0, label: 'No password', barClass: 'bg-gray-300', textClass: 'text-gray-500' };
+  }
+
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (password.length >= 12) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[a-z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+  if (score <= 2) {
+    return { score: 1, label: 'Weak', barClass: 'bg-red-500', textClass: 'text-red-600' };
+  }
+  if (score <= 4) {
+    return { score: 2, label: 'Medium', barClass: 'bg-amber-500', textClass: 'text-amber-600' };
+  }
+  return { score: 3, label: 'Strong', barClass: 'bg-green-500', textClass: 'text-green-600' };
+};
 
 // ── LOGIN PAGE
 export const LoginPage = () => {
@@ -95,6 +115,7 @@ export const RegisterPage = () => {
   const [showPwd, setShowPwd]   = useState(false);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
+  const passwordStrength = getPasswordStrength(form.password);
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 
@@ -103,25 +124,33 @@ export const RegisterPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!form.name || !form.email || !form.password || !form.confirmPassword) {
+      setError('Please fill in all required fields.');
+      return;
+    }
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
-    if (form.password.length < 8) {
-      setError('Password must be at least 8 characters.');
+    if (form.password.length < 8 || !/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/\d/.test(form.password) || !/[^A-Za-z0-9]/.test(form.password)) {
+      setError('Password is too weak. Use at least 8 characters with uppercase, lowercase, a number, and a special character.');
       return;
     }
     if (form.phone && !/^09\d{9}$/.test(form.phone)) {
       setError('Phone number must look like 09171234567 — starts with 09, 11 digits total.');
       return;
     }
+
     setLoading(true);
     try {
-      if (form.phone && !/^09\d{9}$/.test(form.phone)) {
-      setError('Phone number must look like 09171234567 — starts with 09, 11 digits total.');
-      return;
-    }
-      navigate('/');
+      await register({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+      });
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -169,6 +198,20 @@ export const RegisterPage = () => {
                   <i className={`ti ${showPwd ? 'ti-eye-off' : 'ti-eye'}`} aria-hidden="true" />
                 </button>
               </div>
+              {form.password && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500">Password strength</span>
+                    <span className={`font-medium ${passwordStrength.textClass}`}>{passwordStrength.label}</span>
+                  </div>
+                  <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-200 ${passwordStrength.barClass}`}
+                      style={{ width: `${(passwordStrength.score / 3) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </FormField>
 
             <FormField label="Confirm password" id="confirmPassword" required>

@@ -39,8 +39,8 @@ router.post('/register', async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'name, email, and password are required.' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters with uppercase, lowercase, a number, and a special character.' });
     }
 
     const exists = await Customer.findOne({ email: email.toLowerCase() });
@@ -128,8 +128,8 @@ router.put('/change-password', requireCustomer, async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: 'currentPassword and newPassword are required.' });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({ message: 'New password must be at least 8 characters.' });
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters with uppercase, lowercase, a number, and a special character.' });
     }
 
     const customer = await Customer.findById(req.customer.id).select('+passwordHash');
