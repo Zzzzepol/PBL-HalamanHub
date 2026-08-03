@@ -142,7 +142,7 @@ const CartPage = () => {
                 <span>Subtotal</span>
                 <span>₱{total.toFixed(2)}</span>
               </div>
-              <p className="text-xs text-gray-400 mb-5 text-center">Delivery fee calculated at checkout</p>
+              <p className="text-xs text-gray-400 mb-5 text-center">Delivery may vary based on Tranfortify or Lalamove</p>
               {hasBlockingIssue && (
                 <div className="mb-3 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 text-center">
                   Update the quantities marked above before checking out.

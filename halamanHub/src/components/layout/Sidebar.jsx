@@ -40,13 +40,11 @@ const Sidebar = ({ collapsed, onToggle, mobileOpen, pendingOrders }) => {
     >
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-3.5 pt-[18px] pb-3.5 border-b-[0.5px] border-border flex-shrink-0 min-h-[64px] relative">
-        <div className="w-[34px] h-[34px] bg-green-800 rounded-md flex items-center justify-center flex-shrink-0 text-white text-lg">
-          <i className="ti ti-leaf" aria-hidden="true" />
-        </div>
+        <img src="/logo.jpg" alt="Mapili Plant Nursery logo" className="w-[34px] h-[34px] rounded-md object-cover flex-shrink-0" />
         {!collapsed && (
-          <div className="flex flex-col flex-1 min-w-0">
-            <span className="text-md font-semibold text-text-primary whitespace-nowrap">HalamanHub</span>
-            <span className="text-xs text-text-secondary whitespace-nowrap">Smart Agriculture</span>
+          <div className="flex flex-col flex-1 min-w-0 leading-tight">
+            <span className="text-md font-semibold text-text-primary whitespace-nowrap">Mapili Plant Nursery</span>
+            <span className="text-[10px] text-text-secondary whitespace-nowrap">HalamanHub</span>
           </div>
         )}
         <button

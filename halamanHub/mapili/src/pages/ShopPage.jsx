@@ -93,7 +93,7 @@ const ShopPage = () => {
       <div className="bg-white border-b border-gray-100 py-8 px-4">
         <div className="max-w-6xl mx-auto">
           <h1 className="font-display text-3xl font-bold text-gray-800 mb-1">Our products</h1>
-          <p className="text-gray-500">Fresh, locally grown — harvested and delivered with care</p>
+          <p className="text-gray-500">Healthy plants, locally grown and harvested and delivered with care</p>
         </div>
       </div>
 

@@ -61,12 +61,10 @@ const LoginPage = () => {
       <div className="relative bg-bg-primary rounded-xl shadow-lg p-8 w-full max-w-[380px] animate-fade-in-up max-[400px]:p-6">
         {/* Brand */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-[42px] h-[42px] rounded-md bg-green-800 text-white flex items-center justify-center text-[22px] flex-shrink-0">
-            <i className="ti ti-leaf" aria-hidden="true" />
-          </div>
+          <img src="/logo.jpg" alt="Mapili Plant Nursery logo" className="w-[42px] h-[42px] rounded-md object-cover flex-shrink-0" />
           <div className="flex flex-col leading-tight">
-            <span className="text-lg font-semibold text-text-primary">HalamanHub</span>
-            <span className="text-xs text-text-secondary">Smart Agriculture Admin</span>
+            <span className="text-lg font-semibold text-text-primary">Mapili Plant Nursery</span>
+            <span className="text-xs text-text-secondary">HalamanHub</span>
           </div>
         </div>
         

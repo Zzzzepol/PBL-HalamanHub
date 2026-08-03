@@ -425,10 +425,6 @@ const CheckoutPage = () => {
                     <div className="flex justify-between text-sm text-gray-600">
                       <span>Subtotal</span><span>₱{total.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>{fulfillment === 'delivery' ? 'Delivery' : 'Pickup'}</span>
-                      <span>{shippingFee === 0 ? 'Free' : `₱${shippingFee}`}</span>
-                    </div>
                     <div className="flex justify-between font-bold text-gray-800 text-base mt-1">
                       <span>Total</span><span>₱{grandTotal.toFixed(2)}</span>
                     </div>
@@ -470,10 +466,6 @@ const CheckoutPage = () => {
               </div>
               <div className="border-t border-gray-100 mt-4 pt-4 flex flex-col gap-1.5 text-sm">
                 <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>₱{total.toFixed(2)}</span></div>
-                <div className="flex justify-between text-gray-500">
-                  <span>{fulfillment === 'delivery' ? 'Delivery' : 'Pickup'}</span>
-                  <span>{shippingFee === 0 ? 'Free' : `₱${shippingFee}`}</span>
-                </div>
                 <div className="flex justify-between font-bold text-gray-800 text-base mt-1">
                   <span>Total</span><span>₱{grandTotal.toFixed(2)}</span>
                 </div>
