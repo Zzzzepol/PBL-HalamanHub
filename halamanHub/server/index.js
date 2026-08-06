@@ -24,10 +24,15 @@ const logRoutes = require('./routes/logs');
 const sensorDataRoutes = require('./routes/sensorData');
 const reportRoutes = require('./routes/reports');
 
+const http = require('http');
+const { initSocket } = require('./socket');
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:3000';
 const SHOP_ORIGIN = process.env.SHOP_ORIGIN || 'http://localhost:3001';
+const server = http.createServer(app);
+initSocket(server, [CLIENT_ORIGIN, SHOP_ORIGIN]);
 
 app.use(cors({ origin: [CLIENT_ORIGIN, SHOP_ORIGIN] }));
 
@@ -76,8 +81,9 @@ connectDB().then(() => {
   const { checkProductStock } = require('./utils/productHealth');
   setInterval(checkSensorHealth, 60 * 1000);  // check every minute
   setInterval(checkProductStock, 60 * 1000);  // check every minute
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`HalamanHub server running on http://localhost:${PORT}`);
+    console.log(`Socket.io ready for real-time connections`);
     console.log(`Allowing requests from: ${CLIENT_ORIGIN}`);
   });
 });

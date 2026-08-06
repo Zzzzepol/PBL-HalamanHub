@@ -12,6 +12,7 @@ import IrrigationPage from './pages/IrrigationPage';
 import RainwaterPage from './pages/RainwaterPage';
 import ProductsPage from './pages/ProductsPage';
 import OrdersPage from './pages/OrdersPage';
+import SalesAnalyticsPage from './pages/SalesAnalyticsPage';
 import SchedulePage from './pages/SchedulePage';
 import UsersPage from './pages/UsersPage';
 import ReportsPage from './pages/ReportsPage';
@@ -42,6 +43,7 @@ function App() {
             <Route path="/rainwater" element={<RainwaterPage />} />
             <Route path="/products" element={<ProductsPage />} />
             <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/sales-analytics" element={<SalesAnalyticsPage />} />
             <Route path="/pos" element={<POSPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/users" element={<UsersPage />} />

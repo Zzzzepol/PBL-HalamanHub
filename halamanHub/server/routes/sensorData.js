@@ -1,10 +1,10 @@
-
 const express = require('express');
 const Sensor = require('../models/Sensor');
 const SensorReading = require('../models/SensorReading');
 const IrrigationLog = require('../models/IrrigationLog');
 const IrrigationSettings = require('../models/IrrigationSettings');
 const { createAlertIfEnabled } = require('../utils/alerts');
+const { getIO } = require('../socket');
 
 const router = express.Router();
 
@@ -99,7 +99,7 @@ if (events.length > 0) {
         events.map(e => ({ ...e, device: deviceId, moistureAtEvent: moisture }))
       );
 
-      // Notify admin whenever the pump/solenoid actually turns ON —
+      // Notify admin whenever the pump/solenoid actually turns on
       // OFF events are quieter/expected, so we don't double up on noise.
       for (const e of events) {
         if (e.action !== 'ON') continue;
@@ -111,7 +111,7 @@ if (events.length > 0) {
       }
     }
 
-    // ---- Low moisture crossing (fires once, right when it first drops below threshold) ----
+    //Low moisture crossing (fires once, right when it first drops below threshold)
     const prevMoisture = previous?.soilMoisture;
     if (moisture !== null && moisture < dryThreshold && (prevMoisture == null || prevMoisture >= dryThreshold)) {
       await createAlertIfEnabled('lowMoisture', {
@@ -121,7 +121,7 @@ if (events.length > 0) {
       });
     }
 
-    // ---- Water tank low crossing (fires once, right when it first drops below threshold) ----
+//Water tank low crossing (fires once, right when it first drops below threshold)
     const prevWaterAvailable = previous?.waterAvailable;
     if (!waterAvailable && (prevWaterAvailable == null || prevWaterAvailable === true)) {
       await createAlertIfEnabled('waterTank', {
@@ -129,6 +129,18 @@ if (events.length > 0) {
         icon: 'ti-alert-triangle',
         message: `Water tank level is low${levelPercent != null ? ` (${levelPercent}%)` : ''} — irrigation may switch to backup.`,
       });
+    }
+
+    //Broadcast live update to any connected admin dashboards
+    try {
+      const io = getIO();
+      io.emit('sensor:reading', reading);
+      if (events.length > 0) {
+        io.emit('irrigation:log', events.map(e => ({ ...e, device: deviceId, moistureAtEvent: moisture, createdAt: new Date() })));
+      }
+    } catch (socketErr) {
+      // Socket.io not ready yet, or no clients connected — never let this break ingestion
+      console.warn('[Socket.io] Broadcast skipped:', socketErr.message);
     }
 
     res.status(201).json({ status: 'ok', readingId: reading._id });

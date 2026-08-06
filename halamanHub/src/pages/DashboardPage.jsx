@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardBody, Badge, Button, PulseDot, StatCard } from '../components/ui/UI';
 import { NPKRing, SensorReadingRow } from '../components/charts/Widgets';
@@ -6,6 +6,7 @@ import { MoistureTrendChart } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
 import { dashboardApi, sensorsApi, alertsApi, ApiError } from '../api/client';
 import * as s from './pageStyles';
+import { socket } from '../socket';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -29,8 +30,18 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const [range, setRange] = useState('24h');
 
-  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 5000);
-  const { data: sensors, refetch: refetchSensors } = useApiData(sensorsApi.getAll, [], 5000);
+  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
+  const { data: sensors, refetch: refetchSensors } = useApiData(sensorsApi.getAll, [], 30000);
+  // real-time updates — socket pushes new readings instantly, polling above
+  // just stays as a slower fallback in case the socket ever drops.
+  useEffect(() => {
+    const handleReading = () => {
+      refetchSensors();
+      refetchSummary();
+    };
+    socket.on('sensor:reading', handleReading);
+    return () => socket.off('sensor:reading', handleReading);
+  }, [refetchSensors, refetchSummary]);
   const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
   const { data: history } = useApiData(
     (token) => sensorsApi.getHistory(token, RANGE_HOURS[range]),

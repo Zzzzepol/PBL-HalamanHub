@@ -234,3 +234,62 @@ export const RainForecastChart = ({ labels, values, forecast, height = 130 }) =>
     />
   </div>
 );
+
+/* ── Sales Revenue Trend (Bar) ── */
+export const SalesRevenueChart = ({ labels, values, height = 180 }) => (
+  <div style={{ height, position: 'relative' }}>
+    <Bar
+      data={{
+        labels,
+        datasets: [{
+          label: 'Revenue',
+          data: values,
+          backgroundColor: values.map((_, index) => index === values.length - 1 ? `${COLORS.green}CC` : `${COLORS.green}99`),
+          borderColor: COLORS.green,
+          borderWidth: 1.5,
+          borderRadius: 4,
+          maxBarThickness: 32,
+        }],
+      }}
+      options={{
+        ...baseOptions('Revenue'),
+        plugins: {
+          ...baseOptions().plugins,
+          tooltip: {
+            ...baseOptions().plugins.tooltip,
+            callbacks: {
+              label: ctx => `₱${Number(ctx.raw || 0).toLocaleString('en-PH')}`,
+            },
+          },
+        },
+      }}
+    />
+  </div>
+);
+
+/* ── Top Products (Bar) ── */
+export const TopProductsChart = ({ labels, values, height = 180 }) => (
+  <div style={{ height, position: 'relative' }}>
+    <Bar
+      data={{
+        labels,
+        datasets: [{
+          label: 'Units sold',
+          data: values,
+          backgroundColor: `${COLORS.blue}99`,
+          borderColor: COLORS.blue,
+          borderWidth: 1.5,
+          borderRadius: 4,
+          maxBarThickness: 30,
+        }],
+      }}
+      options={{
+        ...baseOptions('Units'),
+        plugins: {
+          ...baseOptions().plugins,
+          legend: { display: false },
+        },
+      }}
+    />
+  </div>
+);

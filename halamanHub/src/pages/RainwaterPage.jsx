@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, dashboardApi, irrigationApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
+import { socket } from '../socket';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -21,11 +22,22 @@ const RainwaterPage = () => {
   const [range, setRange] = useState('24h');
   const hours = RANGE_HOURS[range];
 
-  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 5000);
+const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
   const { data: history, error: historyError, refetch: refetchHistory } =
-    useApiData((t) => sensorsApi.getHistory(t, hours), [hours], 20000);
+    useApiData((t) => sensorsApi.getHistory(t, hours), [hours], 30000);
   const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } =
-    useApiData(irrigationApi.getSettings, [], 10000);
+    useApiData(irrigationApi.getSettings, [], 30000);
+
+  // real-time updates — socket pushes new readings instantly, polling above
+  // just stays as a slower fallback in case the socket ever drops.
+  useEffect(() => {
+    const handleReading = () => {
+      refetchSummary();
+      refetchHistory();
+    };
+    socket.on('sensor:reading', handleReading);
+    return () => socket.off('sensor:reading', handleReading);
+  }, [refetchSummary, refetchHistory]);
 
   const [emptyDist, setEmptyDist] = useState(100);
   const [fullDist, setFullDist] = useState(10);

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { irrigationApi, dashboardApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
+import { socket } from '../socket';
 
 const reasonLabel = {
   auto_dry: { label: 'Auto — soil dry', variant: 'default' },
@@ -19,9 +20,25 @@ const formatDateTime = (iso) => {
 
 const IrrigationPage = () => {
   const { token } = useAuth();
-  const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } = useApiData(irrigationApi.getSettings, [], 10000);
-  const { data: logs, error: logsError, refetch: refetchLogs } = useApiData((t) => irrigationApi.getLogs(t, 50), [], 5000);
-  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 5000);
+  const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } = useApiData(irrigationApi.getSettings, [], 30000);
+  const { data: logs, error: logsError, refetch: refetchLogs } = useApiData((t) => irrigationApi.getLogs(t, 50), [], 30000);
+  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
+
+  // real-time updates — socket pushes new readings instantly, polling above
+  // just stays as a slower fallback in case the socket ever drops.
+  useEffect(() => {
+    const handleReading = () => refetchSummary();
+    const handleLog = () => {
+      refetchLogs();
+      refetchSummary();
+    };
+    socket.on('sensor:reading', handleReading);
+    socket.on('irrigation:log', handleLog);
+    return () => {
+      socket.off('sensor:reading', handleReading);
+      socket.off('irrigation:log', handleLog);
+    };
+  }, [refetchSummary, refetchLogs]);
 
   const [dryThreshold, setDryThreshold] = useState(30);
   const [wetThreshold, setWetThreshold] = useState(60);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardHeader, CardBody, Button } from '../components/ui/UI';
 import {
   PHTrendChart, ECTrendChart, NPKTrendChart, IrrigationHistoryChart, TempHumidityChart,
@@ -6,6 +6,7 @@ import {
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, irrigationApi, ApiError } from '../api/client';
 import * as s from './pageStyles';
+import { socket } from '../socket';
 
 const RANGE_HOURS = { Daily: 24, Weekly: 24 * 7, Monthly: 24 * 30 };
 const ranges = ['Daily', 'Weekly', 'Monthly'];
@@ -29,11 +30,23 @@ const AnalyticsPage = () => {
   const [range, setRange] = useState('Weekly');
   const hours = RANGE_HOURS[range];
 
-  const { data: history, error: historyError, refetch: refetchHistory } =
-    useApiData((token) => sensorsApi.getHistory(token, hours), [hours], 20000);
+const { data: history, error: historyError, refetch: refetchHistory } =
+    useApiData((token) => sensorsApi.getHistory(token, hours), [hours], 60000);
   const { data: logs, error: logsError, refetch: refetchLogs } =
-    useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours], 20000);
+    useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours], 60000);
 
+  // real-time updates — socket pushes new readings instantly, polling above
+  // just stays as a slower fallback in case the socket ever drops.
+  useEffect(() => {
+    const handleReading = () => refetchHistory();
+    const handleLog = () => refetchLogs();
+    socket.on('sensor:reading', handleReading);
+    socket.on('irrigation:log', handleLog);
+    return () => {
+      socket.off('sensor:reading', handleReading);
+      socket.off('irrigation:log', handleLog);
+    };
+  }, [refetchHistory, refetchLogs]);
   const points = history || [];
 
   const pointLabel = (iso) =>

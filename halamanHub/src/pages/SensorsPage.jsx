@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardHeader, Table, Badge, StatCard, SearchBar, Select } from '../components/ui/UI';
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
+import { socket } from '../socket';
 
 const statusBadge = {
   ok: { variant: 'ok', label: 'Online' },
@@ -19,7 +20,16 @@ const formatTime = (iso) => {
 };
 
 const SensorsPage = () => {
-  const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 5000);
+  const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000);
+
+  // real-time updates — socket pushes new readings instantly, polling above
+  // just stays as a slower fallback in case the socket ever drops.
+  useEffect(() => {
+    const handleReading = () => refetch();
+    socket.on('sensor:reading', handleReading);
+    return () => socket.off('sensor:reading', handleReading);
+  }, [refetch]);
+
   const [search, setSearch] = useState('');
   const [zoneFilter, setZoneFilter] = useState('All zones');
   const [statusFilter, setStatusFilter] = useState('All statuses');
