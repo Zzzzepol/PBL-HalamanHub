@@ -18,6 +18,8 @@ const sensorStatusToPercent = (sensor) => {
   return Math.min(sensor.numericValue, 100);
 };
 
+const severityVariant = { high: 'error', medium: 'warning', low: 'blue', ok: 'ok' };
+const severityLabel = { high: 'Action needed', medium: 'Monitor', low: 'Minor', ok: 'Healthy' };
 const formatTime = (iso) => {
   if (!iso) return '—';
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -156,6 +158,27 @@ const DashboardPage = () => {
           </Card>
         </div>
       </div>
+
+{/* Soil recommendations */}
+      <Card className="mb-4">
+        <CardHeader
+          title="Soil & environment recommendations"
+          subtitle="General guidance based on current pH, EC, NPK, temperature, and humidity — not crop-specific."
+        />
+        <CardBody>
+          {(summary?.recommendations || []).map((rec, idx) => (
+            <div key={idx} className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
+              <Badge variant={severityVariant[rec.severity] || 'blue'}>{severityLabel[rec.severity] || rec.severity}</Badge>
+              <div className="text-sm text-text-secondary">
+                <span className="font-medium text-gray-700">{rec.category}:</span> {rec.message}
+              </div>
+            </div>
+          ))}
+          {(!summary?.recommendations || summary.recommendations.length === 0) && (
+            <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
+          )}
+        </CardBody>
+      </Card>
 
       {/* NPK + Alerts */}
       <div className={s.grid.twoCol}>

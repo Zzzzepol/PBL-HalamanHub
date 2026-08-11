@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const Sensor = require('../models/Sensor');
 const SensorReading = require('../models/SensorReading');
 const IrrigationSettings = require('../models/IrrigationSettings');
+const { getSoilRecommendations } = require('../utils/soilRecommendations');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -41,6 +42,16 @@ router.get('/summary', async (req, res) => {
     }
   }
 
+const recommendations = getSoilRecommendations({
+    ph:          pH?.numericValue ?? null,
+    ec:          ec?.numericValue ?? null,
+    nitrogen:    npkValues.nitrogen,
+    phosphorus:  npkValues.phosphorus,
+    potassium:   npkValues.potassium,
+    temperature: temperature?.numericValue ?? null,
+    humidity:    humidity?.numericValue ?? null,
+  });
+
   res.json({
     activeSensors,
     soilMoisture: { value: soilMoisture?.numericValue ?? null, unit: '%', status: soilMoisture?.status },
@@ -50,6 +61,7 @@ router.get('/summary', async (req, res) => {
     humidity: { value: humidity?.numericValue ?? null, unit: '%', status: humidity?.status },
     waterTank: { available: waterLevel?.status === 'ok', percent: waterLevel?.numericValue ?? null },
     npk: npkValues,
+    recommendations,
     irrigation: {
       pumpActive: latestReading?.pumpActive ?? false,
       solenoidActive: latestReading?.solenoidActive ?? false,
