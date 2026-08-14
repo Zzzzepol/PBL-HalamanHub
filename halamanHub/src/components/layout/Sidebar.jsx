@@ -13,7 +13,7 @@ const navItems = [
   { path: '/products',label: 'Products',icon: 'ti-package'},
   { path: '/orders',label: 'Orders', icon: 'ti-shopping-cart' },
   { path: '/sales-analytics',label: 'Sales Analytics', icon: 'ti-chart-bar' },
-  { path: '/pos',label: 'Point of sale', icon: 'ti-cash-register' },
+  { path: '/pos',label: 'Point of sale', icon: 'ti-basket' },
   { path: '/schedule',label: 'Pickup schedule', icon: 'ti-calendar'},
   { section: 'Admin' },
   { path: '/users',label: 'Users',icon: 'ti-users'},
