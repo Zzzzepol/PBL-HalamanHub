@@ -36,7 +36,11 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
       refetchHistory();
     };
     socket.on('sensor:reading', handleReading);
-    return () => socket.off('sensor:reading', handleReading);
+    socket.on('sensor:status', handleReading);
+    return () => {
+      socket.off('sensor:reading', handleReading);
+      socket.off('sensor:status', handleReading);
+    };
   }, [refetchSummary, refetchHistory]);
 
   const [emptyDist, setEmptyDist] = useState(100);

@@ -18,6 +18,16 @@ const FROM = `"Mapili Plant Nursery" <${process.env.SMTP_USER}>`;
 
 // ── Order confirmation email
 async function sendOrderConfirmation(order) {
+  if (!order || !order.customerEmail) {
+    console.log('[Email] Missing customer email — skipping order confirmation email.');
+    return;
+  }
+
+  if (order.payment !== 'paid') {
+    console.log(`[Email] Order ${order.orderNumber || 'unknown'} is not paid — skipping confirmation email.`);
+    return;
+  }
+
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     console.log('[Email] SMTP not configured — skipping order confirmation email.');
     return;
@@ -43,11 +53,9 @@ async function sendOrderConfirmation(order) {
   <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
     
     <!-- Header -->
-    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:32px 36px;text-align:center;">
-      <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <div style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:10px;display:inline-flex;align-items:center;justify-content:center;">
-          🌿
-        </div>
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:30px 36px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <img src="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/logo.jpg" alt="Mapili Plant Nursery logo" style="width:42px;height:42px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,0.12);padding:4px;" />
         <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
       </div>
       <div style="color:#86efac;font-size:13px;">Fresh from our farm to your door</div>
@@ -104,13 +112,6 @@ async function sendOrderConfirmation(order) {
         ${order.note && !order.note.startsWith('Deliver') ? `<div style="margin-top:6px;color:#6b7280;"><em>Note: ${order.note}</em></div>` : ''}
       </div>
 
-      <!-- Payment status -->
-      <div style="background:${order.payment === 'paid' ? '#f0fdf4' : '#fffbeb'};border-radius:12px;padding:14px 20px;margin-bottom:28px;font-size:13px;">
-        <span style="font-weight:600;color:${order.payment === 'paid' ? '#16a34a' : '#d97706'};">
-          Payment: ${order.payment === 'paid' ? '✅ Paid' : '⏳ Pending payment'}
-        </span>
-      </div>
-
       <!-- CTA -->
       <div style="text-align:center;">
         <a href="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/account/orders"
@@ -155,8 +156,11 @@ async function sendWelcomeEmail(customer) {
 <html>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;">
   <div style="max-width:520px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:32px 36px;text-align:center;">
-      <div style="color:white;font-size:20px;font-weight:700;margin-bottom:4px;">🌿 Mapili Plant Nursery</div>
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:30px 36px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <img src="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/logo.jpg" alt="Mapili Plant Nursery logo" style="width:42px;height:42px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,0.12);padding:4px;" />
+        <div style="color:white;font-size:20px;font-weight:700;">Mapili Plant Nursery</div>
+      </div>
       <div style="color:#86efac;font-size:13px;">Welcome to our community!</div>
     </div>
     <div style="padding:36px;">
@@ -203,8 +207,11 @@ async function sendPasswordReset(user, tempPassword) {
 <!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;color:#1f2937;">
   <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:32px 36px;text-align:center;">
-      <span style="color:white;font-size:18px;font-weight:700;">HalamanHub</span>
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:30px 36px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:12px;justify-content:center;">
+        <img src="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/logo.jpg" alt="Mapili Plant Nursery logo" style="width:42px;height:42px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,0.12);padding:4px;" />
+        <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
+      </div>
     </div>
     <div style="padding:36px;">
       <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">Your password was reset</h1>
@@ -272,8 +279,11 @@ async function sendOrderStatusUpdate(order, status) {
 <!DOCTYPE html>
 <html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;color:#1f2937;">
   <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:32px 36px;text-align:center;">
-      <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:30px 36px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:12px;justify-content:center;">
+        <img src="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/logo.jpg" alt="Mapili Plant Nursery logo" style="width:42px;height:42px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,0.12);padding:4px;" />
+        <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
+      </div>
     </div>
     <div style="padding:36px;">
       <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">${template.headline(order)}</h1>

@@ -59,8 +59,8 @@ const recommendations = getSoilRecommendations({
     ec: { value: ec?.numericValue ?? null, unit: 'uS/cm', status: ec?.status },
     temperature: { value: temperature?.numericValue ?? null, unit: '°C', status: temperature?.status },
     humidity: { value: humidity?.numericValue ?? null, unit: '%', status: humidity?.status },
-    waterTank: { available: waterLevel?.status === 'ok', percent: waterLevel?.numericValue ?? null },
-    npk: npkValues,
+    waterTank: { available: waterLevel?.status === 'ok', percent: waterLevel?.numericValue ?? null, status: waterLevel?.status ?? 'offline' },
+    npk: { ...npkValues, status: npk?.status ?? 'offline' },
     recommendations,
     irrigation: {
       pumpActive: latestReading?.pumpActive ?? false,

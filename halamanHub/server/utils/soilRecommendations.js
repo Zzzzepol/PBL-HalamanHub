@@ -8,61 +8,61 @@ function getSoilRecommendations({ ph, ec, nitrogen, phosphorus, potassium, tempe
   // ph
   if (ph != null) {
     if (ph < 5.5) {
-      recs.push({ category: 'pH', severity: 'high', message: `Soil is acidic (pH ${ph}). Consider applying agricultural lime to raise pH toward the 6.0–7.0 range most crops prefer.` });
+      recs.push({ category: 'pH', severity: 'high', reading: `pH ${ph}`, message: 'Acidic soil can limit nutrient uptake. Apply agricultural lime gradually and retest; aim for pH 6.0–7.0.' });
     } else if (ph > 7.5) {
-      recs.push({ category: 'pH', severity: 'high', message: `Soil is alkaline (pH ${ph}). Consider adding elemental sulfur or organic matter (compost) to lower pH toward 6.0–7.0.` });
+      recs.push({ category: 'pH', severity: 'high', reading: `pH ${ph}`, message: 'Alkaline soil can lock up nutrients. Add elemental sulfur or compost gradually and retest; aim for pH 6.0–7.0.' });
     } else if (ph < 6.0 || ph > 7.0) {
-      recs.push({ category: 'pH', severity: 'medium', message: `pH is slightly outside the ideal 6.0–7.0 range (currently ${ph}). Monitor — most crops still tolerate this but growth may be reduced.` });
+      recs.push({ category: 'pH', severity: 'medium', reading: `pH ${ph}`, message: 'Slightly outside the 6.0–7.0 target. Monitor it; most crops tolerate this, but growth may slow.' });
     }
   }
 
   // ec (salinity)
   if (ec != null) {
     if (ec > 2000) {
-      recs.push({ category: 'EC', severity: 'high', message: `EC is high (${ec} uS/cm), indicating salt buildup. Flush soil with clean water and reduce fertilizer application until levels normalize.` });
+      recs.push({ category: 'EC', severity: 'high', reading: `${ec} uS/cm`, message: 'High EC can indicate salt buildup. Flush with clean water and pause or reduce fertilizer until the level drops.' });
     } else if (ec < 200) {
-      recs.push({ category: 'EC', severity: 'medium', message: `EC is low (${ec} uS/cm), suggesting nutrient-poor soil. Consider applying a balanced fertilizer.` });
+      recs.push({ category: 'EC', severity: 'medium', reading: `${ec} uS/cm`, message: 'Low EC suggests few available nutrients. Apply a balanced fertilizer according to its label, then retest.' });
     }
   }
 
   // nitrogen
   if (nitrogen != null) {
     if (nitrogen < 20) {
-      recs.push({ category: 'Nitrogen', severity: 'high', message: `Nitrogen is low (${nitrogen} mg/kg). Apply a nitrogen-rich fertilizer such as urea or ammonium sulfate.` });
+      recs.push({ category: 'Nitrogen', severity: 'high', reading: `${nitrogen} mg/kg`, message: 'Low nitrogen can slow leafy growth. Apply a nitrogen-rich fertilizer, such as urea or ammonium sulfate, at the label rate.' });
     } else if (nitrogen > 80) {
-      recs.push({ category: 'Nitrogen', severity: 'medium', message: `Nitrogen is very high (${nitrogen} mg/kg). Excess nitrogen can cause lush but weak growth and higher pest susceptibility — reduce nitrogen fertilizer.` });
+      recs.push({ category: 'Nitrogen', severity: 'medium', reading: `${nitrogen} mg/kg`, message: 'Too much nitrogen can cause weak, leafy growth. Stop or reduce nitrogen fertilizer and monitor the next reading.' });
     }
   }
 
   // phosphorus
   if (phosphorus != null) {
     if (phosphorus < 10) {
-      recs.push({ category: 'Phosphorus', severity: 'high', message: `Phosphorus is low (${phosphorus} mg/kg). Apply a phosphate fertilizer (e.g. superphosphate or rock phosphate) to support root development.` });
+      recs.push({ category: 'Phosphorus', severity: 'high', reading: `${phosphorus} mg/kg`, message: 'Low phosphorus can limit root development. Apply a phosphate fertilizer, such as superphosphate or rock phosphate, at the label rate.' });
     }
   }
 
   // potassium
   if (potassium != null) {
     if (potassium < 100) {
-      recs.push({ category: 'Potassium', severity: 'high', message: `Potassium is low (${potassium} mg/kg). Apply potassium fertilizer (e.g. muriate of potash) to improve fruiting and disease resistance.` });
+      recs.push({ category: 'Potassium', severity: 'high', reading: `${potassium} mg/kg`, message: 'Low potassium can affect fruiting and resilience. Apply a potassium fertilizer, such as muriate of potash, at the label rate.' });
     }
   }
 
   // temperature
   if (temperature != null) {
     if (temperature > 35) {
-      recs.push({ category: 'Temperature', severity: 'medium', message: `Air temperature is high (${temperature}°C). Consider shading and more frequent irrigation to reduce heat stress.` });
+      recs.push({ category: 'Temperature', severity: 'medium', reading: `${temperature}°C`, message: 'Heat stress is possible. Provide shade and check soil moisture more often before increasing irrigation.' });
     } else if (temperature < 18) {
-      recs.push({ category: 'Temperature', severity: 'medium', message: `Air temperature is low (${temperature}°C). Cold-sensitive crops may benefit from row covers or moving to a warmer area.` });
+      recs.push({ category: 'Temperature', severity: 'medium', reading: `${temperature}°C`, message: 'Cold-sensitive crops may need protection. Use row covers or move containers to a warmer area.' });
     }
   }
 
   // humidity
   if (humidity != null) {
     if (humidity > 85) {
-      recs.push({ category: 'Humidity', severity: 'medium', message: `Humidity is high (${humidity}%). Improve airflow/ventilation to reduce fungal disease risk.` });
+      recs.push({ category: 'Humidity', severity: 'medium', reading: `${humidity}%`, message: 'High humidity increases fungal disease risk. Improve spacing and airflow around plants.' });
     } else if (humidity < 40) {
-      recs.push({ category: 'Humidity', severity: 'low', message: `Humidity is low (${humidity}%). Consider misting or increasing watering frequency, especially for humidity-loving plants.` });
+      recs.push({ category: 'Humidity', severity: 'low', reading: `${humidity}%`, message: 'Dry air can stress humidity-loving plants. Check soil moisture and consider misting where appropriate.' });
     }
   }
 

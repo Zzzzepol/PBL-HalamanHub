@@ -33,9 +33,11 @@ const IrrigationPage = () => {
       refetchSummary();
     };
     socket.on('sensor:reading', handleReading);
+    socket.on('sensor:status', handleReading);
     socket.on('irrigation:log', handleLog);
     return () => {
       socket.off('sensor:reading', handleReading);
+      socket.off('sensor:status', handleReading);
       socket.off('irrigation:log', handleLog);
     };
   }, [refetchSummary, refetchLogs]);

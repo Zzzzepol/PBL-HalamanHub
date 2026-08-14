@@ -41,9 +41,11 @@ const { data: history, error: historyError, refetch: refetchHistory } =
     const handleReading = () => refetchHistory();
     const handleLog = () => refetchLogs();
     socket.on('sensor:reading', handleReading);
+    socket.on('sensor:status', handleReading);
     socket.on('irrigation:log', handleLog);
     return () => {
       socket.off('sensor:reading', handleReading);
+      socket.off('sensor:status', handleReading);
       socket.off('irrigation:log', handleLog);
     };
   }, [refetchHistory, refetchLogs]);

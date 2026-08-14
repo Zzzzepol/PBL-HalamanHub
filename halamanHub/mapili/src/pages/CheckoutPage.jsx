@@ -44,8 +44,7 @@ const CheckoutPage = () => {
     pickupDate: '',
   });
 
-
-  const [payMethod, setPayMethod] = useState('gcash'); // gcash | card | paymaya | bank_transfer
+  const payMethod = 'qrph';
 
   const shippingFee = fulfillment === 'delivery' ? DELIVERY_FEE : PICKUP_FEE;
   const grandTotal  = total + shippingFee;
@@ -189,13 +188,6 @@ const CheckoutPage = () => {
       setLoading(false);
     }
   };
-
-  const payMethods = [
-    { value: 'gcash',         label: 'GCash',          icon: 'ti-brand-google-pay', desc: 'Pay via GCash e-wallet' },
-    { value: 'paymaya',       label: 'Maya',            icon: 'ti-credit-card',      desc: 'Pay via Maya e-wallet' },
-    { value: 'card',          label: 'Credit / Debit card', icon: 'ti-credit-card',  desc: 'Visa, Mastercard, JCB' },
-    { value: 'bank_transfer', label: 'Online banking',  icon: 'ti-building-bank',    desc: 'BPI, UnionBank, etc.' },
-  ];
 
   if (items.length === 0) {
     navigate('/shop', { replace: true });
@@ -396,20 +388,16 @@ const CheckoutPage = () => {
                   </button>
                   <h2 className="font-semibold text-gray-800 text-lg">Choose payment method</h2>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {payMethods.map(m => (
-                    <button
-                      key={m.value}
-                      type="button"
-                      onClick={() => setPayMethod(m.value)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all
-                        ${payMethod === m.value ? 'border-brand-600 bg-brand-50' : 'border-gray-200 hover:border-brand-300'}`}
-                    >
-                      <i className={`ti ${m.icon} text-xl ${payMethod === m.value ? 'text-brand-700' : 'text-gray-400'} block mb-1.5`} />
-                      <div className={`text-sm font-semibold ${payMethod === m.value ? 'text-brand-800' : 'text-gray-700'}`}>{m.label}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{m.desc}</div>
-                    </button>
-                  ))}
+                <div className="rounded-2xl border-2 border-brand-600 bg-brand-50 p-4 text-left">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-white border border-brand-200 flex items-center justify-center shadow-sm">
+                      <i className="ti ti-qrcode text-2xl text-brand-700" />
+                    </div>
+                    <div>
+                      <div className="text-base font-semibold text-brand-800">QRPH</div>
+                      <div className="text-sm text-brand-700">Pay securely through QR code payment</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Order review */}

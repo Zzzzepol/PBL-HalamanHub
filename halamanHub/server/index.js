@@ -79,7 +79,8 @@ app.use((req, res) => {
 connectDB().then(() => {
   const { checkSensorHealth } = require('./utils/sensorHealth');
   const { checkProductStock } = require('./utils/productHealth');
-  setInterval(checkSensorHealth, 60 * 1000);  // check every minute
+  checkSensorHealth();
+  setInterval(checkSensorHealth, 30 * 1000);  // detect a five-minute timeout promptly
   setInterval(checkProductStock, 60 * 1000);  // check every minute
   server.listen(PORT, () => {
     console.log(`HalamanHub server running on http://localhost:${PORT}`);

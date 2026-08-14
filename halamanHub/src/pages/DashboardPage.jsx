@@ -20,6 +20,14 @@ const sensorStatusToPercent = (sensor) => {
 
 const severityVariant = { high: 'error', medium: 'warning', low: 'blue', ok: 'ok' };
 const severityLabel = { high: 'Action needed', medium: 'Monitor', low: 'Minor', ok: 'Healthy' };
+const recommendationTone = {
+  high: { card: 'border-red-200 bg-red-50/60', icon: 'ti-alert-circle bg-red-100 text-red-700', value: 'text-red-800' },
+  medium: { card: 'border-amber-200 bg-amber-50/60', icon: 'ti-eye bg-amber-100 text-amber-800', value: 'text-amber-900' },
+  low: { card: 'border-blue-200 bg-blue-50/60', icon: 'ti-info-circle bg-blue-100 text-blue-700', value: 'text-blue-900' },
+  ok: { card: 'border-green-200 bg-green-50/60', icon: 'ti-circle-check bg-green-100 text-green-700', value: 'text-green-900' },
+};
+const liveLabel = (status) => status === 'offline' ? 'Inactive' : 'Live';
+const liveTrend = (status) => status === 'offline' ? 'dn' : 'ok';
 const formatTime = (iso) => {
   if (!iso) return '—';
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -42,7 +50,11 @@ const DashboardPage = () => {
       refetchSummary();
     };
     socket.on('sensor:reading', handleReading);
-    return () => socket.off('sensor:reading', handleReading);
+    socket.on('sensor:status', handleReading);
+    return () => {
+      socket.off('sensor:reading', handleReading);
+      socket.off('sensor:status', handleReading);
+    };
   }, [refetchSensors, refetchSummary]);
   const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
   const { data: history } = useApiData(
@@ -67,6 +79,8 @@ const DashboardPage = () => {
   };
 
   const irrigation = summary?.irrigation;
+  const recommendations = summary?.recommendations || [];
+  const actionCount = recommendations.filter(rec => rec.severity === 'high').length;
 
   return (
     <div>
@@ -80,16 +94,15 @@ const DashboardPage = () => {
       {/* KPI Stats */}
       <div className={s.grid.stats}>
         <StatCard icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="Live" trendDir="ok" />
-        <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend="Live" trendDir="ok" />
-        <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend="Live" trendDir="ok" />
-        <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend="Live" trendDir="ok" />
-        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Soil temperature" trend="Live" trendDir="ok" />
-        <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend="Live" trendDir="ok" />
+        <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
+        <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend={liveLabel(summary?.pH.status)} trendDir={liveTrend(summary?.pH.status)} />
+        <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend={liveLabel(summary?.ec.status)} trendDir={liveTrend(summary?.ec.status)} />
+        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Soil temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
+        <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend={liveLabel(summary?.humidity.status)} trendDir={liveTrend(summary?.humidity.status)} />
       </div>
 
-      {/* Live sensor feed + Right column */}
+      {/* The recommendations sit beside the readings so important actions are visible immediately. */}
       <div className={s.grid.twoCol}>
-        {/* Live sensor feed */}
         <Card>
           <CardHeader
             title="Live sensor feed"
@@ -113,72 +126,90 @@ const DashboardPage = () => {
           </CardBody>
         </Card>
 
-        {/* Right column */}
-        <div className={s.grid.colStack}>
-          {/* Irrigation status */}
-          <Card>
-            <CardHeader title="Irrigation status" actions={<Badge variant={irrigation?.mode === 'manual' ? 'warning' : 'ok'}>{irrigation?.mode === 'manual' ? 'Manual' : 'Auto'}</Badge>} />
-            <CardBody>
-              <div className={`${s.irrRow} !mb-1.5`}>
-                <div className={irrigation?.pumpActive ? s.irrOn : s.irrOff}>
-                  <PulseDot active={!!irrigation?.pumpActive} /> Pump — {irrigation?.pumpActive ? 'Running' : 'Off'}
+        <Card>
+          <CardHeader
+            title="Soil & environment recommendations"
+            subtitle="Clear next steps based on the latest sensor readings."
+            actions={recommendations.length > 0 && <Badge variant={actionCount > 0 ? 'error' : 'ok'}>{actionCount > 0 ? `${actionCount} to review` : 'Healthy'}</Badge>}
+          />
+          <CardBody>
+            {recommendations.length > 0 && (
+              <div className={`flex items-center gap-3 rounded-md px-3 py-2.5 ${actionCount > 0 ? 'bg-red-50 text-red-900' : 'bg-green-50 text-green-900'}`}>
+                <i className={`ti ${actionCount > 0 ? 'ti-clipboard-heart' : 'ti-circle-check'} text-lg`} aria-hidden="true" />
+                <div>
+                  <div className="text-sm font-medium">{actionCount > 0 ? `${actionCount} priority action${actionCount === 1 ? '' : 's'} to take` : 'Conditions look healthy'}</div>
+                  <div className="text-xs opacity-80">{actionCount > 0 ? 'Start with the red cards below, then retest after treatment.' : 'Keep monitoring to maintain these conditions.'}</div>
                 </div>
               </div>
-              <div className={`${s.irrRow} mb-3`}>
-                <div className={irrigation?.solenoidActive ? s.irrOn : s.irrOff}>
-                  <PulseDot active={!!irrigation?.solenoidActive} /> Solenoid — {irrigation?.solenoidActive ? 'Open' : 'Closed'}
-                </div>
-              </div>
-              <div className={s.btnRow}>
-                <Button variant="primary" size="sm" icon="ti-settings" onClick={() => navigate('/irrigation')}>
-                  Manage irrigation
-                </Button>
-              </div>
-              <div className={s.irrMeta}>Last update: {formatTime(irrigation?.lastUpdated)}</div>
-            </CardBody>
-          </Card>
+            )}
 
-          {/* Water tank */}
-          <Card>
-            <CardHeader title="Water tank" subtitle="Live level sensor" />
-            <CardBody>
-              <div className="flex items-center gap-3">
-                <Badge variant={summary?.waterTank.available ? 'ok' : 'error'}>
-                  <i className={`ti ${summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
-                  {summary?.waterTank.available ? 'Water available' : 'Tank low'}
-                </Badge>
-              </div>
-              <div className="text-sm text-text-secondary mt-2.5">
-                Raw sensor reading: <strong>{summary?.waterTank.raw ?? '—'}</strong>
-              </div>
-              <div className="text-sm text-text-secondary mt-1">
-                No flow meter is installed, so litres can't be calculated yet — this reflects the tank sensor's on/off threshold only.
-              </div>
-            </CardBody>
-          </Card>
-        </div>
+            <div className="grid gap-2.5 mt-3">
+              {recommendations.map((rec, idx) => {
+                const tone = recommendationTone[rec.severity] || recommendationTone.low;
+                return (
+                  <div key={idx} className={`border rounded-md p-3 ${tone.card}`}>
+                    <div className="flex items-start gap-2.5">
+                      <i className={`ti ${tone.icon} w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0`} aria-hidden="true" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-medium text-text-primary">{rec.category}</div>
+                            {rec.reading && <div className={`text-base font-semibold mt-0.5 ${tone.value}`}>{rec.reading}</div>}
+                          </div>
+                          <Badge variant={severityVariant[rec.severity] || 'blue'}>{severityLabel[rec.severity] || rec.severity}</Badge>
+                        </div>
+                        <div className="text-xs font-medium uppercase tracking-wide text-text-secondary mt-2">Recommended next step</div>
+                        <div className="text-sm text-text-secondary leading-snug mt-0.5">{rec.message}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {recommendations.length === 0 && (
+              <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
-{/* Soil recommendations */}
-      <Card className="mb-4">
-        <CardHeader
-          title="Soil & environment recommendations"
-          subtitle="General guidance based on current pH, EC, NPK, temperature, and humidity — not crop-specific."
-        />
-        <CardBody>
-          {(summary?.recommendations || []).map((rec, idx) => (
-            <div key={idx} className="flex items-start gap-3 py-2.5 border-b border-gray-50 last:border-0">
-              <Badge variant={severityVariant[rec.severity] || 'blue'}>{severityLabel[rec.severity] || rec.severity}</Badge>
-              <div className="text-sm text-text-secondary">
-                <span className="font-medium text-gray-700">{rec.category}:</span> {rec.message}
+      {/* Irrigation + water tank */}
+      <div className={s.grid.twoCol}>
+        <Card>
+          <CardHeader title="Irrigation status" actions={<Badge variant={irrigation?.mode === 'manual' ? 'warning' : 'ok'}>{irrigation?.mode === 'manual' ? 'Manual' : 'Auto'}</Badge>} />
+          <CardBody>
+            <div className={`${s.irrRow} !mb-1.5`}>
+              <div className={irrigation?.pumpActive ? s.irrOn : s.irrOff}>
+                <PulseDot active={!!irrigation?.pumpActive} /> Pump — {irrigation?.pumpActive ? 'Running' : 'Off'}
               </div>
             </div>
-          ))}
-          {(!summary?.recommendations || summary.recommendations.length === 0) && (
-            <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
-          )}
-        </CardBody>
-      </Card>
+            <div className={`${s.irrRow} mb-3`}>
+              <div className={irrigation?.solenoidActive ? s.irrOn : s.irrOff}>
+                <PulseDot active={!!irrigation?.solenoidActive} /> Solenoid — {irrigation?.solenoidActive ? 'Open' : 'Closed'}
+              </div>
+            </div>
+            <div className={s.btnRow}>
+              <Button variant="primary" size="sm" icon="ti-settings" onClick={() => navigate('/irrigation')}>Manage irrigation</Button>
+            </div>
+            <div className={s.irrMeta}>Last update: {formatTime(irrigation?.lastUpdated)}</div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader title="Water tank" subtitle="Live level sensor" />
+          <CardBody>
+            <div className="flex items-center gap-3">
+              <Badge variant={summary?.waterTank.status === 'offline' ? 'error' : summary?.waterTank.available ? 'ok' : 'warning'}>
+                <i className={`ti ${summary?.waterTank.status === 'offline' ? 'ti-wifi-off' : summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
+                {summary?.waterTank.status === 'offline' ? 'Sensor inactive' : summary?.waterTank.available ? 'Water available' : 'Tank low'}
+              </Badge>
+            </div>
+            <div className="text-sm text-text-secondary mt-2.5">Raw sensor reading: <strong>{summary?.waterTank.raw ?? '—'}</strong></div>
+            <div className="text-sm text-text-secondary mt-1">No flow meter is installed, so litres can't be calculated yet — this reflects the tank sensor's on/off threshold only.</div>
+          </CardBody>
+        </Card>
+      </div>
 
       {/* NPK + Alerts */}
       <div className={s.grid.twoCol}>

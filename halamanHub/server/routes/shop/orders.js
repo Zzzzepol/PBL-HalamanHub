@@ -236,8 +236,8 @@ router.post('/', async (req, res) => {
       statusHistory: [{ status: 'pending', note: 'Order placed', changedBy: customer }],
     });
 
-    // Send order confirmation email (non-blocking)
-    sendOrderConfirmation(order).catch(() => {});
+    // Do not send a confirmation email until payment is actually marked as paid.
+    // Payment confirmation is triggered only after a successful PayMongo webhook.
 
     await createAlertIfEnabled('orders', {
       type: 'ok',

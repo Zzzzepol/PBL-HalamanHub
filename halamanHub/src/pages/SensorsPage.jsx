@@ -27,7 +27,11 @@ const SensorsPage = () => {
   useEffect(() => {
     const handleReading = () => refetch();
     socket.on('sensor:reading', handleReading);
-    return () => socket.off('sensor:reading', handleReading);
+    socket.on('sensor:status', handleReading);
+    return () => {
+      socket.off('sensor:reading', handleReading);
+      socket.off('sensor:status', handleReading);
+    };
   }, [refetch]);
 
   const [search, setSearch] = useState('');
