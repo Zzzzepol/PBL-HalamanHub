@@ -26,7 +26,7 @@ const UsersPage = () => {
   const { token, user: currentUser } = useAuth();
   const { data: users, loading, error, refetch, setData: setUsers } = useApiData(usersApi.getAll, [], 20000);
 
-  const [search, setSearch]         = useState('');
+const [search, setSearch]         = useState('');
   const [roleFilter, setRoleFilter] = useState('All roles');
   const [modalUser, setModalUser]   = useState(null);
   const [resetInfo, setResetInfo]   = useState(null);
@@ -34,6 +34,14 @@ const UsersPage = () => {
   const [form, setForm]             = useState(emptyForm);
   const [saveError, setSaveError]   = useState('');
   const [saving, setSaving]         = useState(false);
+
+  // "Change my own password" form — only used when the modal is open on your own account
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword]         = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwError, setPwError]     = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+  const [changingPw, setChangingPw] = useState(false);
 
   const list = useMemo(() => users || [], [users]);
 
@@ -43,7 +51,15 @@ const UsersPage = () => {
     return matchSearch && matchRole;
   }), [list, search, roleFilter]);
 
-  const openEdit = (u) => { setModalUser(u); setResetInfo(null); };
+const openEdit = (u) => {
+    setModalUser(u);
+    setResetInfo(null);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPwError('');
+    setPwSuccess('');
+  };
 
   const changeRole = async (newRole) => {
     try {
@@ -75,7 +91,31 @@ const UsersPage = () => {
     }
   };
 
-  const deleteUser = async (u) => {
+ const changePassword = async (e) => {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setPwError('New password and confirmation do not match.');
+      return;
+    }
+
+    setChangingPw(true);
+    try {
+      const result = await usersApi.changePassword(currentPassword, newPassword, token);
+      setPwSuccess(result.message || 'Password updated successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      setPwError(err instanceof ApiError ? err.message : 'Failed to change password.');
+    } finally {
+      setChangingPw(false);
+    }
+  };
+
+  const deleteUser = async (u) => { 
     if (!window.confirm(`Permanently delete ${u.name}'s account? This cannot be undone.`)) return;
     try {
       await usersApi.delete(u._id, token);
@@ -201,18 +241,73 @@ const UsersPage = () => {
                 </div>
               </div>
 
-              {/* Password reset */}
+{/* Password — self-service change on your own account, reset-for-others everywhere else */}
               <div className={sectionBlock}>
                 <div className={`${ps.toggleRowTitle} mb-2`}>Password</div>
-                <Button size="sm" icon="ti-key" onClick={sendReset}>Generate temporary password</Button>
-                {resetInfo && (
-                  <div className="mt-2 flex flex-col gap-1">
-                    <span className="text-sm text-green-800"><i className="ti ti-check" /> {resetInfo.message}</span>
-                    <span className="font-mono bg-bg-secondary text-text-primary px-2 py-1 rounded-sm text-sm inline-block w-fit tracking-wider">
-                      {resetInfo.tempPassword}
-                    </span>
-                    <span className="text-xs text-text-secondary">Share this with the user and ask them to change it immediately.</span>
-                  </div>
+                {(currentUser?.id === modalUser._id || currentUser?.username === modalUser.username) ? (
+                  <form onSubmit={changePassword}>
+                    <div className="flex flex-col gap-2.5">
+                      <FormField label="Current password" id="mu-current-password">
+                        <Input
+                          id="mu-current-password"
+                          type="password"
+                          value={currentPassword}
+                          onChange={e => setCurrentPassword(e.target.value)}
+                          autoComplete="current-password"
+                          required
+                        />
+                      </FormField>
+                      <FormField label="New password" id="mu-new-password">
+                        <Input
+                          id="mu-new-password"
+                          type="password"
+                          value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          placeholder="At least 8 characters"
+                          autoComplete="new-password"
+                          required
+                        />
+                      </FormField>
+                      <FormField label="Confirm new password" id="mu-confirm-password">
+                        <Input
+                          id="mu-confirm-password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          autoComplete="new-password"
+                          required
+                        />
+                      </FormField>
+                    </div>
+
+                    {pwError && (
+                      <div className="mt-2 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">{pwError}</div>
+                    )}
+
+                    <div className="mt-2.5">
+                      <Button size="sm" variant="primary" type="submit" icon="ti-key" disabled={changingPw}>
+                        {changingPw ? 'Updating…' : 'Update my password'}
+                      </Button>
+                      {pwSuccess && (
+                        <span className="ml-2 text-sm text-green-800">
+                          <i className="ti ti-check" /> {pwSuccess}
+                        </span>
+                      )}
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <Button size="sm" icon="ti-key" onClick={sendReset}>Generate temporary password</Button>
+                    {resetInfo && (
+                      <div className="mt-2 flex flex-col gap-1">
+                        <span className="text-sm text-green-800"><i className="ti ti-check" /> {resetInfo.message}</span>
+                        <span className="font-mono bg-bg-secondary text-text-primary px-2 py-1 rounded-sm text-sm inline-block w-fit tracking-wider">
+                          {resetInfo.tempPassword}
+                        </span>
+                        <span className="text-xs text-text-secondary">Share this with the user and ask them to change it immediately.</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 

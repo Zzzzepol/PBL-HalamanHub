@@ -74,8 +74,10 @@ export const usersApi = {
   create:        (data, token)     => request('/users', { method: 'POST', body: data, token }),
   setRole:       (id, role, token) => request(`/users/${id}/role`, { method: 'PATCH', body: { role }, token }),
   setStatus:     (id, status, token) => request(`/users/${id}/status`, { method: 'PATCH', body: { status }, token }),
-  resetPassword: (id, token)       => request(`/users/${id}/reset-password`, { method: 'POST', token }),
+resetPassword: (id, token)       => request(`/users/${id}/reset-password`, { method: 'POST', token }),
   delete:        (id, token)       => request(`/users/${id}`, { method: 'DELETE', token }),
+  changePassword: (currentPassword, newPassword, token) =>
+    request('/users/me/password', { method: 'PATCH', body: { currentPassword, newPassword }, token }),
 };
 
 export const settingsApi = {
