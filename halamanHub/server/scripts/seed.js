@@ -8,7 +8,7 @@ const connectDB = require('../config/db');
 
 const User               = require('../models/User');
 const Product            = require('../models/Product');
-const Order              = require('../models/Order');
+const ShopOrder           = require('../models/ShopOrder');
 const Sensor             = require('../models/Sensor');
 const IrrigationZone     = require('../models/IrrigationZone');
 const IrrigationSchedule = require('../models/IrrigationSchedule');
@@ -64,11 +64,11 @@ async function seed() {
   }
 
   // Orders
-  const orderCount = await Order.countDocuments();
+  const orderCount = await ShopOrder.countDocuments();
   if (orderCount === 0) {
     const now = Date.now();
     const days = (d) => new Date(now - d * 86400000);
-    await Order.insertMany([
+    await ShopOrder.insertMany([
       { orderNumber: '#ORD-0001', customer: 'Maria Santos',    customerEmail: 'maria@gmail.com',  product: 'Organic Tomatoes (2 kg)',  quantity: 2, amount: 280, status: 'pending',    payment: 'unpaid',   orderDate: days(0), statusHistory: [{ status: 'pending',    note: 'Order created',                    changedAt: days(0), changedBy: 'admin' }] },
       { orderNumber: '#ORD-0002', customer: 'Juan Reyes',      customerEmail: 'jreyes@yahoo.com', product: 'Mixed Greens (1 kg)',      quantity: 1, amount: 180, status: 'confirmed',  payment: 'paid',     orderDate: days(0), statusHistory: [{ status: 'pending',    note: 'Order created',                    changedAt: days(0), changedBy: 'admin' }, { status: 'confirmed',  note: 'Payment received',              changedAt: days(0), changedBy: 'admin' }] },
       { orderNumber: '#ORD-0003', customer: 'Ana Cruz',        customerEmail: 'ana@gmail.com',    product: 'Bell Peppers (1.5 kg)',    quantity: 1, amount: 320, status: 'processing', payment: 'paid',     orderDate: days(1), statusHistory: [{ status: 'pending',    note: 'Order created',                    changedAt: days(1), changedBy: 'admin' }, { status: 'confirmed',  note: '',                              changedAt: days(1), changedBy: 'admin' }, { status: 'processing', note: 'Being packed', changedAt: days(0), changedBy: 'admin' }] },
