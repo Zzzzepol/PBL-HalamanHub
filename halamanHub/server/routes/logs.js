@@ -1,9 +1,10 @@
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 const ActivityLog = require('../models/ActivityLog');
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireAdmin);
 
 // GET /api/logs
 router.get('/', async (req, res) => {

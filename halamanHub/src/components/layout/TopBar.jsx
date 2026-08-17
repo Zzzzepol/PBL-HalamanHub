@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SearchBar, Avatar } from '../ui/UI';
+import { SearchBar, Avatar, Button, FormField, Input } from '../ui/UI';
 import { useAuth } from '../../context/AuthContext';
-import { alertsApi } from '../../api/client';
+import { alertsApi, usersApi, ApiError } from '../../api/client';
 
 const pageTitles = {
   '/':           { title: 'Dashboard',             sub: 'Farm overview & live readings' },
@@ -37,6 +37,30 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
   const [search, setSearch] = useState('');
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
+  const [pwError, setPwError] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+
+  const submitPasswordChange = async (e) => {
+    e.preventDefault();
+    setPwError('');
+    if (pwForm.newPassword !== pwForm.confirm) {
+      setPwError('New passwords do not match.');
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await usersApi.changePassword(pwForm.currentPassword, pwForm.newPassword, token);
+      setShowPasswordModal(false);
+      setPwForm({ currentPassword: '', newPassword: '', confirm: '' });
+      window.alert('Password updated successfully.');
+    } catch (err) {
+      setPwError(err instanceof ApiError ? err.message : 'Failed to update password.');
+    } finally {
+      setPwSaving(false);
+    }
+  };
   const page = pageTitles[location.pathname] || pageTitles['/'];
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -168,6 +192,14 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
                 <span className="text-xs text-text-secondary">@{user?.username || 'admin'}</span>
               </div>
               <button
+                className="flex items-center gap-2 w-full px-3.5 py-2.5 bg-transparent border-none text-sm text-text-primary cursor-pointer text-left font-sans hover:bg-bg-secondary"
+                onClick={() => { setShowUserMenu(false); setShowPasswordModal(true); }}
+                role="menuitem"
+              >
+                <i className="ti ti-key text-base" aria-hidden="true" />
+                Change password
+              </button>
+              <button
                 className="flex items-center gap-2 w-full px-3.5 py-2.5 bg-transparent border-none text-sm text-red-600 cursor-pointer text-left font-sans hover:bg-red-50"
                 onClick={handleLogout}
                 role="menuitem"
@@ -179,6 +211,36 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
           )}
         </div>
       </div>
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]" onClick={() => setShowPasswordModal(false)}>
+          <div className="bg-bg-primary rounded-lg shadow-lg w-full max-w-sm p-5" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+            <h2 className="text-base font-medium text-text-primary mb-3">Change your password</h2>
+            <form onSubmit={submitPasswordChange} className="flex flex-col gap-3">
+              {pwError && <div className="text-sm text-red-600">{pwError}</div>}
+              <FormField label="Current password" id="pw-current">
+                <Input id="pw-current" type="password" required
+                  value={pwForm.currentPassword}
+                  onChange={e => setPwForm({ ...pwForm, currentPassword: e.target.value })} />
+              </FormField>
+              <FormField label="New password" id="pw-new">
+                <Input id="pw-new" type="password" required minLength={8}
+                  value={pwForm.newPassword}
+                  onChange={e => setPwForm({ ...pwForm, newPassword: e.target.value })} />
+              </FormField>
+              <FormField label="Confirm new password" id="pw-confirm">
+                <Input id="pw-confirm" type="password" required
+                  value={pwForm.confirm}
+                  onChange={e => setPwForm({ ...pwForm, confirm: e.target.value })} />
+              </FormField>
+              <div className="flex gap-2 justify-end mt-2">
+                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)}>Cancel</Button>
+                <Button type="submit" variant="primary" disabled={pwSaving}>{pwSaving ? 'Saving…' : 'Update password'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

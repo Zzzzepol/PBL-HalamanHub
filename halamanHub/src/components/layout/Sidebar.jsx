@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { section: 'Monitor' },
@@ -16,14 +17,17 @@ const navItems = [
   { path: '/pos',label: 'Point of sale', icon: 'ti-basket' },
   { path: '/schedule',label: 'Pickup schedule', icon: 'ti-calendar'},
   { section: 'Admin' },
-  { path: '/users',label: 'Users',icon: 'ti-users'},
+  { path: '/users',label: 'Users',icon: 'ti-users', adminOnly: true },
   { path: '/reports',label: 'Reports', icon: 'ti-file-analytics' },
-  { path: '/settings',label: 'Settings', icon: 'ti-settings'},
-  { path: '/logs', label: 'Activity logs', icon: 'ti-clipboard-list' },
+  { path: '/settings',label: 'Settings', icon: 'ti-settings', adminOnly: true },
+  { path: '/logs', label: 'Activity logs', icon: 'ti-clipboard-list', adminOnly: true },
 ];
 
 const Sidebar = ({ collapsed, onToggle, mobileOpen, pendingOrders }) => {
   const location = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <aside
@@ -59,7 +63,7 @@ const Sidebar = ({ collapsed, onToggle, mobileOpen, pendingOrders }) => {
 
       {/* Navigation */}
       <nav className="px-2 py-2.5 flex-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map((item, i) => {
+        {visibleItems.map((item, i) => {
           if (item.section) {
             return !collapsed ? (
               <div key={i} className="text-[10px] font-medium text-text-tertiary uppercase tracking-wider px-2 pt-2.5 pb-1 whitespace-nowrap">
