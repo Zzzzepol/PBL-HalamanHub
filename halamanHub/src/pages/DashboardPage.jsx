@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardBody, Badge, Button, PulseDot, StatCard } from '../components/ui/UI';
-import { NPKRing, SensorReadingRow } from '../components/charts/Widgets';
+import { Card, CardHeader, CardBody, Badge, Button, PulseDot } from '../components/ui/UI';
+import { NPKRing } from '../components/charts/Widgets';
 import { MoistureTrendChart } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
 import { dashboardApi, sensorsApi, alertsApi, ApiError } from '../api/client';
@@ -9,29 +9,6 @@ import * as s from './pageStyles';
 import { socket } from '../socket';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
-
-const parseNitrogenValue = (sensor) => {
-  if (sensor == null) return null;
-  if (typeof sensor.numericValue === 'number') return sensor.numericValue;
-  if (typeof sensor.value === 'string') {
-    const match = sensor.value.match(/N:(\d+(?:\.\d+)?)/i);
-    return match ? Number(match[1]) : null;
-  }
-  return null;
-};
-
-const sensorStatusToPercent = (sensor) => {
-  if (sensor.type === 'NPK') {
-    const nitrogen = parseNitrogenValue(sensor);
-    if (nitrogen == null) return 0;
-    return Math.min((nitrogen / 100) * 100, 100);
-  }
-  if (sensor.numericValue == null) return 0;
-  if (sensor.type === 'pH') return Math.min((sensor.numericValue / 14) * 100, 100);
-  if (sensor.type === 'EC') return Math.min((sensor.numericValue / 2000) * 100, 100); // uS/cm scale
-  if (sensor.type === 'Temperature') return Math.min((sensor.numericValue / 50) * 100, 100);
-  return Math.min(sensor.numericValue, 100);
-};
 
 const severityVariant = { high: 'error', medium: 'warning', low: 'blue', ok: 'ok' };
 const severityLabel = { high: 'Action needed', medium: 'Monitor', low: 'Minor', ok: 'Healthy' };
@@ -41,6 +18,29 @@ const recommendationTone = {
   low: { card: 'border-blue-200 bg-blue-50/60', icon: 'ti-info-circle bg-blue-100 text-blue-700', value: 'text-blue-900' },
   ok: { card: 'border-green-200 bg-green-50/60', icon: 'ti-circle-check bg-green-100 text-green-700', value: 'text-green-900' },
 };
+const iconTone = {
+  green: 'bg-green-100 text-green-700',
+  blue: 'bg-blue-100 text-blue-700',
+  amber: 'bg-amber-100 text-amber-700',
+  red: 'bg-red-100 text-red-700',
+  teal: 'bg-teal-100 text-teal-700',
+};
+
+const StatRow = ({ icon, iconVariant, label, value, trend, trendDir }) => (
+  <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5 bg-white">
+    <div className="flex items-center gap-2.5 min-w-0">
+      <span className={`w-8 h-8 rounded-md flex items-center justify-center text-sm flex-shrink-0 ${iconTone[iconVariant] || iconTone.green}`}>
+        <i className={`ti ${icon}`} aria-hidden="true" />
+      </span>
+      <div className="min-w-0">
+        <div className="text-xs text-text-secondary truncate">{label}</div>
+        <div className="text-sm font-semibold text-text-primary truncate">{value}</div>
+      </div>
+    </div>
+    <Badge variant={trendDir === 'ok' ? 'ok' : 'error'} className="flex-shrink-0">{trend}</Badge>
+  </div>
+);
+
 const liveLabel = (status) => status === 'offline' ? 'Inactive' : 'Live';
 const liveTrend = (status) => status === 'offline' ? 'dn' : 'ok';
 const formatTime = (iso) => {
@@ -56,12 +56,10 @@ const DashboardPage = () => {
   const [range, setRange] = useState('24h');
 
   const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
-  const { data: sensors, refetch: refetchSensors } = useApiData(sensorsApi.getAll, [], 30000);
   // real-time updates — socket pushes new readings instantly, polling above
   // just stays as a slower fallback in case the socket ever drops.
   useEffect(() => {
     const handleReading = () => {
-      refetchSensors();
       refetchSummary();
     };
     socket.on('sensor:reading', handleReading);
@@ -70,15 +68,13 @@ const DashboardPage = () => {
       socket.off('sensor:reading', handleReading);
       socket.off('sensor:status', handleReading);
     };
-  }, [refetchSensors, refetchSummary]);
+  }, [refetchSummary]);
   const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
   const { data: history } = useApiData(
     (token) => sensorsApi.getHistory(token, RANGE_HOURS[range]),
     [range],
     20000
   );
-
-  const liveSensors = (sensors || []).filter(sn => sn.zone === 'Main System');
 
   const moistureTrend = useMemo(() => {
     const points = history || [];
@@ -90,7 +86,6 @@ const DashboardPage = () => {
 
   const handleRefresh = () => {
     refetchSummary();
-    refetchSensors();
   };
 
   const irrigation = summary?.irrigation;
@@ -100,145 +95,124 @@ const DashboardPage = () => {
   return (
     <div>
       {summaryError && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
+        <div className="mb-3 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
           Failed to load dashboard data. {summaryError instanceof ApiError ? summaryError.message : 'Check that the backend and MongoDB are running.'}{' '}
           <button className="underline" onClick={handleRefresh}>Retry</button>
         </div>
       )}
 
-{/* KPI Stats */}
-      <div className={s.grid.stats}>
-        <StatCard icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="Live" trendDir="ok" />
-        <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
-        <StatCard icon="ti-seedling" iconVariant="green" value={summary?.npk.nitrogen != null ? `${summary.npk.nitrogen} mg/kg` : '—'} label="Nitrogen" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
-        <StatCard icon="ti-leaf" iconVariant="green" value={summary?.npk.phosphorus != null ? `${summary.npk.phosphorus} mg/kg` : '—'} label="Phosphorus" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
-        <StatCard icon="ti-leaf-2" iconVariant="green" value={summary?.npk.potassium != null ? `${summary.npk.potassium} mg/kg` : '—'} label="Potassium" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
-        <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend={liveLabel(summary?.pH.status)} trendDir={liveTrend(summary?.pH.status)} />
-        <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend={liveLabel(summary?.ec.status)} trendDir={liveTrend(summary?.ec.status)} />
-        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
-        <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend={liveLabel(summary?.humidity.status)} trendDir={liveTrend(summary?.humidity.status)} />
+      {/* KPI Stats — compact horizontal rows so short values (e.g. "6") and
+          long ones (e.g. "162 uS/cm") take up the same row height, no ragged
+          whitespace from a variable-height card grid. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 !mb-3">
+        <StatRow icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="Live" trendDir="ok" />
+        <StatRow icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
+        <StatRow icon="ti-seedling" iconVariant="green" value={summary?.npk.nitrogen != null ? `${summary.npk.nitrogen} mg/kg` : '—'} label="Nitrogen" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
+        <StatRow icon="ti-leaf" iconVariant="green" value={summary?.npk.phosphorus != null ? `${summary.npk.phosphorus} mg/kg` : '—'} label="Phosphorus" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
+        <StatRow icon="ti-leaf-2" iconVariant="green" value={summary?.npk.potassium != null ? `${summary.npk.potassium} mg/kg` : '—'} label="Potassium" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
+        <StatRow icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend={liveLabel(summary?.pH.status)} trendDir={liveTrend(summary?.pH.status)} />
+        <StatRow icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend={liveLabel(summary?.ec.status)} trendDir={liveTrend(summary?.ec.status)} />
+        <StatRow icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
+        <StatRow icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend={liveLabel(summary?.humidity.status)} trendDir={liveTrend(summary?.humidity.status)} />
       </div>
 
-      {/* The recommendations sit beside the readings so important actions are visible immediately. */}
-      <div className={s.grid.twoCol}>
-        <Card>
-          <CardHeader
-            title="Live sensor feed"
-            subtitle={liveSensors[0] ? `Updated ${formatTime(liveSensors[0].lastReadingAt)}` : 'Loading…'}
-            actions={<Button variant="ghost" size="sm" icon="ti-refresh" aria-label="Refresh" onClick={handleRefresh} />}
-          />
-          <CardBody>
-            {liveSensors.map(sensor => {
-              const nitrogenValue = sensor.type === 'NPK' ? parseNitrogenValue(sensor) : null;
-              return (
-                <SensorReadingRow
-                  key={sensor._id}
-                  name={sensor.type === 'NPK' ? 'Nitrogen (N)' : `${sensor.type} sensor`}
-                  value={sensor.type === 'NPK' && nitrogenValue != null ? `${nitrogenValue} mg/kg` : sensor.value}
-                  percent={sensorStatusToPercent(sensor)}
-                  status={sensor.status}
-                  time={formatTime(sensor.lastReadingAt)}
-                />
-              );
-            })}
-            {liveSensors.length === 0 && (
-              <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
-            )}
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Soil & environment recommendations"
-            subtitle="Clear next steps based on the latest sensor readings."
-            actions={recommendations.length > 0 && <Badge variant={actionCount > 0 ? 'error' : 'ok'}>{actionCount > 0 ? `${actionCount} to review` : 'Healthy'}</Badge>}
-          />
-          <CardBody>
-            {recommendations.length > 0 && (
-              <div className={`flex items-center gap-3 rounded-md px-3 py-2.5 ${actionCount > 0 ? 'bg-red-50 text-red-900' : 'bg-green-50 text-green-900'}`}>
-                <i className={`ti ${actionCount > 0 ? 'ti-clipboard-heart' : 'ti-circle-check'} text-lg`} aria-hidden="true" />
-                <div>
-                  <div className="text-sm font-medium">{actionCount > 0 ? `${actionCount} priority action${actionCount === 1 ? '' : 's'} to take` : 'Conditions look healthy'}</div>
-                  <div className="text-xs opacity-80">{actionCount > 0 ? 'Start with the red cards below, then retest after treatment.' : 'Keep monitoring to maintain these conditions.'}</div>
-                </div>
+      {/* Recommendations — now full width since the live feed card is gone */}
+      <Card className="!mb-3">
+        <CardHeader
+          title="Soil & environment recommendations"
+          subtitle="Clear next steps based on the latest sensor readings."
+          actions={recommendations.length > 0 && <Badge variant={actionCount > 0 ? 'error' : 'ok'}>{actionCount > 0 ? `${actionCount} to review` : 'Healthy'}</Badge>}
+        />
+        <CardBody className="!py-2.5">
+          {recommendations.length > 0 && (
+            <div className={`flex items-center gap-2.5 rounded-md px-3 py-2 mb-2.5 ${actionCount > 0 ? 'bg-red-50 text-red-900' : 'bg-green-50 text-green-900'}`}>
+              <i className={`ti ${actionCount > 0 ? 'ti-clipboard-heart' : 'ti-circle-check'} text-lg`} aria-hidden="true" />
+              <div>
+                <div className="text-sm font-medium">{actionCount > 0 ? `${actionCount} priority action${actionCount === 1 ? '' : 's'} to take` : 'Conditions look healthy'}</div>
+                <div className="text-xs opacity-80">{actionCount > 0 ? 'Start with the red cards below, then retest after treatment.' : 'Keep monitoring to maintain these conditions.'}</div>
               </div>
-            )}
+            </div>
+          )}
 
-            <div className="grid gap-2.5 mt-3">
-              {recommendations.map((rec, idx) => {
-                const tone = recommendationTone[rec.severity] || recommendationTone.low;
-                return (
-                  <div key={idx} className={`border rounded-md p-3 ${tone.card}`}>
-                    <div className="flex items-start gap-2.5">
-                      <i className={`ti ${tone.icon} w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0`} aria-hidden="true" />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-sm font-medium text-text-primary">{rec.category}</div>
-                            {rec.reading && <div className={`text-base font-semibold mt-0.5 ${tone.value}`}>{rec.reading}</div>}
-                          </div>
-                          <Badge variant={severityVariant[rec.severity] || 'blue'}>{severityLabel[rec.severity] || rec.severity}</Badge>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+            {recommendations.map((rec, idx) => {
+              const tone = recommendationTone[rec.severity] || recommendationTone.low;
+              return (
+                <div key={idx} className={`border rounded-md p-2.5 ${tone.card}`}>
+                  <div className="flex items-start gap-2.5">
+                    <i className={`ti ${tone.icon} w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0`} aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-medium text-text-primary">{rec.category}</div>
+                          {rec.reading && <div className={`text-base font-semibold mt-0.5 ${tone.value}`}>{rec.reading}</div>}
                         </div>
-                        <div className="text-xs font-medium uppercase tracking-wide text-text-secondary mt-2">Recommended next step</div>
-                        <div className="text-sm text-text-secondary leading-snug mt-0.5">{rec.message}</div>
+                        <Badge variant={severityVariant[rec.severity] || 'blue'}>{severityLabel[rec.severity] || rec.severity}</Badge>
                       </div>
+                      <div className="text-sm text-text-secondary leading-snug mt-1">{rec.message}</div>
+                      {rec.fix && (
+                        <div className="flex items-start gap-1.5 mt-2">
+                          <i className="ti ti-shopping-cart text-xs mt-0.5 text-text-secondary flex-shrink-0" aria-hidden="true" />
+                          <div className="text-sm leading-snug"><span className="font-medium text-text-primary">Fix: </span><span className="text-text-secondary">{rec.fix}</span></div>
+                        </div>
+                      )}
+                      {rec.diyTip && (
+                        <div className="flex items-start gap-1.5 mt-1.5 bg-green-50/70 border border-green-100 rounded px-2 py-1.5">
+                          <i className="ti ti-leaf text-xs mt-0.5 text-green-700 flex-shrink-0" aria-hidden="true" />
+                          <div className="text-sm leading-snug"><span className="font-medium text-green-800">DIY option: </span><span className="text-green-900/80">{rec.diyTip}</span></div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
+          </div>
 
-            {recommendations.length === 0 && (
-              <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
-            )}
-          </CardBody>
-        </Card>
-      </div>
+          {recommendations.length === 0 && (
+            <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
+          )}
+        </CardBody>
+      </Card>
 
-      {/* Irrigation + water tank */}
-      <div className={s.grid.twoCol}>
+      {/* Irrigation, water tank, NPK and alerts — dense four-up row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
         <Card>
-          <CardHeader title="Irrigation status" actions={<Badge variant={irrigation?.mode === 'manual' ? 'warning' : 'ok'}>{irrigation?.mode === 'manual' ? 'Manual' : 'Auto'}</Badge>} />
-          <CardBody>
-            <div className={`${s.irrRow} !mb-1.5`}>
+          <CardHeader title="Irrigation" actions={<Badge variant={irrigation?.mode === 'manual' ? 'warning' : 'ok'}>{irrigation?.mode === 'manual' ? 'Manual' : 'Auto'}</Badge>} />
+          <CardBody className="!py-2.5">
+            <div className={`${s.irrRow} !mb-1`}>
               <div className={irrigation?.pumpActive ? s.irrOn : s.irrOff}>
                 <PulseDot active={!!irrigation?.pumpActive} /> Pump — {irrigation?.pumpActive ? 'Running' : 'Off'}
               </div>
             </div>
-            <div className={`${s.irrRow} mb-3`}>
+            <div className={`${s.irrRow} !mb-2`}>
               <div className={irrigation?.solenoidActive ? s.irrOn : s.irrOff}>
                 <PulseDot active={!!irrigation?.solenoidActive} /> Solenoid — {irrigation?.solenoidActive ? 'Open' : 'Closed'}
               </div>
             </div>
             <div className={s.btnRow}>
-              <Button variant="primary" size="sm" icon="ti-settings" onClick={() => navigate('/irrigation')}>Manage irrigation</Button>
+              <Button variant="primary" size="sm" icon="ti-settings" onClick={() => navigate('/irrigation')}>Manage</Button>
             </div>
-            <div className={s.irrMeta}>Last update: {formatTime(irrigation?.lastUpdated)}</div>
+            <div className={`${s.irrMeta} !mt-2`}>Last update: {formatTime(irrigation?.lastUpdated)}</div>
           </CardBody>
         </Card>
 
         <Card>
           <CardHeader title="Water tank" subtitle="Live level sensor" />
-          <CardBody>
-            <div className="flex items-center gap-3">
-              <Badge variant={summary?.waterTank.status === 'offline' ? 'error' : summary?.waterTank.available ? 'ok' : 'warning'}>
-                <i className={`ti ${summary?.waterTank.status === 'offline' ? 'ti-wifi-off' : summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
-                {summary?.waterTank.status === 'offline' ? 'Sensor inactive' : summary?.waterTank.available ? 'Water available' : 'Tank low'}
-              </Badge>
-            </div>
-            <div className="text-sm text-text-secondary mt-2.5">Raw sensor reading: <strong>{summary?.waterTank.raw ?? '—'}</strong></div>
-            <div className="text-sm text-text-secondary mt-1">No flow meter is installed, so litres can't be calculated yet — this reflects the tank sensor's on/off threshold only.</div>
+          <CardBody className="!py-2.5">
+            <Badge variant={summary?.waterTank.status === 'offline' ? 'error' : summary?.waterTank.available ? 'ok' : 'warning'}>
+              <i className={`ti ${summary?.waterTank.status === 'offline' ? 'ti-wifi-off' : summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
+              {summary?.waterTank.status === 'offline' ? 'Sensor inactive' : summary?.waterTank.available ? 'Water available' : 'Tank low'}
+            </Badge>
+            <div className="text-sm text-text-secondary mt-2">Raw reading: <strong>{summary?.waterTank.raw ?? '—'}</strong></div>
+            <div className="text-xs text-text-secondary mt-1">No flow meter installed — reflects on/off threshold only.</div>
           </CardBody>
         </Card>
-      </div>
 
-      {/* NPK + Alerts */}
-      <div className={s.grid.twoCol}>
-        {/* NPK */}
         <Card>
-          <CardHeader title="NPK nutrient levels" subtitle="Live soil analysis" />
-          <CardBody>
-            <div className={s.npkRow}>
+          <CardHeader title="NPK levels" subtitle="Live soil analysis" />
+          <CardBody className="!py-2.5">
+            <div className={`${s.npkRow} !gap-2`}>
               <NPKRing symbol="N" value={summary?.npk.nitrogen ?? 0} max={100} name="Nitrogen" unit="mg/kg" />
               <NPKRing symbol="P" value={summary?.npk.phosphorus ?? 0} max={80} name="Phosphorus" unit="mg/kg" />
               <NPKRing symbol="K" value={summary?.npk.potassium ?? 0} max={80} name="Potassium" unit="mg/kg" />
@@ -246,21 +220,22 @@ const DashboardPage = () => {
           </CardBody>
         </Card>
 
-        {/* Recent alerts */}
         <Card>
           <CardHeader title="Recent alerts" />
-          <CardBody>
-            {((alerts || []).slice(0, 10)).map(a => (
-              <div key={a._id} className={s.alertItem}>
-                <div className={s.alertIconVariant[a.type] || s.alertIconVariant.ok}>
-                  <i className={`ti ${a.icon}`} aria-hidden="true" />
+          <CardBody className="!py-2.5 max-h-64 overflow-y-auto">
+            <div className="divide-y divide-border">
+              {((alerts || []).slice(0, 10)).map(a => (
+                <div key={a._id} className={s.alertItem}>
+                  <div className={s.alertIconVariant[a.type] || s.alertIconVariant.ok}>
+                    <i className={`ti ${a.icon}`} aria-hidden="true" />
+                  </div>
+                  <div>
+                    <div className={s.alertText}>{a.message}</div>
+                    <div className={s.alertTime}>{formatTime(a.occurredAt)}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className={s.alertText}>{a.message}</div>
-                  <div className={s.alertTime}>{formatTime(a.occurredAt)}</div>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
             {(!alerts || alerts.length === 0) && (
               <div className="text-center text-text-secondary py-4 text-sm">No alerts yet.</div>
             )}
@@ -283,7 +258,7 @@ const DashboardPage = () => {
             </div>
           }
         />
-        <CardBody>
+        <CardBody className="!py-2.5">
           <MoistureTrendChart labels={moistureTrend.labels} values={moistureTrend.values} />
         </CardBody>
       </Card>

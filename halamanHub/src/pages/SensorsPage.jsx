@@ -47,7 +47,6 @@ const SensorsPage = () => {
 
   const counts = useMemo(() => ({
     online: list.filter(s => s.status === 'ok').length,
-    warning: list.filter(s => s.status === 'warning').length,
     offline: list.filter(s => s.status === 'offline').length,
     total: list.length,
   }), [list]);
@@ -57,7 +56,6 @@ const SensorsPage = () => {
       {/* Summary stats */}
       <div className={ps.grid.stats4}>
         <StatCard icon="ti-circle-check" iconVariant="green" value={counts.online} label="Online" />
-        <StatCard icon="ti-alert-triangle" iconVariant="amber" value={counts.warning} label="Warning" />
         <StatCard icon="ti-wifi-off" iconVariant="red" value={counts.offline} label="Offline" />
         <StatCard icon="ti-device-floppy" iconVariant="blue" value={counts.total} label="Total sensors" />
       </div>
