@@ -9,7 +9,8 @@ const CartPage = () => {
   const { items, removeItem, updateQty, total, clearCart } = useCart();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [insufficient, setInsufficient] = useState({}); // productId -> { available, requested }
+const [insufficient, setInsufficient] = useState({}); 
+  const [qtyDrafts, setQtyDrafts] = useState({}); 
 
   const checkStock = async () => {
     if (items.length === 0) { setInsufficient({}); return; }
@@ -90,7 +91,26 @@ const CartPage = () => {
                       >
                         <i className="ti ti-minus text-xs" />
                       </button>
-                      <span className="w-6 text-center font-medium text-sm">{item.qty}</span>
+                      <input
+                        type="number"
+                        min="1"
+                        inputMode="numeric"
+                        value={qtyDrafts[item._id] !== undefined ? qtyDrafts[item._id] : item.qty}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setQtyDrafts(prev => ({ ...prev, [item._id]: val }));
+                          if (val === '') return;
+                          const n = parseInt(val, 10);
+                          if (!Number.isNaN(n) && n >= 1) updateQty(item._id, n);
+                        }}
+                        onBlur={e => {
+                          const n = parseInt(e.target.value, 10);
+                          if (Number.isNaN(n) || n < 1) updateQty(item._id, 1);
+                          setQtyDrafts(prev => { const next = { ...prev }; delete next[item._id]; return next; });
+                        }}
+                        className="w-12 text-center font-medium text-sm border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        aria-label={`Quantity for ${item.name}`}
+                      />
                       <button
                         onClick={() => updateQty(item._id, item.qty + 1)}
                         className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-sm"

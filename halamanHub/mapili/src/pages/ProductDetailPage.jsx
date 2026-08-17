@@ -22,9 +22,10 @@ const ProductDetailPage = () => {
 
   const inCart = items.find(i => i._id === id);
 
-  const handleAdd = () => {
+const handleAdd = () => {
     if (!product || product.status === 'out-of-stock') return;
-    addItem(product, qty);
+    const safeQty = qty === '' || qty < 1 ? 1 : qty;
+    addItem(product, safeQty);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
@@ -101,7 +102,21 @@ const ProductDetailPage = () => {
                     >
                       <i className="ti ti-minus text-sm" />
                     </button>
-                    <span className="text-lg font-semibold w-8 text-center">{qty}</span>
+                    <input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={qty}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '') { setQty(''); return; }
+                        const n = parseInt(val, 10);
+                        if (!Number.isNaN(n)) setQty(Math.max(1, n));
+                      }}
+                      onBlur={() => { if (qty === '' || qty < 1) setQty(1); }}
+                      className="text-lg font-semibold w-16 text-center border border-gray-200 rounded-xl py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                      aria-label="Quantity"
+                    />
                     <button
                       onClick={() => setQty(q => q + 1)}
                       className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
@@ -110,7 +125,7 @@ const ProductDetailPage = () => {
                       <i className="ti ti-plus text-sm" />
                     </button>
                     <span className="text-sm text-gray-400 ml-2">
-                      Total: <strong className="text-gray-700">₱{(product.price * qty).toFixed(2)}</strong>
+                      Total: <strong className="text-gray-700">₱{(product.price * (qty || 0)).toFixed(2)}</strong>
                     </span>
                   </div>
                 </div>

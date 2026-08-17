@@ -144,20 +144,6 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 px-4 bg-white">
-        <div className="max-w-3xl mx-auto text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-brand-100 rounded-full mb-6">
-            <i className="ti ti-truck-delivery text-3xl text-brand-700" aria-hidden="true" />
-          </div>
-          <h2 className="font-display text-3xl font-bold text-gray-800 mb-4">Ready to order?</h2>
-          <p className="text-gray-500 mb-8 text-lg">Create a free account and get plants delivered or pick up directly from our nursery.</p>
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Link to="/register"><Button variant="primary" size="lg" icon="ti-user-plus">Create free account</Button></Link>
-            <Link to="/shop"><Button variant="outline" size="lg" icon="ti-shopping-bag">Browse products</Button></Link>
-          </div>
-        </div>
-      </section>
     </div>
   );
 };
