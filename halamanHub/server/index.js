@@ -36,13 +36,24 @@ initSocket(server, [CLIENT_ORIGIN, SHOP_ORIGIN]);
 
 app.use(cors({ origin: [CLIENT_ORIGIN, SHOP_ORIGIN] }));
 
-// Global JSON parser that ignores ONLY the webhook endpoint
+const BODY_LIMIT = '10mb';
+
+// Global JSON parser that ignores ONLY the webhook endpoint.
+// Product image uploads are stored as base64 data URLs, so the default limit is too small.
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/shop/payment/webhook') {
     next(); // Skip express.json() for the webhook
   } else {
-    express.json()(req, res, next);
+    express.json({ limit: BODY_LIMIT })(req, res, next);
   }
+});
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
+
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request payload too large. Please use a smaller image or compress it before uploading.' });
+  }
+  next(err);
 });
 
 // Health check

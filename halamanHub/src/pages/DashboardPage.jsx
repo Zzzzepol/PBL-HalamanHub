@@ -97,7 +97,7 @@ const DashboardPage = () => {
         <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
         <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend={liveLabel(summary?.pH.status)} trendDir={liveTrend(summary?.pH.status)} />
         <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend={liveLabel(summary?.ec.status)} trendDir={liveTrend(summary?.ec.status)} />
-        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Soil temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
+        <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
         <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend={liveLabel(summary?.humidity.status)} trendDir={liveTrend(summary?.humidity.status)} />
       </div>
 

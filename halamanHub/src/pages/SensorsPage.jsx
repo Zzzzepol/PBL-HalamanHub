@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardHeader, Table, Badge, StatCard, SearchBar, Select } from '../components/ui/UI';
+import { Card, CardHeader, Table, Badge, StatCard, SearchBar } from '../components/ui/UI';
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
@@ -35,22 +35,15 @@ const SensorsPage = () => {
   }, [refetch]);
 
   const [search, setSearch] = useState('');
-  const [zoneFilter, setZoneFilter] = useState('All zones');
-  const [statusFilter, setStatusFilter] = useState('All statuses');
 
   const list = useMemo(() => sensors || [], [sensors]);
-
-  const zones = ['All zones', ...new Set(list.map(s => s.zone))];
-  const statuses = ['All statuses', 'Online', 'Warning', 'Offline'];
 
   const filtered = useMemo(() => {
     return list.filter(s => {
       const matchesSearch = `${s.sensorId} ${s.type} ${s.zone} ${s.device}`.toLowerCase().includes(search.toLowerCase());
-      const matchesZone = zoneFilter === 'All zones' || s.zone === zoneFilter;
-      const matchesStatus = statusFilter === 'All statuses' || statusBadge[s.status]?.label === statusFilter;
-      return matchesSearch && matchesZone && matchesStatus;
+      return matchesSearch;
     });
-  }, [list, search, zoneFilter, statusFilter]);
+  }, [list, search]);
 
   const counts = useMemo(() => ({
     online: list.filter(s => s.status === 'ok').length,
@@ -81,12 +74,6 @@ const SensorsPage = () => {
         <div className={ps.filterSearch}>
           <SearchBar value={search} onChange={setSearch} placeholder="Search by ID, type, zone, device…" />
         </div>
-        <Select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
-          {zones.map(z => <option key={z} value={z}>{z}</option>)}
-        </Select>
-        <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-        </Select>
       </div>
 
       {/* Table */}

@@ -23,6 +23,8 @@ const formatDate = (iso) => new Date(iso).toLocaleString('en-US', {
   month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
 });
 
+const PAGE_SIZE = 25;
+
 const LogsPage = () => {
   const { data: logs, loading, error, refetch } = useApiData(logsApi.getAll, [], 10000);
 
@@ -30,6 +32,7 @@ const LogsPage = () => {
   const [catFilter, setCatFilter] = useState('all');
   const [fromDate, setFromDate]   = useState('');
   const [toDate, setToDate]       = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const list = logs || [];
 
@@ -55,6 +58,20 @@ const LogsPage = () => {
 
     return matchSearch && matchCat && matchFrom && matchTo;
   }), [list, search, catFilter, fromDate, toDate]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const paginatedLogs = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [search, catFilter, fromDate, toDate]);
+
+  React.useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const clearFilters = () => {
     setSearch('');
@@ -125,10 +142,10 @@ const LogsPage = () => {
       <Card className={ps.lastCard}>
         <CardHeader
           title="Activity logs"
-          subtitle={loading ? 'Loading…' : `${filtered.length} of ${list.length} entries`}
+          subtitle={loading ? 'Loading…' : `${Math.min(filtered.length, startIndex + paginatedLogs.length)} of ${filtered.length} entries`}
         />
         <Table headers={['Date & time', 'User', 'Action', 'Category', 'Status']}>
-          {filtered.map(l => {
+          {paginatedLogs.map(l => {
             const cb = categoryBadge[l.category] || categoryBadge.auth;
             const sb = statusBadge[l.status]     || statusBadge.success;
             return (
@@ -149,6 +166,22 @@ const LogsPage = () => {
             </tr>
           )}
         </Table>
+
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-3 border-t border-border-subtle">
+            <div className="text-sm text-text-secondary">
+              Page {currentPage} of {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="default" type="button" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>
+                Previous
+              </Button>
+              <Button size="sm" variant="default" type="button" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );
