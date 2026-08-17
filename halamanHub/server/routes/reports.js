@@ -1258,12 +1258,18 @@ function sendPdf(
     Number(metadata.rowCount) ||
     0;
 
+  const salesSummary =
+    metadata.salesSummary || null;
+
+  const summaryBoxHeight =
+    salesSummary ? 62 : 34;
+
   doc
     .roundedRect(
       left,
       y,
       usableWidth,
-      34,
+      summaryBoxHeight,
       4
     )
     .fillColor(
@@ -1283,21 +1289,82 @@ function sendPdf(
       y + 8
     );
 
-  doc
-    .fillColor(
-      COLORS.dark
-    )
-    .fontSize(8)
-    .font('Helvetica')
-    .text(
-      `${total.toLocaleString(
-        'en-PH'
-      )} records included in this report.`,
-      left + 10,
-      y + 20
-    );
+  if (salesSummary) {
+    doc
+      .fillColor(
+        COLORS.dark
+      )
+      .fontSize(8)
+      .font('Helvetica')
+      .text(
+        `${total.toLocaleString(
+          'en-PH'
+        )} product line(s) included in this report.`,
+        left + 10,
+        y + 20
+      );
 
-  y += 48;
+    const money = (value) =>
+      `PHP ${Number(value || 0).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+
+    const stats = [
+      {
+        label: 'Total revenue',
+        value: money(salesSummary.totalRevenue),
+      },
+      {
+        label: 'Completed sales',
+        value: Number(
+          salesSummary.totalOrders || 0
+        ).toLocaleString('en-PH'),
+      },
+      {
+        label: 'Avg. order value',
+        value: money(salesSummary.averageOrderValue),
+      },
+    ];
+
+    const statWidth = (usableWidth - 20) / stats.length;
+
+    stats.forEach((stat, index) => {
+      const statX = left + 10 + index * statWidth;
+
+      doc
+        .fillColor(COLORS.muted)
+        .fontSize(7)
+        .font('Helvetica')
+        .text(stat.label, statX, y + 36, {
+          width: statWidth - 10,
+        });
+
+      doc
+        .fillColor(COLORS.primary)
+        .fontSize(10)
+        .font('Helvetica-Bold')
+        .text(stat.value, statX, y + 46, {
+          width: statWidth - 10,
+        });
+    });
+  } else {
+    doc
+      .fillColor(
+        COLORS.dark
+      )
+      .fontSize(8)
+      .font('Helvetica')
+      .text(
+        `${total.toLocaleString(
+          'en-PH'
+        )} records included in this report.`,
+        left + 10,
+        y + 20
+      );
+  }
+
+  y += summaryBoxHeight + 14;
 
   /*
    * No columns
@@ -1482,6 +1549,7 @@ function finishPdf(
           width:
             usableWidth * 0.6,
           align: 'left',
+          lineBreak: false,
         }
       );
 
@@ -1496,6 +1564,7 @@ function finishPdf(
         width:
           usableWidth * 0.4,
         align: 'right',
+        lineBreak: false,
       }
     );
   }
@@ -1647,6 +1716,10 @@ router.get(
             metadata.rowCount
           ) ||
           rows.length,
+
+        salesSummary:
+          report?.sales?.summary ||
+          null,
       };
 
       /*

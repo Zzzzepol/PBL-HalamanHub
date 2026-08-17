@@ -270,7 +270,7 @@ async function buildReportData(dataType, from, to) {
       'Product',
       'Units Sold',
       'Orders',
-      'Revenue (₱)',
+      'Revenue (PHP)',
       'Revenue Share (%)',
     ];
 
