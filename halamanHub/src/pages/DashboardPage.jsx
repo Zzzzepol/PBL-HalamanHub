@@ -106,13 +106,15 @@ const DashboardPage = () => {
         </div>
       )}
 
-      {/* KPI Stats */}
+{/* KPI Stats */}
       <div className={s.grid.stats}>
         <StatCard icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="Live" trendDir="ok" />
         <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
+        <StatCard icon="ti-seedling" iconVariant="green" value={summary?.npk.nitrogen != null ? `${summary.npk.nitrogen} mg/kg` : '—'} label="Nitrogen" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
+        <StatCard icon="ti-leaf" iconVariant="green" value={summary?.npk.phosphorus != null ? `${summary.npk.phosphorus} mg/kg` : '—'} label="Phosphorus" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
+        <StatCard icon="ti-leaf-2" iconVariant="green" value={summary?.npk.potassium != null ? `${summary.npk.potassium} mg/kg` : '—'} label="Potassium" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
         <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend={liveLabel(summary?.pH.status)} trendDir={liveTrend(summary?.pH.status)} />
         <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend={liveLabel(summary?.ec.status)} trendDir={liveTrend(summary?.ec.status)} />
-        <StatCard icon="ti-seedling" iconVariant="green" value={summary?.npk.nitrogen != null ? `${summary.npk.nitrogen} mg/kg` : '—'} label="Nitrogen" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
         <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
         <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend={liveLabel(summary?.humidity.status)} trendDir={liveTrend(summary?.humidity.status)} />
       </div>
