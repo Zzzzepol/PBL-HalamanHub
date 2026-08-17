@@ -10,7 +10,22 @@ import { socket } from '../socket';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
+const parseNitrogenValue = (sensor) => {
+  if (sensor == null) return null;
+  if (typeof sensor.numericValue === 'number') return sensor.numericValue;
+  if (typeof sensor.value === 'string') {
+    const match = sensor.value.match(/N:(\d+(?:\.\d+)?)/i);
+    return match ? Number(match[1]) : null;
+  }
+  return null;
+};
+
 const sensorStatusToPercent = (sensor) => {
+  if (sensor.type === 'NPK') {
+    const nitrogen = parseNitrogenValue(sensor);
+    if (nitrogen == null) return 0;
+    return Math.min((nitrogen / 100) * 100, 100);
+  }
   if (sensor.numericValue == null) return 0;
   if (sensor.type === 'pH') return Math.min((sensor.numericValue / 14) * 100, 100);
   if (sensor.type === 'EC') return Math.min((sensor.numericValue / 2000) * 100, 100); // uS/cm scale
@@ -63,7 +78,7 @@ const DashboardPage = () => {
     20000
   );
 
-  const liveSensors = (sensors || []).filter(sn => sn.zone === 'Main System' && sn.type !== 'NPK');
+  const liveSensors = (sensors || []).filter(sn => sn.zone === 'Main System');
 
   const moistureTrend = useMemo(() => {
     const points = history || [];
@@ -97,6 +112,7 @@ const DashboardPage = () => {
         <StatCard icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
         <StatCard icon="ti-test-pipe" iconVariant="green" value={summary?.pH.value ?? '—'} label="pH level" trend={liveLabel(summary?.pH.status)} trendDir={liveTrend(summary?.pH.status)} />
         <StatCard icon="ti-bolt" iconVariant="amber" value={summary?.ec.value != null ? `${summary.ec.value} uS/cm` : '—'} label="EC level" trend={liveLabel(summary?.ec.status)} trendDir={liveTrend(summary?.ec.status)} />
+        <StatCard icon="ti-seedling" iconVariant="green" value={summary?.npk.nitrogen != null ? `${summary.npk.nitrogen} mg/kg` : '—'} label="Nitrogen" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
         <StatCard icon="ti-thermometer" iconVariant="red" value={summary?.temperature.value != null ? `${summary.temperature.value}°C` : '—'} label="Temperature" trend={liveLabel(summary?.temperature.status)} trendDir={liveTrend(summary?.temperature.status)} />
         <StatCard icon="ti-wave-sine" iconVariant="teal" value={summary?.humidity.value != null ? `${summary.humidity.value}%` : '—'} label="Humidity" trend={liveLabel(summary?.humidity.status)} trendDir={liveTrend(summary?.humidity.status)} />
       </div>
@@ -110,16 +126,19 @@ const DashboardPage = () => {
             actions={<Button variant="ghost" size="sm" icon="ti-refresh" aria-label="Refresh" onClick={handleRefresh} />}
           />
           <CardBody>
-            {liveSensors.map(sensor => (
-              <SensorReadingRow
-                key={sensor._id}
-                name={`${sensor.type} sensor`}
-                value={sensor.value}
-                percent={sensorStatusToPercent(sensor)}
-                status={sensor.status}
-                time={formatTime(sensor.lastReadingAt)}
-              />
-            ))}
+            {liveSensors.map(sensor => {
+              const nitrogenValue = sensor.type === 'NPK' ? parseNitrogenValue(sensor) : null;
+              return (
+                <SensorReadingRow
+                  key={sensor._id}
+                  name={sensor.type === 'NPK' ? 'Nitrogen (N)' : `${sensor.type} sensor`}
+                  value={sensor.type === 'NPK' && nitrogenValue != null ? `${nitrogenValue} mg/kg` : sensor.value}
+                  percent={sensorStatusToPercent(sensor)}
+                  status={sensor.status}
+                  time={formatTime(sensor.lastReadingAt)}
+                />
+              );
+            })}
             {liveSensors.length === 0 && (
               <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
             )}
@@ -227,9 +246,9 @@ const DashboardPage = () => {
 
         {/* Recent alerts */}
         <Card>
-          <CardHeader title="Recent alerts" actions={<Button variant="default" size="sm">View all</Button>} />
+          <CardHeader title="Recent alerts" />
           <CardBody>
-            {(alerts || []).map(a => (
+            {((alerts || []).slice(0, 10)).map(a => (
               <div key={a._id} className={s.alertItem}>
                 <div className={s.alertIconVariant[a.type] || s.alertIconVariant.ok}>
                   <i className={`ti ${a.icon}`} aria-hidden="true" />

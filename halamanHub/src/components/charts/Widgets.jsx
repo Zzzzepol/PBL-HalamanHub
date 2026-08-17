@@ -70,7 +70,7 @@ const dotColors = {
 export const SensorReadingRow = ({ name, value, percent, status = 'ok', time }) => {
   const barColor = status === 'ok' ? '#27a85a' : status === 'warning' ? '#f0b429' : '#e03535';
   return (
-    <div className="flex items-center gap-2.5 py-2.5 border-b-[0.5px] border-border last:border-b-0">
+    <div className="flex items-center gap-2 py-2 border-b-[0.5px] border-border last:border-b-0">
       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColors[status] || dotColors.ok}`} aria-hidden="true" />
       <span className="text-base text-text-primary flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
       <div className="hidden sm:block flex-[0_1_80px] h-[5px] bg-bg-tertiary rounded-full overflow-hidden">
