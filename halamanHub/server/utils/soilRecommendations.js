@@ -13,115 +13,6 @@
 function getSoilRecommendations({ ph, ec, nitrogen, phosphorus, potassium, temperature, humidity }) {
   const recs = [];
 
-  // ph
-  if (ph != null) {
-    if (ph < 5.5) {
-      recs.push({
-        category: 'Soil pH',
-        severity: 'high',
-        reading: `pH ${ph}`,
-        message: 'Your soil is too sour (acidic). Plants struggle to absorb nutrients like this.',
-        fix: 'Add a little agricultural lime, mix it in, then retest in a few days. Aim for pH 6.0–7.0.',
-        diyTip: 'Crushed eggshells or wood ash work too — sprinkle a handful over the soil, mix in, and water lightly.',
-      });
-    } else if (ph > 7.5) {
-      recs.push({
-        category: 'Soil pH',
-        severity: 'high',
-        reading: `pH ${ph}`,
-        message: 'Your soil is too alkaline (sweet). Nutrients get "locked up" so plants can\'t use them.',
-        fix: 'Add a little elemental sulfur or compost, mix it in, then retest. Aim for pH 6.0–7.0.',
-        diyTip: 'Used coffee grounds mixed into the topsoil can gently lower pH over time.',
-      });
-    } else if (ph < 6.0 || ph > 7.0) {
-      recs.push({ category: 'Soil pH', severity: 'medium', reading: `pH ${ph}`, message: 'A little off the ideal range, but most crops still grow fine here. Just keep watching future readings.' });
-    } else {
-      recs.push({ category: 'Soil pH', severity: 'ok', reading: `pH ${ph}`, message: 'Good — your soil pH is right in the ideal 6.0–7.0 range.' });
-    }
-  }
-
-  // ec (salinity)
-  if (ec != null) {
-    if (ec > 2000) {
-      recs.push({
-        category: 'Soil Salinity (EC)',
-        severity: 'high',
-        reading: `${ec} uS/cm`,
-        message: 'Too much salt has built up in the soil. This can burn roots and stress plants.',
-        fix: 'Water the area well to flush the salt out, and pause fertilizer until the reading drops.',
-        diyTip: 'Rainwater flushes salt out best, since it has no added salts of its own.',
-      });
-    } else if (ec < 200) {
-      recs.push({
-        category: 'Soil Salinity (EC)',
-        severity: 'medium',
-        reading: `${ec} uS/cm`,
-        message: 'There aren\'t many nutrients available in the soil right now.',
-        fix: 'Apply a balanced fertilizer following the product label, then retest in a few days.',
-        diyTip: 'Compost tea — compost or manure soaked in water for a day or two — gives soil a gentle nutrient boost.',
-      });
-    } else {
-      recs.push({ category: 'Soil Salinity (EC)', severity: 'ok', reading: `${ec} uS/cm`, message: 'Good — nutrient levels in the soil are well balanced.' });
-    }
-  }
-
-  // nitrogen
-  if (nitrogen != null) {
-    if (nitrogen < 20) {
-      recs.push({
-        category: 'Nitrogen (N)',
-        severity: 'high',
-        reading: `${nitrogen} mg/kg`,
-        message: 'Nitrogen is low. This slows down leaf and stem growth.',
-        fix: 'Apply a nitrogen fertilizer like urea or ammonium sulfate, following the label.',
-        diyTip: 'Used coffee grounds or fresh grass clippings mixed into the topsoil are natural nitrogen boosters.',
-      });
-    } else if (nitrogen > 80) {
-      recs.push({
-        category: 'Nitrogen (N)',
-        severity: 'medium',
-        reading: `${nitrogen} mg/kg`,
-        message: 'Nitrogen is too high. Plants may grow lots of leaves but weak fruit or flowers.',
-        fix: 'Stop nitrogen fertilizer for now and watch the next few readings.',
-        diyTip: 'Mixing in dry leaves, straw, or sawdust helps soak up the extra nitrogen.',
-      });
-    } else {
-      recs.push({ category: 'Nitrogen (N)', severity: 'ok', reading: `${nitrogen} mg/kg`, message: 'Good — nitrogen is in the healthy 20–80 mg/kg range.' });
-    }
-  }
-
-  // phosphorus
-  if (phosphorus != null) {
-    if (phosphorus < 10) {
-      recs.push({
-        category: 'Phosphorus (P)',
-        severity: 'high',
-        reading: `${phosphorus} mg/kg`,
-        message: 'Phosphorus is low. This can hold back root growth.',
-        fix: 'Apply a phosphate fertilizer like superphosphate or rock phosphate, following the label.',
-        diyTip: 'Dried, crushed banana peels buried near the roots break down slowly and release phosphorus and potassium.',
-      });
-    } else {
-      recs.push({ category: 'Phosphorus (P)', severity: 'ok', reading: `${phosphorus} mg/kg`, message: 'Good — phosphorus is healthy, so root growth shouldn\'t be held back.' });
-    }
-  }
-
-  // potassium
-  if (potassium != null) {
-    if (potassium < 100) {
-      recs.push({
-        category: 'Potassium (K)',
-        severity: 'high',
-        reading: `${potassium} mg/kg`,
-        message: 'Potassium is low. This weakens fruiting and makes plants less able to handle stress.',
-        fix: 'Apply a potassium fertilizer like muriate of potash, following the label.',
-        diyTip: 'Banana peels or a light sprinkle of wood ash are natural sources of potassium — bury peels near the roots.',
-      });
-    } else {
-      recs.push({ category: 'Potassium (K)', severity: 'ok', reading: `${potassium} mg/kg`, message: 'Good — potassium is healthy, supporting fruiting and stress resistance.' });
-    }
-  }
-
   // temperature
   if (temperature != null) {
     if (temperature > 35) {
@@ -172,6 +63,127 @@ function getSoilRecommendations({ ph, ec, nitrogen, phosphorus, potassium, tempe
     }
   }
 
+  // generalized soil recommendation block
+  if (ph != null) {
+    if (ph < 6.0) {
+      recs.push({
+        category: 'Soil pH',
+        severity: 'high',
+        reading: `pH ${ph}`,
+        message: `Current pH ${ph} is below the target soil pH range.`,
+        fix: 'Apply a pH balancing amendment such as lime and retest after a few days.',
+        diyTip: 'Mix in crushed eggshells or compost to gently raise soil pH over time.',
+      });
+    } else if (ph > 7.2) {
+      recs.push({
+        category: 'Soil pH',
+        severity: 'high',
+        reading: `pH ${ph}`,
+        message: `Current pH ${ph} is above the target soil pH range.`,
+        fix: 'Apply a sulfur-rich or acidifying amendment, then retest the soil pH.',
+        diyTip: 'Use coffee grounds or composted organic material to lower pH gradually.',
+      });
+    } else {
+      recs.push({ category: 'Soil pH', severity: 'ok', reading: `pH ${ph}`, message: `pH ${ph} is in the normal target soil pH range.` });
+    }
+  }
+
+  if (ec != null) {
+    if (ec > 1050) {
+      recs.push({
+        category: 'Soil EC',
+        severity: 'high',
+        reading: `${ec} uS/cm`,
+        message: `EC ${ec} uS/cm is above the normal soil salinity range.`,
+        fix: 'Flush the soil with clean water and reduce fertilizer salts until the reading drops.',
+        diyTip: 'A controlled water flush and compost-rich soil blend helps reduce salt stress naturally.',
+      });
+    } else if (ec < 750) {
+      recs.push({
+        category: 'Soil EC',
+        severity: 'medium',
+        reading: `${ec} uS/cm`,
+        message: `EC ${ec} uS/cm is below the normal soil salinity range.`,
+        fix: 'Re-apply a balanced nutrient solution or fertilizer with low salt load.',
+        diyTip: 'Use compost tea or a mild nutrient solution to rebuild available salts.',
+      });
+    } else {
+      recs.push({ category: 'Soil EC', severity: 'ok', reading: `${ec} uS/cm`, message: `EC ${ec} uS/cm is aligned with the normal soil salinity range.` });
+    }
+  }
+
+  if (nitrogen != null) {
+    if (nitrogen < 30) {
+      recs.push({
+        category: 'Nitrogen (N)',
+        severity: 'high',
+        reading: `${nitrogen} mg/kg`,
+        message: `Nitrogen ${nitrogen} mg/kg is below the recommended soil nitrogen range.`,
+        fix: 'Apply a nitrogen source such as urea or ammonium sulfate according to label rates.',
+        diyTip: 'Add coffee grounds, fresh grass clippings, or composted organic matter to raise nitrogen slowly.',
+      });
+    } else if (nitrogen > 70) {
+      recs.push({
+        category: 'Nitrogen (N)',
+        severity: 'medium',
+        reading: `${nitrogen} mg/kg`,
+        message: `Nitrogen ${nitrogen} mg/kg is above the recommended soil nitrogen range.`,
+        fix: 'Pause nitrogen fertilizer and retest before applying more.',
+        diyTip: 'Mix in dry straw or dry leaves to soak up excess nitrogen and improve balance.',
+      });
+    } else {
+      recs.push({ category: 'Nitrogen (N)', severity: 'ok', reading: `${nitrogen} mg/kg`, message: `Nitrogen ${nitrogen} mg/kg is within the recommended soil nitrogen range.` });
+    }
+  }
+
+  if (phosphorus != null) {
+    if (phosphorus < 20) {
+      recs.push({
+        category: 'Phosphorus (P)',
+        severity: 'high',
+        reading: `${phosphorus} mg/kg`,
+        message: `Phosphorus ${phosphorus} mg/kg is below the recommended soil phosphorus range.`,
+        fix: 'Apply a phosphate fertilizer like superphosphate or rock phosphate.',
+        diyTip: 'Bury dried crushed banana peels or compost near the roots to release phosphorus gradually.',
+      });
+    } else if (phosphorus > 40) {
+      recs.push({
+        category: 'Phosphorus (P)',
+        severity: 'medium',
+        reading: `${phosphorus} mg/kg`,
+        message: `Phosphorus ${phosphorus} mg/kg is above the recommended soil phosphorus range.`,
+        fix: 'Pause phosphorus fertilizer until the next reading stabilizes.',
+        diyTip: 'Use compost and mulch to buffer the root zone without adding fertilizers.',
+      });
+    } else {
+      recs.push({ category: 'Phosphorus (P)', severity: 'ok', reading: `${phosphorus} mg/kg`, message: `Phosphorus ${phosphorus} mg/kg is within the recommended soil phosphorus range.` });
+    }
+  }
+
+  if (potassium != null) {
+    if (potassium < 100) {
+      recs.push({
+        category: 'Potassium (K)',
+        severity: 'high',
+        reading: `${potassium} mg/kg`,
+        message: `Potassium ${potassium} mg/kg is below the recommended soil potassium range.`,
+        fix: 'Apply a potassium feed like muriate of potash or a balanced crop fertilizer.',
+        diyTip: 'Place banana peels or wood ash in a compost heap and compost them into the root zone.',
+      });
+    } else if (potassium > 180) {
+      recs.push({
+        category: 'Potassium (K)',
+        severity: 'medium',
+        reading: `${potassium} mg/kg`,
+        message: `Potassium ${potassium} mg/kg is above the recommended soil potassium range.`,
+        fix: 'Pause extra potassium fertilizer and observe the next reading.',
+        diyTip: 'Use composted organic washouts and reduce mineral potash feeding until the soil settles.',
+      });
+    } else {
+      recs.push({ category: 'Potassium (K)', severity: 'ok', reading: `${potassium} mg/kg`, message: `Potassium ${potassium} mg/kg is within the recommended soil potassium range.` });
+    }
+  }
+
   if (recs.length === 0) {
     recs.push({ category: 'General', severity: 'ok', message: 'No sensor readings are available yet.' });
   }
@@ -179,4 +191,155 @@ function getSoilRecommendations({ ph, ec, nitrogen, phosphorus, potassium, tempe
   return recs;
 }
 
-module.exports = { getSoilRecommendations };
+function normalizePlantTargets(soilTargets = {}) {
+  const useDefault = soilTargets.useDefault !== false;
+  const targets = {
+    ph: useDefault ? 6.5 : soilTargets.ph ?? null,
+    ec: useDefault ? 900 : soilTargets.ec ?? null,
+    npk: {
+      nitrogen: useDefault ? 50 : soilTargets.npk?.nitrogen ?? null,
+      phosphorus: useDefault ? 30 : soilTargets.npk?.phosphorus ?? null,
+      potassium: useDefault ? 140 : soilTargets.npk?.potassium ?? null,
+    },
+  };
+
+  return { useDefault, targets };
+}
+
+function getPlantRecommendations({ ph, ec, nitrogen, phosphorus, potassium, soilTargets = {} }) {
+  const recs = [];
+  const targetMap = normalizePlantTargets(soilTargets);
+
+  // pH target
+  if (ph != null && targetMap.targets.ph != null) {
+    if (ph < targetMap.targets.ph - 0.3) {
+      recs.push({
+        category: 'Soil pH',
+        severity: 'high',
+        reading: `pH ${ph}`,
+        message: `Current pH ${ph} is below the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.ph}.`,
+        fix: 'Apply a pH balancing amendment such as lime and retest after a few days.',
+        diyTip: 'Mix in crushed eggshells or compost to gently raise soil pH over time.',
+      });
+    } else if (ph > targetMap.targets.ph + 0.3) {
+      recs.push({
+        category: 'Soil pH',
+        severity: 'high',
+        reading: `pH ${ph}`,
+        message: `Current pH ${ph} is above the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.ph}.`,
+        fix: 'Apply a sulfur-rich or acidifying amendment, then retest the soil pH.',
+        diyTip: 'Use coffee grounds or composted organic material to lower pH gradually.',
+      });
+    } else {
+      recs.push({ category: 'Soil pH', severity: 'ok', reading: `pH ${ph}`, message: `pH ${ph} is aligned with the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.ph}.` });
+    }
+  }
+
+  // EC target
+  if (ec != null && targetMap.targets.ec != null) {
+    if (ec > targetMap.targets.ec + 150) {
+      recs.push({
+        category: 'Soil Salinity (EC)',
+        severity: 'high',
+        reading: `${ec} uS/cm`,
+        message: `EC ${ec} uS/cm is above the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.ec} uS/cm.`,
+        fix: 'Flush the soil with clean water and reduce fertilizer salts until the reading drops.',
+        diyTip: 'A controlled water flush and compost-rich soil blend helps reduce salt stress naturally.',
+      });
+    } else if (ec < targetMap.targets.ec - 150) {
+      recs.push({
+        category: 'Soil Salinity (EC)',
+        severity: 'medium',
+        reading: `${ec} uS/cm`,
+        message: `EC ${ec} uS/cm is below the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.ec} uS/cm.`,
+        fix: 'Re-apply a balanced nutrient solution or fertilizer with low salt load.',
+        diyTip: 'Use compost tea or a mild nutrient solution to rebuild available salts.',
+      });
+    } else {
+      recs.push({ category: 'Soil Salinity (EC)', severity: 'ok', reading: `${ec} uS/cm`, message: `EC ${ec} uS/cm is aligned with the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.ec} uS/cm.` });
+    }
+  }
+
+  // Nitrogen target
+  if (nitrogen != null && targetMap.targets.npk.nitrogen != null) {
+    if (nitrogen < targetMap.targets.npk.nitrogen - 10) {
+      recs.push({
+        category: 'Nitrogen (N)',
+        severity: 'high',
+        reading: `${nitrogen} mg/kg`,
+        message: `Nitrogen ${nitrogen} mg/kg is below the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.nitrogen} mg/kg.`,
+        fix: 'Apply a nitrogen source such as urea or ammonium sulfate according to label rates.',
+        diyTip: 'Add coffee grounds, fresh grass clippings, or composted organic matter to raise nitrogen slowly.',
+      });
+    } else if (nitrogen > targetMap.targets.npk.nitrogen + 10) {
+      recs.push({
+        category: 'Nitrogen (N)',
+        severity: 'medium',
+        reading: `${nitrogen} mg/kg`,
+        message: `Nitrogen ${nitrogen} mg/kg is above the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.nitrogen} mg/kg.`,
+        fix: 'Pause nitrogen fertilizer and retest before applying more.',
+        diyTip: 'Mix in dry straw or dry leaves to soak up excess nitrogen and improve balance.',
+      });
+    } else {
+      recs.push({ category: 'Nitrogen (N)', severity: 'ok', reading: `${nitrogen} mg/kg`, message: `Nitrogen ${nitrogen} mg/kg matches the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.nitrogen} mg/kg.` });
+    }
+  }
+
+  // Phosphorus target
+  if (phosphorus != null && targetMap.targets.npk.phosphorus != null) {
+    if (phosphorus < targetMap.targets.npk.phosphorus - 10) {
+      recs.push({
+        category: 'Phosphorus (P)',
+        severity: 'high',
+        reading: `${phosphorus} mg/kg`,
+        message: `Phosphorus ${phosphorus} mg/kg is below the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.phosphorus} mg/kg.`,
+        fix: 'Apply a phosphate fertilizer like superphosphate or rock phosphate.',
+        diyTip: 'Bury dried crushed banana peels or compost near the roots to release phosphorus gradually.',
+      });
+    } else if (phosphorus > targetMap.targets.npk.phosphorus + 10) {
+      recs.push({
+        category: 'Phosphorus (P)',
+        severity: 'medium',
+        reading: `${phosphorus} mg/kg`,
+        message: `Phosphorus ${phosphorus} mg/kg is above the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.phosphorus} mg/kg.`,
+        fix: 'Pause phosphorus fertilizer until the next reading stabilizes.',
+        diyTip: 'Use compost and mulch to buffer the root zone without adding fertilizers.',
+      });
+    } else {
+      recs.push({ category: 'Phosphorus (P)', severity: 'ok', reading: `${phosphorus} mg/kg`, message: `Phosphorus ${phosphorus} mg/kg matches the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.phosphorus} mg/kg.` });
+    }
+  }
+
+  // Potassium target
+  if (potassium != null && targetMap.targets.npk.potassium != null) {
+    if (potassium < targetMap.targets.npk.potassium - 20) {
+      recs.push({
+        category: 'Potassium (K)',
+        severity: 'high',
+        reading: `${potassium} mg/kg`,
+        message: `Potassium ${potassium} mg/kg is below the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.potassium} mg/kg.`,
+        fix: 'Apply a potassium feed like muriate of potash or a balanced crop fertilizer.',
+        diyTip: 'Place banana peels or wood ash in a compost heap and compost them into the root zone.',
+      });
+    } else if (potassium > targetMap.targets.npk.potassium + 20) {
+      recs.push({
+        category: 'Potassium (K)',
+        severity: 'medium',
+        reading: `${potassium} mg/kg`,
+        message: `Potassium ${potassium} mg/kg is above the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.potassium} mg/kg.`,
+        fix: 'Pause extra potassium fertilizer and observe the next reading.',
+        diyTip: 'Use composted organic washouts and reduce mineral potash feeding until the soil settles.',
+      });
+    } else {
+      recs.push({ category: 'Potassium (K)', severity: 'ok', reading: `${potassium} mg/kg`, message: `Potassium ${potassium} mg/kg matches the ${targetMap.useDefault ? 'default' : 'configured'} target ${targetMap.targets.npk.potassium} mg/kg.` });
+    }
+  }
+
+  if (recs.length === 0) {
+    recs.push({ category: 'General', severity: 'ok', message: 'No plant target readings are available yet.' });
+  }
+
+  return recs;
+}
+
+module.exports = { getSoilRecommendations, getPlantRecommendations };

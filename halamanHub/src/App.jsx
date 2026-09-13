@@ -19,6 +19,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import LogsPage from './pages/LogsPage';
 import POSPage from './pages/POSPage';
+import OfflineReadingsPage from './pages/OfflineReadingsPage';
 
 function App() {
   return (
@@ -46,11 +47,11 @@ function App() {
             <Route path="/sales-analytics" element={<SalesAnalyticsPage />} />
             <Route path="/pos" element={<POSPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
-            <Route path="/users" element={<ProtectedRoute adminOnly><UsersPage /></ProtectedRoute>} />
+            <Route path="/users" element={<UsersPage />} />
             <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<ProtectedRoute adminOnly><SettingsPage /></ProtectedRoute>} />
-            <Route path="/logs" element={<ProtectedRoute adminOnly><LogsPage /></ProtectedRoute>} />
-            
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/logs" element={<LogsPage />} />
+            <Route path="/offline-readings" element={<OfflineReadingsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

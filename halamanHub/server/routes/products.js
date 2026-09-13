@@ -6,6 +6,17 @@ const log = require('../utils/logger');
 const router = express.Router();
 router.use(requireAuth);
 
+const normalizeSoilTargets = (soilTargets = {}) => ({
+  useDefault: soilTargets.useDefault === undefined ? true : Boolean(soilTargets.useDefault),
+  npk: {
+    nitrogen: soilTargets.npk?.nitrogen ?? null,
+    phosphorus: soilTargets.npk?.phosphorus ?? null,
+    potassium: soilTargets.npk?.potassium ?? null,
+  },
+  ec: soilTargets.ec ?? null,
+  ph: soilTargets.ph ?? null,
+});
+
 // GET /api/products
 router.get('/', async (req, res) => {
   try {
@@ -19,11 +30,11 @@ router.get('/', async (req, res) => {
 // POST /api/products
 router.post('/', async (req, res) => {
   try {
-    const { name, category, price, unit, stock, imageUrl } = req.body;
+    const { name, category, price, unit, stock, imageUrl, soilTargets } = req.body;
     if (!name || !category || price == null || stock == null) {
       return res.status(400).json({ message: 'name, category, price, and stock are required.' });
     }
-    const product = await Product.create({ name, category, price, unit, stock, imageUrl });
+    const product = await Product.create({ name, category, price, unit, stock, imageUrl, soilTargets: normalizeSoilTargets(soilTargets) });
 
     await log({
       user: req.user.name,
@@ -41,10 +52,10 @@ router.post('/', async (req, res) => {
 // PUT /api/products/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { name, category, price, unit, stock, imageUrl } = req.body;
+    const { name, category, price, unit, stock, imageUrl, soilTargets } = req.body;
     const product = await Product.findByIdAndUpdate(
       req.params.id,
-      { name, category, price, unit, stock, imageUrl },
+      { name, category, price, unit, stock, imageUrl, soilTargets: normalizeSoilTargets(soilTargets) },
       { new: true, runValidators: true }
     );
     if (!product) return res.status(404).json({ message: 'Product not found.' });

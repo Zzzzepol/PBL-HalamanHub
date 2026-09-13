@@ -28,6 +28,28 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ message: 'Username and password are required.' });
   }
 
+  // ---- Offline read-only account — checked FIRST, before anything touches
+  // MongoDB. This is what lets you log in and view live sensor readings
+  // even when the database itself is completely unreachable (no internet). ----
+  const OFFLINE_USER = process.env.OFFLINE_ADMIN_USER;
+  const OFFLINE_PASS = process.env.OFFLINE_ADMIN_PASS;
+
+  if (
+    OFFLINE_USER &&
+    OFFLINE_PASS &&
+    username.toLowerCase() === OFFLINE_USER.toLowerCase() &&
+    password === OFFLINE_PASS
+  ) {
+    const payload = {
+      id: 'offline-admin',
+      username: OFFLINE_USER.toLowerCase(),
+      name: 'Offline Viewer',
+      role: 'offline-readonly',
+    };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    return res.json({ token, user: payload });
+  }
+
   try {
     const account = await User.findOne({
       $or: [{ username: username.toLowerCase() }, { email: username.toLowerCase() }],

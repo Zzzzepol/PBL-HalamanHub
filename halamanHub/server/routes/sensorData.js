@@ -5,6 +5,7 @@ const IrrigationLog = require('../models/IrrigationLog');
 const IrrigationSettings = require('../models/IrrigationSettings');
 const { createAlertIfEnabled } = require('../utils/alerts');
 const { getIO } = require('../socket');
+const { setLiveReading, getLiveReading } = require('../utils/liveSensorState');
 
 const router = express.Router();
 
@@ -24,17 +25,49 @@ async function upsertSensor(sensorId, type, zone, value, numericValue, device, s
   );
 }
 
+// GET /api/sensor-data/live — last known reading straight from memory.
+// Does NOT touch MongoDB, so this works even when the database is down.
+// Used by the offline-readonly dashboard view.
+router.get('/live', (req, res) => {
+  const reading = getLiveReading();
+  if (!reading) {
+    return res.status(404).json({ message: 'No live reading received yet.' });
+  }
+  res.json(reading);
+});
+
 router.post('/', async (req, res) => {
+  const { soil = {}, air = {}, watering = {}, device } = req.body;
+  const deviceId = device || 'ESP32-01'; // current firmware doesn't send an ID yet — step 6 will add one
+
+  const pumpActive     = watering.pumpActive === true;
+  const solenoidActive = watering.solenoidActive === true;
+  const waterAvailable = watering.tankWaterLevel === 'OK';
+  const levelPercent    = watering.levelPercent;
+  const distanceCm      = watering.distanceCm;
+
+  // ---- 0. ALWAYS update the in-memory live snapshot + broadcast first.
+  // This is the offline-safe path: it never touches MongoDB, so it keeps
+  // working (and keeps the dashboard live) even when the database is
+  // completely unreachable. ----
+  const livePayload = {
+    device: deviceId,
+    soil,
+    air,
+    watering,
+    recordedAt: new Date(),
+  };
+  setLiveReading(livePayload);
   try {
-    const { soil = {}, air = {}, watering = {}, device } = req.body;
-    const deviceId = device || 'ESP32-01'; // current firmware doesn't send an ID yet — step 6 will add one
+    getIO().emit('sensor:reading', livePayload);
+  } catch (socketErr) {
+    console.warn('[Socket.io] Broadcast skipped:', socketErr.message);
+  }
 
-    const pumpActive     = watering.pumpActive === true;
-    const solenoidActive = watering.solenoidActive === true;
-    const waterAvailable = watering.tankWaterLevel === 'OK';
-    const levelPercent    = watering.levelPercent;
-    const distanceCm      = watering.distanceCm;
-
+  // ---- Everything below here requires MongoDB. If it's unreachable, we
+  // still respond success above (live view already updated) — history,
+  // alerts, and irrigation logs are simply skipped until the DB is back. ----
+  try {
     // ---- 1. Update live snapshots (Dashboard / Sensors page) ----
     await Promise.all([
       upsertSensor('LIVE-001', 'Soil moisture', ZONE, `${soil.moisture ?? 0}%`, soil.moisture, deviceId),
@@ -131,22 +164,22 @@ if (events.length > 0) {
       });
     }
 
-    //Broadcast live update to any connected admin dashboards
+    //Broadcast the extra irrigation-log event too (separate from the live reading broadcast above)
     try {
       const io = getIO();
-      io.emit('sensor:reading', reading);
       if (events.length > 0) {
         io.emit('irrigation:log', events.map(e => ({ ...e, device: deviceId, moistureAtEvent: moisture, createdAt: new Date() })));
       }
     } catch (socketErr) {
-      // Socket.io not ready yet, or no clients connected — never let this break ingestion
       console.warn('[Socket.io] Broadcast skipped:', socketErr.message);
     }
 
-    res.status(201).json({ status: 'ok', readingId: reading._id });
+    res.status(201).json({ status: 'ok', readingId: reading._id, mode: 'full' });
   } catch (err) {
-    console.error('Sensor ingestion error:', err.message);
-    res.status(400).json({ message: err.message });
+    console.error('Sensor ingestion (database) error — live view was still updated:', err.message);
+    // Live view already succeeded above, so this is not a hard failure —
+    // just tell the caller the DB-backed extras (history/alerts) were skipped.
+    res.status(201).json({ status: 'ok-live-only', message: 'Live reading updated; database unavailable, history/alerts skipped.' });
   }
 });
 

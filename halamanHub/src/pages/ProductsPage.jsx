@@ -11,8 +11,15 @@ const statusBadge = {
   'out-of-stock': { variant: 'error', label: 'Out of stock' },
 };
 
+const emptySoilTargets = {
+  useDefault: true,
+  npk: { nitrogen: '', phosphorus: '', potassium: '' },
+  ec: '',
+  ph: '',
+};
+
 // FIXED: Default unit changed to 'bundle' to align with your dropdown options
-const emptyForm = { name: '', category: 'Grafted Fruit Bearing Trees', price: '', unit: 'bundle', stock: '', imageUrl: '' };
+const emptyForm = { name: '', category: 'Grafted Fruit Bearing Trees', price: '', unit: 'bundle', stock: '', imageUrl: '', soilTargets: emptySoilTargets };
 
 const ProductsPage = () => {
   const { token } = useAuth();
@@ -35,7 +42,7 @@ const ProductsPage = () => {
 
   const openAdd = () => { 
     setEditing(null); 
-    setForm(emptyForm); 
+    setForm({ ...emptyForm, soilTargets: { ...emptySoilTargets, npk: { ...emptySoilTargets.npk } } }); 
     setImagePreview(''); 
     setSaveError(''); 
     setModalOpen(true); 
@@ -43,7 +50,17 @@ const ProductsPage = () => {
 
   const openEdit = (p) => {
     setEditing(p);
-    setForm({ name: p.name, category: p.category, price: p.price, unit: p.unit, stock: p.stock, imageUrl: p.imageUrl || '' });
+    const nextSoilTargets = {
+      useDefault: p.soilTargets?.useDefault ?? true,
+      npk: {
+        nitrogen: p.soilTargets?.npk?.nitrogen ?? '',
+        phosphorus: p.soilTargets?.npk?.phosphorus ?? '',
+        potassium: p.soilTargets?.npk?.potassium ?? '',
+      },
+      ec: p.soilTargets?.ec ?? '',
+      ph: p.soilTargets?.ph ?? '',
+    };
+    setForm({ name: p.name, category: p.category, price: p.price, unit: p.unit, stock: p.stock, imageUrl: p.imageUrl || '', soilTargets: nextSoilTargets });
     setImagePreview(p.imageUrl || ''); 
     setSaveError('');
     setModalOpen(true);
@@ -80,7 +97,23 @@ const ProductsPage = () => {
     e.preventDefault();
     setSaving(true);
     setSaveError('');
-    const payload = { ...form, price: Number(form.price), stock: Number(form.stock) };
+
+    const payload = {
+      ...form,
+      price: Number(form.price),
+      stock: Number(form.stock),
+      soilTargets: {
+        useDefault: Boolean(form.soilTargets?.useDefault),
+        npk: {
+          nitrogen: form.soilTargets?.npk?.nitrogen === '' ? null : Number(form.soilTargets?.npk?.nitrogen),
+          phosphorus: form.soilTargets?.npk?.phosphorus === '' ? null : Number(form.soilTargets?.npk?.phosphorus),
+          potassium: form.soilTargets?.npk?.potassium === '' ? null : Number(form.soilTargets?.npk?.potassium),
+        },
+        ec: form.soilTargets?.ec === '' ? null : Number(form.soilTargets?.ec),
+        ph: form.soilTargets?.ph === '' ? null : Number(form.soilTargets?.ph),
+      },
+    };
+
     try {
       if (editing) {
         const updated = await productsApi.update(editing._id, payload, token);
@@ -205,6 +238,42 @@ const ProductsPage = () => {
                 <FormField label="Stock quantity" id="p-stock">
                   <Input id="p-stock" type="number" min="0" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} placeholder="0" required />
                 </FormField>
+
+                <div className="mt-4 border rounded-md p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-text-primary">Soil reading targets</div>
+                      <div className="text-xs text-text-secondary">Custom plant targets are optional.</div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!form.soilTargets?.useDefault}
+                        onChange={(e) => setForm({ ...form, soilTargets: { ...form.soilTargets, useDefault: e.target.checked } })}
+                      />
+                      <span className="text-sm text-text-secondary">Use default settings</span>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                    <FormField label="NPK - Nitrogen" id="p-nitrogen">
+                      <Input id="p-nitrogen" type="number" value={form.soilTargets?.npk?.nitrogen ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, npk: { ...form.soilTargets.npk, nitrogen: e.target.value } } })} placeholder="mg/kg" disabled={form.soilTargets?.useDefault} />
+                    </FormField>
+                    <FormField label="NPK - Phosphorus" id="p-phosphorus">
+                      <Input id="p-phosphorus" type="number" value={form.soilTargets?.npk?.phosphorus ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, npk: { ...form.soilTargets.npk, phosphorus: e.target.value } } })} placeholder="mg/kg" disabled={form.soilTargets?.useDefault} />
+                    </FormField>
+                    <FormField label="NPK - Potassium" id="p-potassium">
+                      <Input id="p-potassium" type="number" value={form.soilTargets?.npk?.potassium ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, npk: { ...form.soilTargets.npk, potassium: e.target.value } } })} placeholder="mg/kg" disabled={form.soilTargets?.useDefault} />
+                    </FormField>
+                    <FormField label="EC target" id="p-ec">
+                      <Input id="p-ec" type="number" value={form.soilTargets?.ec ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, ec: e.target.value } })} placeholder="uS/cm" disabled={form.soilTargets?.useDefault} />
+                    </FormField>
+                    <FormField label="pH target" id="p-ph">
+                      <Input id="p-ph" type="number" step="0.1" value={form.soilTargets?.ph ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, ph: e.target.value } })} placeholder="6.2" disabled={form.soilTargets?.useDefault} />
+                    </FormField>
+                  </div>
+                </div>
+
                 {saveError && (
                   <div className="mt-3 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">{saveError}</div>
                 )}

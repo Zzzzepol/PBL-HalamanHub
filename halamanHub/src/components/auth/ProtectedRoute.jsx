@@ -1,10 +1,12 @@
 // HalamanHub — ProtectedRoute
 // Redirects to /login if the user is not authenticated.
+// Also confines the offline-readonly account to /offline-readings only —
+// every other page needs MongoDB-backed data it doesn't have access to.
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
-const ProtectedRoute = ({ children, adminOnly = false }) => {
+const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
 
@@ -20,9 +22,8 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (adminOnly && user?.role !== 'admin') {
-    window.alert("You don't have access to that page. Admins only.");
-    return <Navigate to="/" replace />;
+  if (user?.role === 'offline-readonly' && location.pathname !== '/offline-readings') {
+    return <Navigate to="/offline-readings" replace />;
   }
 
   return children;

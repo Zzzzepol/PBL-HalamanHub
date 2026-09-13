@@ -11,6 +11,16 @@ const productSchema = new mongoose.Schema(
     stock: { type: Number, required: true, min: 0, default: 0 },
     imageUrl: { type: String, default: '' },
     lowStockAlerted: { type: Boolean, default: false }, // internal flag — prevents alert spam
+    soilTargets: {
+      useDefault: { type: Boolean, default: true },
+      npk: {
+        nitrogen: { type: Number, default: null },
+        phosphorus: { type: Number, default: null },
+        potassium: { type: Number, default: null },
+      },
+      ec: { type: Number, default: null },
+      ph: { type: Number, default: null },
+    },
   },
   { timestamps: true }
 );

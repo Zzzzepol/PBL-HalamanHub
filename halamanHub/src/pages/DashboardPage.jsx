@@ -54,6 +54,7 @@ const formatTime = (iso) => {
 const DashboardPage = () => {
   const navigate = useNavigate();
   const [range, setRange] = useState('24h');
+  const [selectedPlant, setSelectedPlant] = useState(null);
 
   const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
   // real-time updates — socket pushes new readings instantly, polling above
@@ -90,7 +91,14 @@ const DashboardPage = () => {
 
   const irrigation = summary?.irrigation;
   const recommendations = summary?.recommendations || [];
+  const plantRecommendations = summary?.plantRecommendations || [];
   const actionCount = recommendations.filter(rec => rec.severity === 'high').length;
+
+  const plantStatusVariant = {
+    high: 'error',
+    medium: 'warning',
+    ok: 'ok',
+  };
 
   return (
     <div>
@@ -120,7 +128,7 @@ const DashboardPage = () => {
       <Card className="!mb-3">
         <CardHeader
           title="Soil & environment recommendations"
-          subtitle="Clear next steps based on the latest sensor readings."
+          subtitle="Temperature and humidity recommendations are shown by the latest sensor readings."
           actions={recommendations.length > 0 && <Badge variant={actionCount > 0 ? 'error' : 'ok'}>{actionCount > 0 ? `${actionCount} to review` : 'Healthy'}</Badge>}
         />
         <CardBody className="!py-2.5">
@@ -129,7 +137,7 @@ const DashboardPage = () => {
               <i className={`ti ${actionCount > 0 ? 'ti-clipboard-heart' : 'ti-circle-check'} text-lg`} aria-hidden="true" />
               <div>
                 <div className="text-sm font-medium">{actionCount > 0 ? `${actionCount} priority action${actionCount === 1 ? '' : 's'} to take` : 'Conditions look healthy'}</div>
-                <div className="text-xs opacity-80">{actionCount > 0 ? 'Start with the red cards below, then retest after treatment.' : 'Keep monitoring to maintain these conditions.'}</div>
+                <div className="text-xs opacity-80">{actionCount > 0 ? 'Resolve the highlighted action before moving on to plant targets.' : 'Keep monitoring to maintain these conditions.'}</div>
               </div>
             </div>
           )}
@@ -169,11 +177,94 @@ const DashboardPage = () => {
             })}
           </div>
 
+          <div className="mt-4">
+            <div className="text-sm font-medium text-text-primary mb-2">Configured plant readings</div>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {plantRecommendations.length > 0 ? plantRecommendations.map((plant) => (
+                <button key={plant._id} type="button" onClick={() => setSelectedPlant(plant)} className={`flex items-center gap-3 border rounded-md px-3 py-2 min-w-[180px] text-left transition ${plant.status === 'high' ? 'border-red-300 bg-red-50' : plant.status === 'medium' ? 'border-amber-300 bg-amber-50' : 'border-green-300 bg-green-50'}`}>
+                  <img src={plant.imageUrl || '/logo.jpg'} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
+                  <div>
+                    <div className="text-sm font-medium text-text-primary">{plant.name}</div>
+                    <div className="text-xs text-text-secondary">{plant.category}</div>
+                    <Badge variant={plantStatusVariant[plant.status] || 'ok'} className="mt-1">{plant.status === 'high' ? 'Action' : plant.status === 'medium' ? 'Monitor' : 'Good'}</Badge>
+                  </div>
+                </button>
+              )) : <div className="text-sm text-text-secondary">No plants configured.</div>}
+            </div>
+          </div>
+
           {recommendations.length === 0 && (
             <div className="text-center text-text-secondary py-4 text-sm">Waiting for sensor data…</div>
           )}
         </CardBody>
       </Card>
+
+      {selectedPlant && (
+        <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-[200] p-5" onClick={() => setSelectedPlant(null)}>
+          <div className="bg-bg-primary border border-border rounded-lg w-full max-w-[820px] max-h-[82vh] overflow-y-auto shadow-lg p-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <img src={selectedPlant.imageUrl || '/logo.jpg'} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
+                <div>
+                  <div className="text-base font-medium text-text-primary">{selectedPlant.name}</div>
+                  <div className="text-xs text-text-secondary">{selectedPlant.category}</div>
+                </div>
+              </div>
+              <button className="w-8 h-8 rounded-md hover:bg-bg-secondary" onClick={() => setSelectedPlant(null)}><i className="ti ti-x" /></button>
+            </div>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="rounded-md border border-border p-2.5">
+                <div className="text-xs font-medium text-text-primary">Configured soil targets</div>
+                <div className="mt-1 text-[11px] text-text-secondary leading-5">
+                  <div>Default based: {selectedPlant.soilTargets?.useDefault ? 'Yes' : 'Custom'}</div>
+                  <div>NPK N: {selectedPlant.soilTargets?.npk?.nitrogen ?? '—'} mg/kg</div>
+                  <div>NPK P: {selectedPlant.soilTargets?.npk?.phosphorus ?? '—'} mg/kg</div>
+                  <div>NPK K: {selectedPlant.soilTargets?.npk?.potassium ?? '—'} mg/kg</div>
+                  <div>EC: {selectedPlant.soilTargets?.ec ?? '—'} uS/cm</div>
+                  <div>pH: {selectedPlant.soilTargets?.ph ?? '—'}</div>
+                </div>
+              </div>
+              <div className="rounded-md border border-border p-2.5">
+                <div className="text-xs font-medium text-text-primary">Recommendations</div>
+                <div className="mt-1 space-y-1.5 max-h-[45vh] overflow-y-auto pr-1">
+                  {selectedPlant.recommendations.length ? selectedPlant.recommendations.map((rec, idx) => {
+                    const tone = recommendationTone[rec.severity] || recommendationTone.low;
+                    return (
+                      <div key={idx} className={`border rounded-md p-2 ${tone.card}`}>
+                        <div className="flex items-start gap-2">
+                          <i className={`ti ${tone.icon} w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0`} aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="text-xs font-medium text-text-primary">{rec.category}</div>
+                                {rec.reading && <div className={`text-sm font-semibold mt-0.5 ${tone.value}`}>{rec.reading}</div>}
+                              </div>
+                              <Badge variant={severityVariant[rec.severity] || 'blue'} className="text-[10px] px-2 py-0.5">{severityLabel[rec.severity] || rec.severity}</Badge>
+                            </div>
+                            <div className="text-xs text-text-secondary leading-snug mt-1">{rec.message}</div>
+                            {rec.fix && (
+                              <div className="flex items-start gap-1.5 mt-1">
+                                <i className="ti ti-shopping-cart text-[11px] mt-0.5 text-text-secondary flex-shrink-0" aria-hidden="true" />
+                                <div className="text-xs leading-snug"><span className="font-medium text-text-primary">Fix: </span><span className="text-text-secondary">{rec.fix}</span></div>
+                              </div>
+                            )}
+                            {rec.diyTip && (
+                              <div className="flex items-start gap-1.5 mt-1 bg-green-50/70 border border-green-100 rounded px-1.5 py-1">
+                                <i className="ti ti-leaf text-[11px] mt-0.5 text-green-700 flex-shrink-0" aria-hidden="true" />
+                                <div className="text-xs leading-snug"><span className="font-medium text-green-800">DIY option: </span><span className="text-green-900/80">{rec.diyTip}</span></div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }) : <div className="text-xs text-text-secondary">No readings available.</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Irrigation, water tank, NPK and alerts — dense four-up row */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">

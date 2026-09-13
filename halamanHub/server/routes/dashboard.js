@@ -3,7 +3,8 @@ const { requireAuth } = require('../middleware/auth');
 const Sensor = require('../models/Sensor');
 const SensorReading = require('../models/SensorReading');
 const IrrigationSettings = require('../models/IrrigationSettings');
-const { getSoilRecommendations } = require('../utils/soilRecommendations');
+const Product = require('../models/Product');
+const { getSoilRecommendations, getPlantRecommendations } = require('../utils/soilRecommendations');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -19,7 +20,7 @@ const TANK_ZONE = 'Tank 1';
  * latest sensor readings and the real irrigation system state.
  */
 router.get('/summary', async (req, res) => {
-  const [activeSensors, soilMoisture, pH, ec, temperature, humidity, waterLevel, npk, latestReading, settings] =
+  const [activeSensors, soilMoisture, pH, ec, temperature, humidity, waterLevel, npk, latestReading, settings, products] =
     await Promise.all([
       Sensor.countDocuments({ status: { $ne: 'offline' } }),
       Sensor.findOne({ type: 'Soil moisture', zone: ZONE }),
@@ -31,6 +32,7 @@ router.get('/summary', async (req, res) => {
       Sensor.findOne({ type: 'NPK', zone: ZONE }),
       SensorReading.findOne().sort({ recordedAt: -1 }),
       IrrigationSettings.findOne(),
+      Product.find().sort({ createdAt: 1 }),
     ]);
 
   // Parse "N:60 P:38 K:67" into individual values
@@ -42,7 +44,7 @@ router.get('/summary', async (req, res) => {
     }
   }
 
-const recommendations = getSoilRecommendations({
+  const recommendations = getSoilRecommendations({
     ph:          pH?.numericValue ?? null,
     ec:          ec?.numericValue ?? null,
     nitrogen:    npkValues.nitrogen,
@@ -50,6 +52,33 @@ const recommendations = getSoilRecommendations({
     potassium:   npkValues.potassium,
     temperature: temperature?.numericValue ?? null,
     humidity:    humidity?.numericValue ?? null,
+  });
+
+  const plantRecommendations = products.map((product) => {
+    const plantTargets = product.soilTargets || { useDefault: true, npk: { nitrogen: null, phosphorus: null, potassium: null }, ec: null, ph: null };
+    const list = getPlantRecommendations({
+      ph:          pH?.numericValue ?? null,
+      ec:          ec?.numericValue ?? null,
+      nitrogen:    npkValues.nitrogen,
+      phosphorus:  npkValues.phosphorus,
+      potassium:   npkValues.potassium,
+      temperature: temperature?.numericValue ?? null,
+      humidity:    humidity?.numericValue ?? null,
+      soilTargets: plantTargets,
+    });
+
+    const high = list.some((item) => item.severity === 'high');
+    const anyAction = list.some((item) => item.severity === 'high' || item.severity === 'medium');
+
+    return {
+      _id: product._id,
+      name: product.name,
+      category: product.category,
+      imageUrl: product.imageUrl || '',
+      soilTargets: plantTargets,
+      status: high ? 'high' : anyAction ? 'medium' : 'ok',
+      recommendations: list,
+    };
   });
 
   res.json({
@@ -62,6 +91,7 @@ const recommendations = getSoilRecommendations({
     waterTank: { available: waterLevel?.status === 'ok', percent: waterLevel?.numericValue ?? null, status: waterLevel?.status ?? 'offline' },
     npk: { ...npkValues, status: npk?.status ?? 'offline' },
     recommendations,
+    plantRecommendations,
     irrigation: {
       pumpActive: latestReading?.pumpActive ?? false,
       solenoidActive: latestReading?.solenoidActive ?? false,
