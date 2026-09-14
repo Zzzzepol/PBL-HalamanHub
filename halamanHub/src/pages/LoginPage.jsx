@@ -4,7 +4,7 @@ import { useAuth, ApiError } from '../context/AuthContext';
 import { Button, Input, FormField } from '../components/ui/UI';
 
 const LoginPage = () => {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, user } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
 
@@ -14,9 +14,20 @@ const LoginPage = () => {
   const [error, setError]             = useState('');
   const [loading, setLoading]         = useState(false);
 
+  // Where a just-authenticated user should land. We never blindly trust
+  // location.state.from here — a stale offline-account redirect can
+  // persist in history state across a logout/login cycle (see handleSubmit
+  // below for the full explanation) and would otherwise hijack a
+  // completely different account's login.
+  const getRedirectPath = (currentUser, loc) => {
+    if (currentUser?.role === 'offline-readonly') return '/offline-readings';
+    const from = loc.state?.from?.pathname;
+    if (from && from !== '/offline-readings' && from !== '/login') return from;
+    return '/';
+  };
+
   if (isAuthenticated) {
-    const from = location.state?.from?.pathname || '/';
-    return <Navigate to={from} replace />;
+    return <Navigate to={getRedirectPath(user, location)} replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -30,9 +41,8 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      await login(username, password);
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      const loggedInUser = await login(username, password);
+      navigate(getRedirectPath(loggedInUser, location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

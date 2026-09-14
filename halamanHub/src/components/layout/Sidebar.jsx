@@ -27,7 +27,11 @@ const Sidebar = ({ collapsed, onToggle, mobileOpen, pendingOrders }) => {
   const location = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const visibleItems = navItems.filter(item => !item.adminOnly || isAdmin);
+  const isOfflineOnly = user?.role === 'offline-readonly';
+  // Offline-readonly sessions should never render any nav items — this is
+  // a defensive fallback in case a page is ever mistakenly added inside
+  // MainLayout for that role; the real guard is App.jsx's route structure.
+  const visibleItems = isOfflineOnly ? [] : navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <aside

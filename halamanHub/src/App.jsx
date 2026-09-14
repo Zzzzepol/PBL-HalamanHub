@@ -29,6 +29,18 @@ function App() {
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
 
+          {/* Offline account — deliberately OUTSIDE MainLayout. No Sidebar,
+              no TopBar, no MongoDB-backed API calls (alerts/orders summary)
+              that this account has no access to anyway. */}
+          <Route
+            path="/offline-readings"
+            element={
+              <ProtectedRoute>
+                <OfflineReadingsPage />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Protected — wrapped in dashboard layout */}
           <Route
             element={
@@ -51,7 +63,6 @@ function App() {
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/logs" element={<LogsPage />} />
-            <Route path="/offline-readings" element={<OfflineReadingsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
