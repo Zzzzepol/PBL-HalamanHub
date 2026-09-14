@@ -201,21 +201,22 @@ const DashboardPage = () => {
 
       {selectedPlant && (
         <div className="fixed inset-0 bg-black/45 flex items-center justify-center z-[200] p-5" onClick={() => setSelectedPlant(null)}>
-          <div className="bg-bg-primary border border-border rounded-lg w-full max-w-[820px] max-h-[82vh] overflow-y-auto shadow-lg p-3" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-bg-primary border border-border rounded-lg w-full max-w-[960px] max-h-[80vh] overflow-y-auto shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <img src={selectedPlant.imageUrl || '/logo.jpg'} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
+                <img src={selectedPlant.imageUrl || '/logo.jpg'} alt="" className="w-14 h-14 rounded-md object-cover border border-border" />
                 <div>
-                  <div className="text-base font-medium text-text-primary">{selectedPlant.name}</div>
-                  <div className="text-xs text-text-secondary">{selectedPlant.category}</div>
+                  <div className="text-lg font-medium text-text-primary">{selectedPlant.name}</div>
+                  <div className="text-sm text-text-secondary">{selectedPlant.category}</div>
                 </div>
               </div>
               <button className="w-8 h-8 rounded-md hover:bg-bg-secondary" onClick={() => setSelectedPlant(null)}><i className="ti ti-x" /></button>
             </div>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="rounded-md border border-border p-2.5">
-                <div className="text-xs font-medium text-text-primary">Configured soil targets</div>
-                <div className="mt-1 text-[11px] text-text-secondary leading-5">
+
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-md border border-border p-3">
+                <div className="text-sm font-medium text-text-primary">Configured soil targets</div>
+                <div className="mt-2 text-xs text-text-secondary">
                   <div>Default based: {selectedPlant.soilTargets?.useDefault ? 'Yes' : 'Custom'}</div>
                   <div>NPK N: {selectedPlant.soilTargets?.npk?.nitrogen ?? '—'} mg/kg</div>
                   <div>NPK P: {selectedPlant.soilTargets?.npk?.phosphorus ?? '—'} mg/kg</div>
@@ -224,41 +225,42 @@ const DashboardPage = () => {
                   <div>pH: {selectedPlant.soilTargets?.ph ?? '—'}</div>
                 </div>
               </div>
-              <div className="rounded-md border border-border p-2.5">
-                <div className="text-xs font-medium text-text-primary">Recommendations</div>
-                <div className="mt-1 space-y-1.5 max-h-[45vh] overflow-y-auto pr-1">
+
+              <div className="rounded-md border border-border p-3 md:col-span-2">
+                <div className="text-sm font-medium text-text-primary">Generalized Plant Soil Recommendation</div>
+                <div className="mt-2 space-y-2">
                   {selectedPlant.recommendations.length ? selectedPlant.recommendations.map((rec, idx) => {
                     const tone = recommendationTone[rec.severity] || recommendationTone.low;
                     return (
-                      <div key={idx} className={`border rounded-md p-2 ${tone.card}`}>
-                        <div className="flex items-start gap-2">
+                      <div key={`plant-${idx}`} className={`border rounded-md p-2.5 ${tone.card}`}>
+                        <div className="flex items-start gap-2.5">
                           <i className={`ti ${tone.icon} w-7 h-7 rounded-full flex items-center justify-center text-sm flex-shrink-0`} aria-hidden="true" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <div className="text-xs font-medium text-text-primary">{rec.category}</div>
-                                {rec.reading && <div className={`text-sm font-semibold mt-0.5 ${tone.value}`}>{rec.reading}</div>}
+                                <div className="text-sm font-medium text-text-primary">{rec.category}</div>
+                                {rec.reading && <div className={`text-base font-semibold mt-0.5 ${tone.value}`}>{rec.reading}</div>}
                               </div>
-                              <Badge variant={severityVariant[rec.severity] || 'blue'} className="text-[10px] px-2 py-0.5">{severityLabel[rec.severity] || rec.severity}</Badge>
+                              <Badge variant={severityVariant[rec.severity] || 'blue'}>{severityLabel[rec.severity] || rec.severity}</Badge>
                             </div>
-                            <div className="text-xs text-text-secondary leading-snug mt-1">{rec.message}</div>
+                            <div className="text-sm text-text-secondary leading-snug mt-1">{rec.message}</div>
                             {rec.fix && (
-                              <div className="flex items-start gap-1.5 mt-1">
-                                <i className="ti ti-shopping-cart text-[11px] mt-0.5 text-text-secondary flex-shrink-0" aria-hidden="true" />
-                                <div className="text-xs leading-snug"><span className="font-medium text-text-primary">Fix: </span><span className="text-text-secondary">{rec.fix}</span></div>
+                              <div className="flex items-start gap-1.5 mt-2">
+                                <i className="ti ti-shopping-cart text-xs mt-0.5 text-text-secondary flex-shrink-0" aria-hidden="true" />
+                                <div className="text-sm leading-snug"><span className="font-medium text-text-primary">Fix: </span><span className="text-text-secondary">{rec.fix}</span></div>
                               </div>
                             )}
                             {rec.diyTip && (
-                              <div className="flex items-start gap-1.5 mt-1 bg-green-50/70 border border-green-100 rounded px-1.5 py-1">
-                                <i className="ti ti-leaf text-[11px] mt-0.5 text-green-700 flex-shrink-0" aria-hidden="true" />
-                                <div className="text-xs leading-snug"><span className="font-medium text-green-800">DIY option: </span><span className="text-green-900/80">{rec.diyTip}</span></div>
+                              <div className="flex items-start gap-1.5 mt-1.5 bg-green-50/70 border border-green-100 rounded px-2 py-1.5">
+                                <i className="ti ti-leaf text-xs mt-0.5 text-green-700 flex-shrink-0" aria-hidden="true" />
+                                <div className="text-sm leading-snug"><span className="font-medium text-green-800">DIY option: </span><span className="text-green-900/80">{rec.diyTip}</span></div>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
                     );
-                  }) : <div className="text-xs text-text-secondary">No readings available.</div>}
+                  }) : <div className="text-xs text-text-secondary">No plant-specific readings available.</div>}
                 </div>
               </div>
             </div>
