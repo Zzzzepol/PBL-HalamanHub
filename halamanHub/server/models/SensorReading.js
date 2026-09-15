@@ -23,6 +23,11 @@ const sensorReadingSchema = new mongoose.Schema(
     levelPercent:   { type: Number }, // calculated fill percentage
     waterAvailable: { type: Boolean },
 
+    // Rainwater Harvesting — TDS/pH/3-state float switches
+    tds:         { type: Number },  // water TDS in ppm
+    waterPh:     { type: Number },  // water pH (distinct from soil.ph above)
+    tankStatus:  { type: String, enum: ['Low', 'Medium', 'Full'] },
+
     pumpActive:     { type: Boolean, default: false },
     solenoidActive: { type: Boolean, default: false },
     activeSource:   { type: String, enum: ['PUMP', 'SOLENOID', 'NONE'], default: 'NONE' },

@@ -5,6 +5,7 @@ const SensorReading = require('../models/SensorReading');
 const IrrigationSettings = require('../models/IrrigationSettings');
 const Product = require('../models/Product');
 const { getSoilRecommendations, getPlantRecommendations } = require('../utils/soilRecommendations');
+const { getWaterQualityCategory, getPhStatus, getTankStatusInfo } = require('../utils/waterQuality');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -88,7 +89,18 @@ router.get('/summary', async (req, res) => {
     ec: { value: ec?.numericValue ?? null, unit: 'uS/cm', status: ec?.status },
     temperature: { value: temperature?.numericValue ?? null, unit: '°C', status: temperature?.status },
     humidity: { value: humidity?.numericValue ?? null, unit: '%', status: humidity?.status },
-    waterTank: { available: waterLevel?.status === 'ok', percent: waterLevel?.numericValue ?? null, status: waterLevel?.status ?? 'offline' },
+    waterTank: {
+      available: waterLevel?.status === 'ok',
+      percent: waterLevel?.numericValue ?? null,
+      status: waterLevel?.status ?? 'offline',
+      // Rainwater Harvesting additions
+      tds: latestReading?.tds ?? null,
+      waterQuality: getWaterQualityCategory(latestReading?.tds ?? null),
+      waterPh: latestReading?.waterPh ?? null,
+      waterPhStatus: getPhStatus(latestReading?.waterPh ?? null),
+      tankStatus3: latestReading?.tankStatus ?? null,
+      tankStatus3Info: getTankStatusInfo(latestReading?.tankStatus ?? null),
+    },
     npk: { ...npkValues, status: npk?.status ?? 'offline' },
     recommendations,
     plantRecommendations,

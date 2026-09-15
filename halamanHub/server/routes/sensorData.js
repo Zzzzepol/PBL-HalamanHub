@@ -37,7 +37,7 @@ router.get('/live', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { soil = {}, air = {}, watering = {}, device } = req.body;
+  const { soil = {}, air = {}, watering = {}, water = {}, device } = req.body;
   const deviceId = device || 'ESP32-01'; // current firmware doesn't send an ID yet — step 6 will add one
 
   const pumpActive     = watering.pumpActive === true;
@@ -55,6 +55,7 @@ router.post('/', async (req, res) => {
     soil,
     air,
     watering,
+    water, // { tds, ph, tankStatus } — Rainwater Harvesting tab
     recordedAt: new Date(),
   };
   setLiveReading(livePayload);
@@ -99,6 +100,9 @@ router.post('/', async (req, res) => {
       pumpActive,
       solenoidActive,
       activeSource: watering.activeSource || 'NONE',
+      tds: water.tds,
+      waterPh: water.ph,
+      tankStatus: water.tankStatus,
     });
 
     // ---- 3. Detect state changes -> write IrrigationLog entries ----

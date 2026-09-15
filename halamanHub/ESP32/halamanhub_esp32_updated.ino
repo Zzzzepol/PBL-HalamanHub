@@ -56,6 +56,13 @@ const char* DEVICE_ID   = "ESP32-01"; // identifies this unit in the database
 #define MOISTURE_DRY  30.0
 #define MOISTURE_WET  60.0
 
+// --- Pulse Irrigation / Cycle-and-Soak State Machine ---
+// Tune these three for your soil texture — see the notes at the bottom
+// of the accompanying explanation for clay vs. sandy soil guidance.
+#define PUMP_ON_TIME_MS   60000UL   // 60s pulse — how long the pump runs per cycle
+#define SOAK_TIME_MS      300000UL  // 5 min soak — time given for water to percolate
+#define MAX_CYCLES        5         // fail-safe cap before SAFETY_LOCKOUT
+
 const byte QUERY_FRAME[] = { 0x01, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x08 };
 const int  RESPONSE_LEN  = 19;
 
@@ -63,7 +70,6 @@ DHT dht(DHT_PIN, DHT_TYPE);
 
 bool pumpOn      = false;
 bool solenoidOn  = false;
-bool wasWatering = false;
 
 // Global sensor values for telemetry
 float g_moisture = 0, g_soilTemp = 0, g_ec = 0, g_ph = 0;
@@ -91,6 +97,13 @@ bool   g_manualSolenoid = false;
 float g_tankEmptyDistanceCm     = 100; // reading when tank is empty
 float g_tankFullDistanceCm      = 10;  // reading when tank is full
 float g_tankLowThresholdPercent = 20;  // below this % counts as LOW
+
+// ---- Cycle-and-Soak state machine state ----
+enum IrrigationState { IDLE, WATERING, SOAKING, SAFETY_LOCKOUT };
+IrrigationState g_irrigationState = IDLE;
+unsigned long   g_stateEnteredAt  = 0;
+int             g_currentCycle    = 0;
+bool            g_lockoutError    = false;
 
 // -------------------------------------------------------
 
@@ -163,15 +176,6 @@ bool readResponse(byte *buf) {
 
 // -------------------------------------------------------
 
-void stopAll() {
-  digitalWrite(RELAY_PUMP,     RELAY_OFF);
-  digitalWrite(RELAY_SOLENOID, RELAY_OFF);
-  pumpOn      = false;
-  solenoidOn  = false;
-  wasWatering = false;
-  Serial.println(">> ALL OFF — soil sufficiently wet");
-}
-
 bool fetchControlSettings() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
@@ -230,6 +234,14 @@ float readWaterLevelPercent() {
   return constrain(percent, 0.0, 100.0);
 }
 
+// Reads the tank level + availability. Called once per 2s sensor cycle
+// (not every loop()) since the ultrasonic ping briefly blocks and doesn't
+// need to run faster than the rest of the sensor sampling.
+void updateTankLevel() {
+  g_levelPercent   = readWaterLevelPercent();
+  g_waterAvailable = g_levelPercent > g_tankLowThresholdPercent;
+}
+
 // Averages several ADC samples to smooth out sensor noise —
 // standard practice for both TDS and pH analog boards.
 float readAnalogAveraged(int pin, int samples = 20) {
@@ -280,76 +292,139 @@ String readTankStatus3() {
   return "Low";
 }
 
-void controlPump(float moisture) {
-  g_levelPercent   = readWaterLevelPercent();
-  g_waterAvailable = g_levelPercent > g_tankLowThresholdPercent;
+// -------------------------------------------------------
+// PULSE IRRIGATION / CYCLE-AND-SOAK STATE MACHINE
+// -------------------------------------------------------
 
-  Serial.printf("Water level: %s (%.0f%%, %.1fcm) | Moisture: %.1f%% | Mode: %s\n",
-                g_waterAvailable ? "OK" : "LOW", g_levelPercent, g_distanceCm, moisture, g_mode.c_str());
+const char* stateName(IrrigationState s) {
+  switch (s) {
+    case IDLE:            return "IDLE";
+    case WATERING:        return "WATERING";
+    case SOAKING:         return "SOAKING";
+    case SAFETY_LOCKOUT:  return "SAFETY_LOCKOUT";
+  }
+  return "UNKNOWN";
+}
 
-  // ---- Safety switch — applies in BOTH auto and manual mode ----
+void enterState(IrrigationState newState) {
+  g_irrigationState = newState;
+  g_stateEnteredAt  = millis();
+  Serial.printf(">> Irrigation state -> %s (cycle %d/%d)\n", stateName(newState), g_currentCycle, MAX_CYCLES);
+}
+
+// Global safety switch — applies in BOTH auto and manual mode. Tank empty
+// mid-pump always forces the pump off and falls back to the solenoid line,
+// regardless of what the state machine or manual overrides want.
+void enforceTankSafety() {
   if (pumpOn && !g_waterAvailable) {
     digitalWrite(RELAY_PUMP, RELAY_OFF);
     pumpOn = false;
     digitalWrite(RELAY_SOLENOID, RELAY_ON);
     solenoidOn = true;
     Serial.println(">> SAFETY SWITCH: Tank empty! PUMP OFF -> SOLENOID ON.");
-    return;
   }
+}
 
-  if (g_mode == "manual") {
-    // ---- Manual mode: just obey the admin's on/off switches ----
-    bool wantPump     = g_manualPump && g_waterAvailable;
-    bool wantSolenoid = g_manualSolenoid || (g_manualPump && !g_waterAvailable);
+// Manual mode: admin's on/off switches drive the relays directly,
+// completely bypassing the cycle-and-soak logic.
+void updateManualIrrigation() {
+  bool wantPump     = g_manualPump && g_waterAvailable;
+  bool wantSolenoid = g_manualSolenoid || (g_manualPump && !g_waterAvailable);
 
-    if (wantPump != pumpOn) {
-      digitalWrite(RELAY_PUMP, wantPump ? RELAY_ON : RELAY_OFF);
-      pumpOn = wantPump;
-      Serial.printf(">> MANUAL: PUMP %s\n", wantPump ? "ON" : "OFF");
-    }
-    if (wantSolenoid != solenoidOn) {
-      digitalWrite(RELAY_SOLENOID, wantSolenoid ? RELAY_ON : RELAY_OFF);
-      solenoidOn = wantSolenoid;
-      Serial.printf(">> MANUAL: SOLENOID %s\n", wantSolenoid ? "ON" : "OFF");
-    }
-    return;
+  if (wantPump != pumpOn) {
+    digitalWrite(RELAY_PUMP, wantPump ? RELAY_ON : RELAY_OFF);
+    pumpOn = wantPump;
+    Serial.printf(">> MANUAL: PUMP %s\n", wantPump ? "ON" : "OFF");
   }
-
-  // ---- Auto mode: same logic as before, using server-set thresholds ----
-  bool soilDry = moisture < g_thresholdDry;
-  bool soilWet = moisture > g_thresholdWet;
-
-  if (soilWet) {
-    if (pumpOn || solenoidOn) stopAll();
-    else Serial.println(">> IDLE — soil wet");
-    return;
+  if (wantSolenoid != solenoidOn) {
+    digitalWrite(RELAY_SOLENOID, wantSolenoid ? RELAY_ON : RELAY_OFF);
+    solenoidOn = wantSolenoid;
+    Serial.printf(">> MANUAL: SOLENOID %s\n", wantSolenoid ? "ON" : "OFF");
   }
+}
 
-  if (soilDry) {
-    if (g_waterAvailable) {
-      if (solenoidOn) {
-        digitalWrite(RELAY_SOLENOID, RELAY_OFF);
-        solenoidOn = false;
+// Non-blocking cycle-and-soak state machine — call every loop() iteration
+// (NOT gated behind the 2s sensor block) so pulse/soak durations are timed
+// precisely off millis(), independent of how often the moisture sensor
+// itself gets re-read.
+void updateIrrigationStateMachine() {
+  unsigned long elapsed = millis() - g_stateEnteredAt;
+
+  switch (g_irrigationState) {
+
+    case IDLE:
+      if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+      if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+
+      if (g_moisture < g_thresholdDry) {
+        g_currentCycle = 0;
+        enterState(WATERING);
       }
-      if (!pumpOn) {
-        pumpOn      = true;
-        wasWatering = true;
-        digitalWrite(RELAY_PUMP, RELAY_ON);
-        Serial.printf(">> PUMP ON — Moisture %.1f%%\n", moisture);
+      break;
+
+    case WATERING:
+      if (!g_waterAvailable) {
+        // No water to pump — fall back to the solenoid backup line and
+        // hold in WATERING until the tank recovers or the pulse elapses.
+        if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+        if (!solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_ON); solenoidOn = true; }
+      } else {
+        if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+        if (!pumpOn) { digitalWrite(RELAY_PUMP, RELAY_ON); pumpOn = true; }
       }
-    } else {
-      if (pumpOn) {
-        digitalWrite(RELAY_PUMP, RELAY_OFF);
-        pumpOn = false;
+
+      if (elapsed >= PUMP_ON_TIME_MS) {
+        enterState(SOAKING);
       }
-      if (!solenoidOn) {
-        solenoidOn  = true;
-        wasWatering = true;
-        digitalWrite(RELAY_SOLENOID, RELAY_ON);
-        Serial.printf(">> SOLENOID ON — Moisture %.1f%%\n", moisture);
+      break;
+
+    case SOAKING:
+      if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+      if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+
+      if (elapsed >= SOAK_TIME_MS) {
+        // ---- Evaluation point: soak finished, check the latest reading ----
+        if (g_moisture >= g_thresholdDry) {
+          g_currentCycle = 0;
+          enterState(IDLE);
+        } else {
+          g_currentCycle++;
+          if (g_currentCycle >= MAX_CYCLES) {
+            enterState(SAFETY_LOCKOUT);
+          } else {
+            enterState(WATERING);
+          }
+        }
       }
-    }
+      break;
+
+    case SAFETY_LOCKOUT:
+      // Relay OFF permanently — protects against a broken pipe or a
+      // disconnected/faulty probe that never reports "wet" no matter
+      // how much water goes in.
+      if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+      if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+      g_lockoutError = true;
+      break;
   }
+}
+
+long computeTimeRemainingSec() {
+  unsigned long elapsed = millis() - g_stateEnteredAt;
+  long remainingMs = 0;
+
+  if (g_irrigationState == WATERING) remainingMs = (long)PUMP_ON_TIME_MS - (long)elapsed;
+  else if (g_irrigationState == SOAKING) remainingMs = (long)SOAK_TIME_MS - (long)elapsed;
+
+  if (remainingMs < 0) remainingMs = 0;
+  return remainingMs / 1000;
+}
+
+void printIrrigationTelemetry() {
+  Serial.printf(
+    "{\"moisture\": %.0f, \"state\": \"%s\", \"cycle\": %d, \"timeRemaining\": %ld, \"relay\": %s}\n",
+    g_moisture, stateName(g_irrigationState), g_currentCycle, computeTimeRemainingSec(), pumpOn ? "true" : "false"
+  );
 }
 
 // -------------------------------------------------------
@@ -370,8 +445,6 @@ void parseSensorData(byte *buf) {
   Serial.printf("pH           : %.1f\n",       g_ph);
   Serial.printf("N / P / K    : %.0f / %.0f / %.0f mg/kg\n", g_nitrogen, g_phosphorus, g_potassium);
   Serial.println("-----------------------------");
-
-  controlPump(g_moisture);
 }
 
 void parseDHTData() {
@@ -395,7 +468,8 @@ void buildTelemetryPayload(char *payload, size_t payloadSize) {
       "\"device\":\"%s\","
       "\"soil\":{\"moisture\":%.1f,\"temperature\":%.1f,\"ec\":%.0f,\"ph\":%.1f,\"nitrogen\":%.0f,\"phosphorus\":%.0f,\"potassium\":%.0f},"
       "\"air\":{\"temperature\":%.1f,\"humidity\":%.1f},"
-      "\"watering\":{\"tankWaterLevel\":\"%s\",\"distanceCm\":%.1f,\"levelPercent\":%.0f,\"pumpActive\":%s,\"solenoidActive\":%s,\"activeSource\":\"%s\"},"
+      "\"watering\":{\"tankWaterLevel\":\"%s\",\"distanceCm\":%.1f,\"levelPercent\":%.0f,\"pumpActive\":%s,\"solenoidActive\":%s,\"activeSource\":\"%s\","
+        "\"irrigationState\":\"%s\",\"cycle\":%d,\"timeRemainingSec\":%ld,\"lockout\":%s},"
       "\"water\":{\"tds\":%.1f,\"ph\":%.2f,\"tankStatus\":\"%s\"}"
     "}",
     DEVICE_ID,
@@ -404,6 +478,7 @@ void buildTelemetryPayload(char *payload, size_t payloadSize) {
     g_waterAvailable ? "OK" : "LOW", g_distanceCm, g_levelPercent,
     pumpOn ? "true" : "false", solenoidOn ? "true" : "false",
     pumpOn ? "PUMP" : (solenoidOn ? "SOLENOID" : "NONE"),
+    stateName(g_irrigationState), g_currentCycle, computeTimeRemainingSec(), g_lockoutError ? "true" : "false",
     g_tds, g_waterPh, g_tankStatus3.c_str()
   );
 }
@@ -458,12 +533,31 @@ void setup() {
   // TDS_PIN / PH_PIN need no pinMode() — analogRead() configures them.
 
   connectWiFi();
+  g_stateEnteredAt = millis();
   Serial.println("System initialized — Ready to stream telemetry");
 }
 
 void loop() {
-  static unsigned long last = 0;
+  // ---- Runs every iteration, NEVER blocked by delay() ----
+  enforceTankSafety();
 
+  if (g_mode == "manual") {
+    // Switching to manual is treated as explicit operator acknowledgment,
+    // so it clears a SAFETY_LOCKOUT the same way physically resetting the
+    // system would.
+    if (g_irrigationState == SAFETY_LOCKOUT) {
+      g_currentCycle = 0;
+      g_lockoutError = false;
+      enterState(IDLE);
+      Serial.println(">> Manual mode engaged — SAFETY_LOCKOUT cleared.");
+    }
+    updateManualIrrigation();
+  } else {
+    updateIrrigationStateMachine();
+  }
+
+  // ---- Runs every 2s: sensor sampling + telemetry (unchanged cadence) ----
+  static unsigned long last = 0;
   if (millis() - last >= 2000) {
     last = millis();
 
@@ -478,19 +572,23 @@ void loop() {
     }
 
     parseDHTData();
+    updateTankLevel();
 
     g_tds         = readTdsPpm(g_dhtTemp);
     g_waterPh     = readPh();
     g_tankStatus3 = readTankStatus3();
-    Serial.printf("TDS: %.1f ppm | Water pH: %.2f | Tank: %s\n", g_tds, g_waterPh, g_tankStatus3.c_str());
 
-    char payload[600];
+    char payload[700];
     buildTelemetryPayload(payload, sizeof(payload));
 
     // ALWAYS sent over the USB cable — this is the guaranteed path the
     // dashboard reads from, works with zero WiFi/internet in the room.
     Serial.print("TELEMETRY:");
     Serial.println(payload);
+
+    // Required schema from the spec — printed as its own line for easy
+    // debugging/monitoring independent of the full TELEMETRY: payload above.
+    printIrrigationTelemetry();
 
     // Best-effort — only helps if a WiFi network happens to be available.
     sendTelemetryToBackend(payload);
