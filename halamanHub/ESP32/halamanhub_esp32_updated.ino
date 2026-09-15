@@ -46,10 +46,6 @@ const char* DEVICE_ID   = "ESP32-01"; // identifies this unit in the database
 #define PH7_VOLTAGE 2.50   // Po voltage measured in pH 7.0 buffer
 #define PH4_VOLTAGE 2.68   // Po voltage measured in pH 4.0 buffer
 
-// --- Dual Float Switches (3-state rainwater tank level) ---
-#define FLOAT_LOW_PIN  18   // bottom switch
-#define FLOAT_HIGH_PIN 19   // top switch
-#define FLOAT_TRIGGERED LOW // wired NO-to-GND with INPUT_PULLUP: closed = LOW
 
 // --- Moisture Thresholds (%) — now just the initial defaults ---
 // (used only until the first successful fetchControlSettings() call)
@@ -282,13 +278,13 @@ float readPh() {
   return constrain(ph, 0.0, 14.0);
 }
 
-// 2 float switches -> 3 discrete tank states.
-String readTankStatus3() {
-  bool lowTriggered  = digitalRead(FLOAT_LOW_PIN)  == FLOAT_TRIGGERED;
-  bool highTriggered = digitalRead(FLOAT_HIGH_PIN) == FLOAT_TRIGGERED;
+// 3 discrete tank states, derived from the SAME ultrasonic reading used
+// everywhere else (g_levelPercent) — no separate hardware needed.
+#define TANK_FULL_CUTOFF_PERCENT 60.0 // at/above this = "Full"; adjust to taste
 
-  if (highTriggered) return "Full";
-  if (lowTriggered)  return "Medium";
+String readTankStatus3() {
+  if (g_levelPercent >= TANK_FULL_CUTOFF_PERCENT) return "Full";
+  if (g_levelPercent > g_tankLowThresholdPercent) return "Medium";
   return "Low";
 }
 
@@ -528,8 +524,6 @@ void setup() {
   pinMode(ULTRASONIC_ECHO_PIN, INPUT);
   digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
 
-  pinMode(FLOAT_LOW_PIN,  INPUT_PULLUP);
-  pinMode(FLOAT_HIGH_PIN, INPUT_PULLUP);
   // TDS_PIN / PH_PIN need no pinMode() — analogRead() configures them.
 
   connectWiFi();

@@ -315,7 +315,7 @@ const OfflineReadingsPage = () => {
             </div>
 
             <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">
-              <div className="text-xs text-text-secondary mb-2">Tank level (float switches)</div>
+              <div className="text-xs text-text-secondary mb-2">Tank level (3-state)</div>
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mb-3 ${
                 tankStatus3Info.tone === 'ok' ? 'bg-green-50 text-green-800' :
                 tankStatus3Info.tone === 'warning' ? 'bg-amber-50 text-amber-800' :

@@ -146,7 +146,7 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         </Card>
 
         <Card>
-          <CardHeader title="Tank level (float switches)" subtitle="Low / Medium / Full" />
+          <CardHeader title="Tank level (3-state)" subtitle="Low / Medium / Full, from the ultrasonic sensor" />
           <CardBody>
             <Badge variant={summary?.waterTank.tankStatus3Info?.tone || 'default'} className="mb-3">
               {summary?.waterTank.tankStatus3Info?.label || 'No data'}
