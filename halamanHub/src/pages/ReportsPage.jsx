@@ -25,6 +25,7 @@ const ReportsPage = () => {
 
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [dateMode, setDateMode] = useState('custom'); // 'custom' | 'all'
   const [dataType, setDataType] = useState('All sensor data');
   const [format, setFormat] = useState('PDF');
 
@@ -66,96 +67,21 @@ const ReportsPage = () => {
   const generate = (e) => {
     e.preventDefault();
 
-    if (fromDate && toDate && new Date(fromDate) > new Date(toDate)) {
+    // "All time" always sends empty dates, regardless of whatever the
+    // (disabled) inputs still hold from before the tab was switched.
+    const from = dateMode === 'all' ? '' : fromDate;
+    const to = dateMode === 'all' ? '' : toDate;
+
+    if (from && to && new Date(from) > new Date(to)) {
       setGenError('The "From date" cannot be later than the "To date".');
       return;
     }
 
-    runReport(dataType, format, fromDate, toDate);
-  };
-
-  const todayStr = new Date().toISOString().slice(0, 10);
-
-  const handleCardKeyDown = (e, type, fmt, from, to) => {
-    if ((e.key === 'Enter' || e.key === ' ') && !generating) {
-      runReport(type, fmt, from, to);
-    }
+    runReport(dataType, format, from, to);
   };
 
   return (
     <div className="space-y-3.5">
-      {/* Quick export cards */}
-      <div className={ps.grid.threeCol}>
-        <Card>
-          <div
-            className={ps.reportCard}
-            onClick={() => !generating && runReport('All sensor data', 'PDF', todayStr, todayStr)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => handleCardKeyDown(e, 'All sensor data', 'PDF', todayStr, todayStr)}
-          >
-            <div className={`${ps.reportIcon} bg-red-50 text-red-800`}>
-              <i className="ti ti-file-text" aria-hidden="true" />
-            </div>
-
-            <div className={ps.reportTitle}>Daily crop report</div>
-            <div className={ps.reportDesc}>
-              Today's sensor readings in a formatted PDF report
-            </div>
-
-            <Button size="sm" icon="ti-file-download" disabled={generating}>
-              Export PDF
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <div
-            className={ps.reportCard}
-            onClick={() => !generating && runReport('All sensor data', 'Excel (.xlsx)')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => handleCardKeyDown(e, 'All sensor data', 'Excel (.xlsx)')}
-          >
-            <div className={`${ps.reportIcon} bg-green-50 text-green-800`}>
-              <i className="ti ti-file-spreadsheet" aria-hidden="true" />
-            </div>
-
-            <div className={ps.reportTitle}>Sensor data report</div>
-            <div className={ps.reportDesc}>
-              Last 30 days of sensor readings in a formatted Excel report
-            </div>
-
-            <Button size="sm" icon="ti-file-download" disabled={generating}>
-              Export Excel
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <div
-            className={ps.reportCard}
-            onClick={() => !generating && runReport('Orders & sales', 'PDF')}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => handleCardKeyDown(e, 'Orders & sales', 'PDF')}
-          >
-            <div className={`${ps.reportIcon} bg-blue-50 text-blue-700`}>
-              <i className="ti ti-chart-bar" aria-hidden="true" />
-            </div>
-
-            <div className={ps.reportTitle}>Sales report</div>
-            <div className={ps.reportDesc}>
-              Orders and sales data in a professional PDF report
-            </div>
-
-            <Button size="sm" icon="ti-file-download" disabled={generating}>
-              Export Sales PDF
-            </Button>
-          </div>
-        </Card>
-      </div>
-
       {/* Custom report */}
       <Card className={ps.lastCard}>
         <CardHeader
@@ -165,6 +91,29 @@ const ReportsPage = () => {
 
         <CardBody>
           <form onSubmit={generate}>
+            {/* Date range tabs */}
+            <div className="text-xs font-medium text-text-secondary mb-1.5">Date range</div>
+            <div className="inline-flex rounded-md border-[0.5px] border-border overflow-hidden mb-3.5">
+              <button
+                type="button"
+                onClick={() => setDateMode('custom')}
+                className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                  dateMode === 'custom' ? 'bg-green-700 text-white' : 'bg-bg-secondary text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Custom range
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDateMode('all'); setFromDate(''); setToDate(''); }}
+                className={`px-3.5 py-1.5 text-sm font-medium border-l-[0.5px] border-border transition-colors ${
+                  dateMode === 'all' ? 'bg-green-700 text-white' : 'bg-bg-secondary text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                All time
+              </button>
+            </div>
+
             <div className={ps.grid.formRow}>
               <FormField label="From date" id="from-date">
                 <Input
@@ -172,6 +121,7 @@ const ReportsPage = () => {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
+                  disabled={dateMode === 'all'}
                 />
               </FormField>
 
@@ -181,6 +131,7 @@ const ReportsPage = () => {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
+                  disabled={dateMode === 'all'}
                 />
               </FormField>
             </div>
