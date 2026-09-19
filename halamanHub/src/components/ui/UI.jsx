@@ -116,7 +116,7 @@ export const Toggle = ({ checked, onChange, label, id }) => (
         aria-checked={checked}
       />
       <span
-        className={`absolute top-[3px] left-[3px] w-4 h-4 bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] pointer-events-none transition-[left] duration-200 ${checked ? 'left-[18px]' : 'left-[3px]'}`}
+        className={`absolute top-[3px] left-[3px] w-4 h-4 bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] pointer-events-none transition-transform duration-200 ease-in-out ${checked ? 'translate-x-[16px]' : 'translate-x-0'}`}
       />
     </span>
     {label && <span className="text-base text-text-primary">{label}</span>}

@@ -15,7 +15,8 @@ const addressSchema = new mongoose.Schema(
 
 const customerSchema = new mongoose.Schema(
   {
-    name:         { type: String, required: true, trim: true },
+    firstName:    { type: String, required: true, trim: true },
+    lastName:     { type: String, required: true, trim: true },
     email:        { type: String, required: true, unique: true, lowercase: true, trim: true },
     phone: {
       type: String,
@@ -34,6 +35,23 @@ const customerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Virtual "name" — kept so every other place that reads/writes
+// customer.name (AccountPage's profile edit, admin order views, receipts,
+// emails) keeps working unchanged. Getter combines first+last; setter
+// splits a single string back into first+last (first word = firstName,
+// the rest = lastName) so old code paths that still assign a single
+// `name` string continue to work transparently.
+customerSchema
+  .virtual('name')
+  .get(function () {
+    return `${this.firstName} ${this.lastName}`.trim();
+  })
+  .set(function (value) {
+    const parts = (value || '').trim().split(/\s+/);
+    this.firstName = parts.shift() || '';
+    this.lastName = parts.join(' ');
+  });
+
 customerSchema.methods.setPassword = async function (plain) {
   const salt = await bcrypt.genSalt(10);
   this.passwordHash = await bcrypt.hash(plain, salt);
@@ -45,6 +63,7 @@ customerSchema.methods.verifyPassword = async function (plain) {
 };
 
 customerSchema.set('toJSON', {
+  virtuals: true, // so serialized customer objects include the computed "name" field
   transform: (doc, ret) => {
     delete ret.passwordHash;
     delete ret.__v;

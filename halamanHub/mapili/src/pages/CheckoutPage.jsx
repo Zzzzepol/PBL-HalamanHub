@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { shopOrdersApi, paymongoApi, addressesApi } from '../api/client';
@@ -239,13 +239,14 @@ const CheckoutPage = () => {
                   </div>
                 </div>
 
-                {/* Contact info */}
+                {/* Contact info — locked to the account's saved details;
+                    edit from Account settings instead of here at checkout */}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <FormField label="Full name" id="name" required>
-                    <Input id="name" value={form.name} onChange={e => f('name', e.target.value)} placeholder="Juan dela Cruz" required />
+                    <Input id="name" value={form.name} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
                   </FormField>
                   <FormField label="Email address" id="email" required>
-                    <Input id="email" type="email" value={form.email} onChange={e => f('email', e.target.value)} placeholder="juan@email.com" required />
+                    <Input id="email" type="email" value={form.email} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
                   </FormField>
                 </div>
                 <FormField label="Phone number" id="phone" required>
@@ -253,12 +254,12 @@ const CheckoutPage = () => {
                     id="phone"
                     type="tel"
                     value={form.phone}
-                    onChange={e => f('phone', e.target.value.replace(/[\s-]/g, ''))}
-                    placeholder="09171234567"
-                    maxLength={11}
-                    required
+                    disabled
+                    className="bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Using the contact details from your account. <Link to="/account" className="text-brand-700 hover:text-brand-800 font-medium">Edit in Account settings</Link>
+                  </p>
                 </FormField>
 
                 {/* Address — only for delivery */}

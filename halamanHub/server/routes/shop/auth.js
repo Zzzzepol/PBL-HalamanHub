@@ -28,16 +28,15 @@ function requireCustomer(req, res, next) {
   }
 }
 
-// POST /api/shop/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, phone, password } = req.body;
+    const { firstName, lastName, email, phone, password } = req.body;
 
     if (phone && !/^09\d{9}$/.test(phone)) {
       return res.status(400).json({ message: 'Phone number must be a valid PH mobile number, e.g. 09171234567.' });
     }
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'name, email, and password are required.' });
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ message: 'First name, last name, email, and password are required.' });
     }
     if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
       return res.status(400).json({ message: 'Password must be at least 8 characters with uppercase, lowercase, a number, and a special character.' });
@@ -48,7 +47,7 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ message: 'An account with this email already exists.' });
     }
 
-    const customer = new Customer({ name, email, phone: phone || '' });
+    const customer = new Customer({ firstName, lastName, email, phone: phone || '' });
     await customer.setPassword(password);
     await customer.save();
 
@@ -108,12 +107,17 @@ router.put('/profile', requireCustomer, async (req, res) => {
       return res.status(400).json({ message: 'Phone number must be a valid PH mobile number, e.g. 09171234567.' });
     }
 
-    const customer = await Customer.findByIdAndUpdate(
-      req.customer.id,
-      { name, phone },
-      { new: true, runValidators: true }
-    );
+    const customer = await Customer.findById(req.customer.id);
     if (!customer) return res.status(404).json({ message: 'Account not found.' });
+
+    // Assigning to customer.name (rather than passing it into
+    // findByIdAndUpdate) is what triggers the virtual setter that splits
+    // it back into firstName/lastName — findByIdAndUpdate would silently
+    // ignore a non-schema field like a virtual.
+    if (name !== undefined) customer.name = name;
+    if (phone !== undefined) customer.phone = phone;
+    await customer.save();
+
     const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', phone: customer.phone };
     res.json({ user: payload });
   } catch (err) {

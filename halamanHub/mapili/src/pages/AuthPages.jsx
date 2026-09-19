@@ -111,7 +111,7 @@ export const RegisterPage = () => {
   const { register, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const [form, setForm]         = useState({ name: '', email: '', phone: '', password: '', confirmPassword: '' });
+  const [form, setForm]         = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '' });
   const [showPwd, setShowPwd]   = useState(false);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
@@ -125,7 +125,7 @@ export const RegisterPage = () => {
     e.preventDefault();
     setError('');
 
-    if (!form.name || !form.email || !form.password || !form.confirmPassword) {
+    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.confirmPassword) {
       setError('Please fill in all required fields.');
       return;
     }
@@ -145,7 +145,8 @@ export const RegisterPage = () => {
     setLoading(true);
     try {
       await register({
-        name: form.name,
+        firstName: form.firstName,
+        lastName: form.lastName,
         email: form.email,
         phone: form.phone,
         password: form.password,
@@ -160,19 +161,25 @@ export const RegisterPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white flex items-center justify-center py-12 px-4">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-xl">
         <AuthLogo />
 
-        <div className="bg-white rounded-3xl shadow-lift border border-gray-100 p-8">
-          <h1 className="font-display text-2xl font-bold text-gray-800 mb-1">Create account</h1>
-          <p className="text-gray-500 text-sm mb-6">Join Mapili and order fresh produce</p>
+        <div className="bg-white rounded-3xl shadow-lift border border-gray-100 p-10 sm:p-12">
+          <h1 className="font-display text-3xl font-bold text-gray-800 mb-1.5 text-center">Create account</h1>
+          <p className="text-gray-500 text-base mb-8 text-center">Join Mapili and order fresh produce</p>
 
           {error && <Alert type="error" message={error} onClose={() => setError('')} className="mb-5" />}
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <FormField label="Full name" id="name" required>
-              <Input id="name" value={form.name} onChange={e => f('name', e.target.value)} autoComplete="name" required />
-            </FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="First name" id="firstName" required>
+                <Input id="firstName" value={form.firstName} onChange={e => f('firstName', e.target.value)} autoComplete="given-name" required />
+              </FormField>
+
+              <FormField label="Last name" id="lastName" required>
+                <Input id="lastName" value={form.lastName} onChange={e => f('lastName', e.target.value)} autoComplete="family-name" required />
+              </FormField>
+            </div>
 
             <FormField label="Email address" id="email" required>
               <Input id="email" type="email" value={form.email} onChange={e => f('email', e.target.value)} placeholder="example@email.com" autoComplete="email" required />
