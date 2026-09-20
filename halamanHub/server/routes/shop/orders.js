@@ -2,7 +2,7 @@ const express   = require('express');
 const PDFDocument = require('pdfkit');
 const ShopOrder = require('../../models/ShopOrder');
 const Product   = require('../../models/Product');
-const { requireCustomer } = require('./auth');
+const { requireCustomer, requireCompleteProfile } = require('./auth');
 const { sendOrderConfirmation } = require('../../utils/email');
 const { validateStockForItems } = require('../../utils/stock');
 const { createAlertIfEnabled } = require('../../utils/alerts');
@@ -186,7 +186,7 @@ router.get('/:id/receipt', async (req, res) => {
 });
 
 // POST /api/shop/orders — create new order
-router.post('/', async (req, res) => {
+router.post('/', requireCustomer, requireCompleteProfile, async (req, res) => {
   try {
     const {
       customer, customerEmail, customerPhone,

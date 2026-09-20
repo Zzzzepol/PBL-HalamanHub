@@ -16,6 +16,7 @@ import AccountPage       from './pages/AccountPage';
 import OrdersPage        from './pages/OrdersPage';
 import AboutPage         from './pages/AboutPage';
 import OrderPendingPage from './pages/OrderPendingPage';
+import OnboardingPage from './pages/OnboardingPage';
 
 
 function App() {
@@ -49,6 +50,9 @@ function App() {
               } />
               <Route path="/order-pending/:id" element={
                 <ProtectedRoute><OrderPendingPage /></ProtectedRoute>
+              } />
+              <Route path="/onboarding" element={
+                <ProtectedRoute><OnboardingPage /></ProtectedRoute>
               } />
 
               {/* Fallback */}

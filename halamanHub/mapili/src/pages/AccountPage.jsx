@@ -132,30 +132,33 @@ const AccountPage = () => {
         {/* Saved addresses */}
         <AddressManager token={token} />
 
-        {/* Password card */}
-        <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 mb-5">
-          <h2 className="font-semibold text-gray-800 mb-1">Change password</h2>
-          <p className="text-gray-500 text-sm mb-5">Use a strong password that you don't use elsewhere.</p>
+        {/* Password card — hidden for Google accounts, which never set a
+            local password in the first place */}
+        {user?.authProvider !== 'google' && (
+          <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 mb-5">
+            <h2 className="font-semibold text-gray-800 mb-1">Change password</h2>
+            <p className="text-gray-500 text-sm mb-5">Use a strong password that you don't use elsewhere.</p>
 
-          {pwdMsg && (
-            <Alert type={pwdMsg.type} message={pwdMsg.text} onClose={() => setPwdMsg(null)} className="mb-5" />
-          )}
+            {pwdMsg && (
+              <Alert type={pwdMsg.type} message={pwdMsg.text} onClose={() => setPwdMsg(null)} className="mb-5" />
+            )}
 
-          <form onSubmit={handlePasswordChange} className="flex flex-col gap-4">
-            <FormField label="Current password" id="current-pwd" required>
-              <Input id="current-pwd" type="password" value={pwdForm.current} onChange={e => fp('current', e.target.value)} placeholder="••••••••" required />
-            </FormField>
-            <FormField label="New password" id="new-pwd" required>
-              <Input id="new-pwd" type="password" value={pwdForm.newPwd} onChange={e => fp('newPwd', e.target.value)} placeholder="At least 8 characters" required />
-            </FormField>
-            <FormField label="Confirm new password" id="confirm-pwd" required>
-              <Input id="confirm-pwd" type="password" value={pwdForm.confirm} onChange={e => fp('confirm', e.target.value)} placeholder="Re-enter new password" required />
-            </FormField>
-            <Button variant="primary" type="submit" disabled={savingPwd} className="self-start">
-              {savingPwd ? 'Updating…' : 'Update password'}
-            </Button>
-          </form>
-        </div>
+            <form onSubmit={handlePasswordChange} className="flex flex-col gap-4">
+              <FormField label="Current password" id="current-pwd" required>
+                <Input id="current-pwd" type="password" value={pwdForm.current} onChange={e => fp('current', e.target.value)} placeholder="••••••••" required />
+              </FormField>
+              <FormField label="New password" id="new-pwd" required>
+                <Input id="new-pwd" type="password" value={pwdForm.newPwd} onChange={e => fp('newPwd', e.target.value)} placeholder="At least 8 characters" required />
+              </FormField>
+              <FormField label="Confirm new password" id="confirm-pwd" required>
+                <Input id="confirm-pwd" type="password" value={pwdForm.confirm} onChange={e => fp('confirm', e.target.value)} placeholder="Re-enter new password" required />
+              </FormField>
+              <Button variant="primary" type="submit" disabled={savingPwd} className="self-start">
+                {savingPwd ? 'Updating…' : 'Update password'}
+              </Button>
+            </form>
+          </div>
+        )}
 
         {/* Sign out */}
         <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6">

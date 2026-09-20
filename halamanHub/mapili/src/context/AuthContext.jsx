@@ -40,6 +40,26 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   }, []);
 
+  // Shared by Google sign-in and onboarding completion — both hand back a
+  // {token, user} pair from the backend the same way login()/register() do.
+  const setSession = useCallback((data) => {
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem(TOKEN_KEY, data.token);
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    return data.user;
+  }, []);
+
+  const loginWithGoogle = useCallback(async (credential) => {
+    const data = await customerAuthApi.google(credential);
+    return setSession(data);
+  }, [setSession]);
+
+  const completeProfile = useCallback(async (formData) => {
+    const data = await customerAuthApi.completeProfile(formData, token);
+    return setSession(data);
+  }, [setSession, token]);
+
   const register = useCallback(async (formData) => {
     const data = await customerAuthApi.register(formData);
     setToken(data.token);
@@ -62,7 +82,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ token, user, isAuthenticated: !!token && !!user, loading, login, register, logout, updateUser, ApiError }}>
+    <AuthContext.Provider value={{ token, user, isAuthenticated: !!token && !!user, loading, login, register, loginWithGoogle, completeProfile, logout, updateUser, ApiError }}>
       {children}
     </AuthContext.Provider>
   );

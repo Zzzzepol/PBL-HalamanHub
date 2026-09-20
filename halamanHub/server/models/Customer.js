@@ -28,7 +28,13 @@ const customerSchema = new mongoose.Schema(
       },
     },
     addresses:    { type: [addressSchema], default: [] },
-    passwordHash: { type: String, select: false },
+    passwordHash: { type: String, select: false }, // absent for Google-only accounts — they never set one
+
+    // ── Google SSO ──
+    googleId:      { type: String, unique: true, sparse: true }, // sparse: lets many docs have NO googleId (local accounts)
+    authProvider:  { type: String, enum: ['local', 'google'], default: 'local' },
+    profileComplete: { type: Boolean, default: true }, // false only for brand-new Google sign-ups missing a phone number
+
     status:       { type: String, enum: ['active', 'inactive'], default: 'active' },
     lastActiveAt: { type: Date, default: Date.now },
   },

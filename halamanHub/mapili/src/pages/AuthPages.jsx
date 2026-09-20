@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button, FormField, Input, Alert } from '../components/ui/UI';
+import GoogleSignInButton from '../components/GoogleSignInButton';
 
 // ── Brand logo in auth pages
 const AuthLogo = () => (
@@ -38,7 +39,7 @@ const getPasswordStrength = (password = '') => {
 
 // ── LOGIN PAGE
 export const LoginPage = () => {
-  const { login, isAuthenticated } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated, user } = useAuth();
   const navigate  = useNavigate();
   const location  = useLocation();
 
@@ -50,19 +51,35 @@ export const LoginPage = () => {
 
   const from = location.state?.from?.pathname || '/';
 
-  if (isAuthenticated) return <Navigate to={from} replace />;
+  const routeAfterAuth = (loggedInUser, dest) => {
+    navigate(loggedInUser?.profileComplete === false ? '/onboarding' : dest, { replace: true });
+  };
+
+  if (isAuthenticated) {
+    return <Navigate to={user?.profileComplete === false ? '/onboarding' : from} replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
-      navigate(from, { replace: true });
+      const loggedInUser = await login(email, password);
+      routeAfterAuth(loggedInUser, from);
     } catch (err) {
       setError(err.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogle = async (credential) => {
+    setError('');
+    try {
+      const loggedInUser = await loginWithGoogle(credential);
+      routeAfterAuth(loggedInUser, from);
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
     }
   };
 
@@ -96,6 +113,14 @@ export const LoginPage = () => {
             </Button>
           </form>
 
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs text-gray-400">OR</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          <GoogleSignInButton onCredential={handleGoogle} onError={setError} />
+
           <p className="text-center text-sm text-gray-500 mt-6">
             Don't have an account?{' '}
             <Link to="/register" className="text-brand-700 font-medium hover:text-brand-800">Create one</Link>
@@ -108,7 +133,7 @@ export const LoginPage = () => {
 
 // ── REGISTER PAGE
 export const RegisterPage = () => {
-  const { register, isAuthenticated } = useAuth();
+  const { register, loginWithGoogle, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm]         = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '' });
@@ -117,7 +142,17 @@ export const RegisterPage = () => {
   const [loading, setLoading]   = useState(false);
   const passwordStrength = getPasswordStrength(form.password);
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to={user?.profileComplete === false ? '/onboarding' : '/'} replace />;
+
+  const handleGoogle = async (credential) => {
+    setError('');
+    try {
+      const loggedInUser = await loginWithGoogle(credential);
+      navigate(loggedInUser?.profileComplete === false ? '/onboarding' : '/', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
+    }
+  };
 
   const f = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
@@ -229,6 +264,14 @@ export const RegisterPage = () => {
               {loading ? 'Creating account…' : 'Create account'}
             </Button>
           </form>
+
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs text-gray-400">OR</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          <GoogleSignInButton onCredential={handleGoogle} onError={setError} />
 
           <p className="text-center text-xs text-gray-400 mt-4">
             By creating an account you agree to our terms of service.

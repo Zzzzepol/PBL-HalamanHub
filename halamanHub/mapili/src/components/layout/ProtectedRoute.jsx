@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../ui/UI';
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -17,6 +17,12 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  // A new Google sign-up can only reach the onboarding page until it's
+  // finished — every other protected page bounces them there first.
+  if (user?.profileComplete === false && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return children;
