@@ -10,6 +10,14 @@ export class ApiError extends Error {
   }
 }
 
+// AuthContext registers a handler here on mount — lets this plain module
+// (no React context of its own) trigger a logout+redirect from anywhere,
+// without every single page needing its own 401-handling code.
+let onSessionExpired = null;
+export function setSessionExpiredHandler(fn) {
+  onSessionExpired = fn;
+}
+
 async function request(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -22,6 +30,13 @@ async function request(path, { method = 'GET', body, token } = {}) {
 
   let data = null;
   try { data = await res.json(); } catch { /* no body */ }
+
+  // Only treat this as "session expired" when a token was actually sent —
+  // a 401 from a plain login attempt (wrong password) is a normal failed
+  // login, not an expired session, and must NOT trigger a redirect loop.
+  if (res.status === 401 && token) {
+    onSessionExpired?.();
+  }
 
   if (!res.ok) throw new ApiError(data?.message || `Request failed (${res.status})`, res.status);
   return data;
@@ -42,6 +57,10 @@ export const customerAuthApi = {
   verify:   (token)    => request('/shop/auth/verify',   { token }),
   update:   (data, token) => request('/shop/auth/profile', { method: 'PUT', body: data, token }),
   changePassword: (data, token) => request('/shop/auth/change-password', { method: 'PUT', body: data, token }),
+  forgotPassword: (email) => request('/shop/auth/forgot-password', { method: 'POST', body: { email } }),
+  resetPassword: (tokenStr, newPassword) => request('/shop/auth/reset-password', { method: 'POST', body: { token: tokenStr, newPassword } }),
+  verifyEmail: (tokenStr) => request('/shop/auth/verify-email', { method: 'POST', body: { token: tokenStr } }),
+  resendVerification: (token) => request('/shop/auth/resend-verification', { method: 'POST', token }),
 };
 
 // Saved addresses

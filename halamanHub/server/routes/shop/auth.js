@@ -2,9 +2,11 @@
 // /api/shop/auth/*
 const express   = require('express');
 const jwt       = require('jsonwebtoken');
+const crypto    = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
+const rateLimit = require('express-rate-limit');
 const Customer  = require('../../models/Customer');
-const { sendWelcomeEmail } = require('../../utils/email');
+const { sendWelcomeEmail, sendPasswordResetLink, sendEmailVerification } = require('../../utils/email');
 
 const router = express.Router();
 
@@ -12,6 +14,29 @@ const JWT_SECRET     = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Throttles brute-force password guessing / scripted account creation.
+// Keyed by IP — 10 attempts per 15 minutes is generous for a real person
+// mistyping a password a few times, punishing for a script trying many.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts. Please wait a few minutes and try again.' },
+});
+
+// Generates a random token, returns both the raw version (goes in the
+// emailed link — never stored) and its SHA-256 hash (what actually gets
+// stored in the DB) — so a database leak alone can't be used to forge a
+// valid reset/verification link.
+function generateToken() {
+  const raw = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.createHash('sha256').update(raw).digest('hex');
+  return { raw, hash };
+}
+
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:3001';
 
 // Converts a raw Mongoose/DB error into something safe and readable to
 // show a customer — never leak internal error text (field paths, driver
@@ -75,7 +100,7 @@ async function requireCompleteProfile(req, res, next) {
   next();
 }
 
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { firstName, lastName, email, phone, password } = req.body;
 
@@ -96,10 +121,15 @@ router.post('/register', async (req, res) => {
 
     const customer = new Customer({ firstName, lastName, email, phone: phone || '' });
     await customer.setPassword(password);
+
+    const { raw: verifyToken, hash: verifyHash } = generateToken();
+    customer.emailVerifyTokenHash = verifyHash;
+    customer.emailVerifyExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
     await customer.save();
 
-    // Send welcome email (non-blocking)
+    // Send welcome + verification emails (non-blocking)
     sendWelcomeEmail(customer).catch(() => {});
+    sendEmailVerification(customer, `${CLIENT_ORIGIN}/verify-email?token=${verifyToken}`).catch(() => {});
 
     const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', authProvider: customer.authProvider };
     const token   = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
@@ -110,7 +140,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/shop/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -133,14 +163,14 @@ router.post('/login', async (req, res) => {
     const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', authProvider: customer.authProvider };
     const token   = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
-    res.json({ token, user: { ...payload, phone: customer.phone } });
+     res.json({ token, user: { ...payload, phone: customer.phone } });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: friendlyErrorMessage(err) });
   }
 });
 
 // POST /api/shop/auth/google — single endpoint for BOTH sign-in and sign-up
-router.post('/google', async (req, res) => {
+router.post('/google', authLimiter, async (req, res) => {
   try {
     const { credential } = req.body; // the ID token GIS handed the frontend
     if (!credential) {
@@ -193,6 +223,7 @@ router.post('/google', async (req, res) => {
         googleId,
         authProvider: 'google',
         profileComplete: false,
+        emailVerified: true, // Google already verified this address — no need to ask again
       });
       await customer.save();
       sendWelcomeEmail(customer).catch(() => {});
@@ -246,6 +277,117 @@ router.put('/complete-profile', requireCustomer, async (req, res) => {
   }
 });
 
+// POST /api/shop/auth/forgot-password
+router.post('/forgot-password', authLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required.' });
+
+    const customer = await Customer.findOne({ email: email.toLowerCase() });
+
+    // Always respond the same way whether or not the account exists —
+    // otherwise this endpoint becomes a way to check which emails are
+    // registered (account enumeration).
+    const genericResponse = { message: 'If an account exists for that email, a reset link has been sent.' };
+
+    if (!customer || customer.authProvider === 'google') {
+      // Google-only accounts have no password to reset — silently no-op,
+      // same generic response either way.
+      return res.json(genericResponse);
+    }
+
+    const { raw, hash } = generateToken();
+    customer.resetPasswordTokenHash = hash;
+    customer.resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 min
+    await customer.save();
+
+    sendPasswordResetLink(customer, `${CLIENT_ORIGIN}/reset-password?token=${raw}`).catch(() => {});
+
+    res.json(genericResponse);
+  } catch (err) {
+    res.status(500).json({ message: friendlyErrorMessage(err) });
+  }
+});
+
+// POST /api/shop/auth/reset-password
+router.post('/reset-password', authLimiter, async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token and new password are required.' });
+    }
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters with uppercase, lowercase, a number, and a special character.' });
+    }
+
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const customer = await Customer.findOne({
+      resetPasswordTokenHash: hash,
+      resetPasswordExpires: { $gt: new Date() },
+    }).select('+resetPasswordTokenHash +resetPasswordExpires');
+
+    if (!customer) {
+      return res.status(400).json({ message: 'This reset link is invalid or has expired. Please request a new one.' });
+    }
+
+    await customer.setPassword(newPassword);
+    customer.resetPasswordTokenHash = undefined;
+    customer.resetPasswordExpires = undefined;
+    await customer.save();
+
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (err) {
+    res.status(400).json({ message: friendlyErrorMessage(err) });
+  }
+});
+
+// POST /api/shop/auth/verify-email
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: 'Verification token is required.' });
+
+    const hash = crypto.createHash('sha256').update(token).digest('hex');
+    const customer = await Customer.findOne({
+      emailVerifyTokenHash: hash,
+      emailVerifyExpires: { $gt: new Date() },
+    }).select('+emailVerifyTokenHash +emailVerifyExpires');
+
+    if (!customer) {
+      return res.status(400).json({ message: 'This verification link is invalid or has expired.' });
+    }
+
+    customer.emailVerified = true;
+    customer.emailVerifyTokenHash = undefined;
+    customer.emailVerifyExpires = undefined;
+    await customer.save();
+
+    res.json({ message: 'Email verified successfully.' });
+  } catch (err) {
+    res.status(400).json({ message: friendlyErrorMessage(err) });
+  }
+});
+
+// POST /api/shop/auth/resend-verification
+router.post('/resend-verification', requireCustomer, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.customer.id);
+    if (!customer) return res.status(404).json({ message: 'Account not found.' });
+    if (customer.emailVerified) return res.json({ message: 'Your email is already verified.' });
+
+    const { raw, hash } = generateToken();
+    customer.emailVerifyTokenHash = hash;
+    customer.emailVerifyExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await customer.save();
+
+    sendEmailVerification(customer, `${CLIENT_ORIGIN}/verify-email?token=${raw}`).catch(() => {});
+
+    res.json({ message: 'Verification email sent.' });
+  } catch (err) {
+    res.status(400).json({ message: friendlyErrorMessage(err) });
+  }
+});
+
 // GET /api/shop/auth/verify
 router.get('/verify', requireCustomer, (req, res) => {
   res.json({ user: req.customer });
@@ -274,7 +416,7 @@ router.put('/profile', requireCustomer, async (req, res) => {
     const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', phone: customer.phone, authProvider: customer.authProvider };
     res.json({ user: payload });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: friendlyErrorMessage(err) });
   }
 });
 
@@ -299,7 +441,7 @@ router.put('/change-password', requireCustomer, async (req, res) => {
     await customer.save();
     res.json({ message: 'Password updated successfully.' });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: friendlyErrorMessage(err) });
   }
 });
 
@@ -312,7 +454,7 @@ router.get('/addresses', requireCustomer, async (req, res) => {
     if (!customer) return res.status(404).json({ message: 'Account not found.' });
     res.json({ addresses: customer.addresses });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: friendlyErrorMessage(err) });
   }
 });
 
@@ -334,7 +476,7 @@ router.post('/addresses', requireCustomer, async (req, res) => {
 
     res.status(201).json({ addresses: customer.addresses });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: friendlyErrorMessage(err) });
   }
 });
 
@@ -355,7 +497,7 @@ router.put('/addresses/:addressId', requireCustomer, async (req, res) => {
     await customer.save();
     res.json({ addresses: customer.addresses });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: friendlyErrorMessage(err) });
   }
 });
 
@@ -380,7 +522,7 @@ router.delete('/addresses/:addressId', requireCustomer, async (req, res) => {
     await customer.save();
     res.json({ addresses: customer.addresses });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: friendlyErrorMessage(err) });
   }
 });
 
@@ -398,7 +540,7 @@ router.patch('/addresses/:addressId/primary', requireCustomer, async (req, res) 
     await customer.save();
     res.json({ addresses: customer.addresses });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(400).json({ message: friendlyErrorMessage(err) });
   }
 });
 

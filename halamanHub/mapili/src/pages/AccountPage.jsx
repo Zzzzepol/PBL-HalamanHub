@@ -36,7 +36,9 @@ const AccountPage = () => {
 
     setSaving(true);
     try {
-      const updated = await customerAuthApi.update({ name: form.name, phone: form.phone }, token);
+      // Name is locked (greyed out above) — only phone is ever actually
+      // editable here, so only phone gets sent.
+      const updated = await customerAuthApi.update({ phone: form.phone }, token);
       updateUser(updated.user);
       setProfileMsg({ type: 'success', text: 'Profile updated successfully.' });
     } catch (err) {
@@ -105,8 +107,9 @@ const AccountPage = () => {
           )}
 
           <form onSubmit={handleProfileSave} className="flex flex-col gap-4">
-            <FormField label="Full name" id="name" required>
-              <Input id="name" value={form.name} onChange={e => f('name', e.target.value)} required />
+            <FormField label="Full name" id="name">
+              <Input id="name" value={form.name} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+              <p className="text-xs text-gray-400 mt-1">Name cannot be changed.</p>
             </FormField>
             <FormField label="Email address" id="email">
               <Input id="email" type="email" value={form.email} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />

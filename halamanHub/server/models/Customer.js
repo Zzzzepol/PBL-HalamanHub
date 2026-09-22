@@ -28,12 +28,24 @@ const customerSchema = new mongoose.Schema(
       },
     },
     addresses:    { type: [addressSchema], default: [] },
-    passwordHash: { type: String, select: false }, // absent for Google-only accounts — they never set one
+    passwordHash: { type: String, select: false },
 
-    // ── Google SSO ──
-    googleId:      { type: String, unique: true, sparse: true }, // sparse: lets many docs have NO googleId (local accounts)
-    authProvider:  { type: String, enum: ['local', 'google'], default: 'local' },
-    profileComplete: { type: Boolean, default: true }, // false only for brand-new Google sign-ups missing a phone number
+    // ── Google SSO — these were missing entirely; Mongoose's default
+    // strict mode silently drops any field not declared here, so without
+    // this, googleId/authProvider/profileComplete were never actually
+    // being saved despite auth.js setting them.
+    googleId:        { type: String, unique: true, sparse: true },
+    authProvider:    { type: String, enum: ['local', 'google'], default: 'local' },
+    profileComplete: { type: Boolean, default: true },
+
+    // ── Password reset ──
+    resetPasswordTokenHash: { type: String, select: false },
+    resetPasswordExpires:   { type: Date, select: false },
+
+    // ── Email verification ──
+    emailVerified:        { type: Boolean, default: false },
+    emailVerifyTokenHash: { type: String, select: false },
+    emailVerifyExpires:   { type: Date, select: false },
 
     status:       { type: String, enum: ['active', 'inactive'], default: 'active' },
     lastActiveAt: { type: Date, default: Date.now },
@@ -69,9 +81,11 @@ customerSchema.methods.verifyPassword = async function (plain) {
 };
 
 customerSchema.set('toJSON', {
-  virtuals: true, // so serialized customer objects include the computed "name" field
+  virtuals: true, // includes the computed "name" field if a customer doc is ever serialized directly
   transform: (doc, ret) => {
     delete ret.passwordHash;
+    delete ret.resetPasswordTokenHash;
+    delete ret.emailVerifyTokenHash;
     delete ret.__v;
     return ret;
   },

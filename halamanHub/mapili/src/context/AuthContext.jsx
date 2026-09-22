@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { customerAuthApi, ApiError } from '../api/client';
+import { customerAuthApi, ApiError, setSessionExpiredHandler } from '../api/client';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'mapili_token';
@@ -75,6 +75,17 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, []);
+
+  // Any API call anywhere in the app that gets a 401 with a token attached
+  // (i.e. an expired/invalid session, not just a failed login attempt)
+  // routes through here — one place to log out and let ProtectedRoute's
+  // existing redirect-to-/login handle the rest.
+  useEffect(() => {
+    setSessionExpiredHandler(() => {
+      logout();
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [logout]);
 
   const updateUser = useCallback((updated) => {
     setUser(updated);

@@ -106,6 +106,9 @@ export const LoginPage = () => {
                   <i className={`ti ${showPwd ? 'ti-eye-off' : 'ti-eye'}`} aria-hidden="true" />
                 </button>
               </div>
+              <div className="text-right mt-1.5">
+                <Link to="/forgot-password" className="text-xs text-brand-700 hover:text-brand-800 font-medium">Forgot password?</Link>
+              </div>
             </FormField>
 
             <Button variant="primary" type="submit" size="lg" disabled={loading} className="w-full mt-2">

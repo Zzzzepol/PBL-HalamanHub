@@ -304,4 +304,81 @@ async function sendOrderStatusUpdate(order, status) {
   }
 }
 
-module.exports = { sendOrderConfirmation, sendWelcomeEmail, sendPasswordReset, sendOrderStatusUpdate };
+async function sendPasswordResetLink(customer, resetUrl) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log('[Email] SMTP not configured — skipping password reset link email.');
+    return;
+  }
+
+  const html = `
+<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;color:#1f2937;">
+  <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:30px 36px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:12px;justify-content:center;">
+        <img src="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/logo.jpg" alt="Mapili Plant Nursery logo" style="width:42px;height:42px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,0.12);padding:4px;" />
+        <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
+      </div>
+    </div>
+    <div style="padding:36px;">
+      <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">Reset your password</h1>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.6;">
+        Hi ${customer.name}, we received a request to reset your Mapili account password. This link expires in 30 minutes.
+      </p>
+      <div style="text-align:center;margin-bottom:20px;">
+        <a href="${resetUrl}" style="display:inline-block;background:#166534;color:white;text-decoration:none;padding:14px 32px;border-radius:12px;font-weight:600;font-size:14px;">
+          Reset password
+        </a>
+      </div>
+      <p style="margin:0;color:#9ca3af;font-size:12px;">If you didn't request this, you can safely ignore this email.</p>
+    </div>
+  </div>
+</body></html>`;
+
+  try {
+    await transporter.sendMail({ from: FROM, to: customer.email, subject: 'Reset your Mapili password', html });
+    console.log(`[Email] Password reset link sent to ${customer.email}`);
+  } catch (err) {
+    console.error('[Email] Failed to send password reset link:', err.message);
+  }
+}
+
+async function sendEmailVerification(customer, verifyUrl) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log('[Email] SMTP not configured — skipping verification email.');
+    return;
+  }
+
+  const html = `
+<!DOCTYPE html>
+<html><body style="margin:0;padding:0;background:#f8fafc;font-family:Inter,sans-serif;color:#1f2937;">
+  <div style="max-width:560px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#14532d,#166534);padding:30px 36px;text-align:center;">
+      <div style="display:inline-flex;align-items:center;gap:12px;justify-content:center;">
+        <img src="${process.env.CLIENT_ORIGIN || 'http://localhost:3001'}/logo.jpg" alt="Mapili Plant Nursery logo" style="width:42px;height:42px;object-fit:contain;border-radius:12px;background:rgba(255,255,255,0.12);padding:4px;" />
+        <span style="color:white;font-size:18px;font-weight:700;">Mapili Plant Nursery</span>
+      </div>
+    </div>
+    <div style="padding:36px;">
+      <h1 style="margin:0 0 12px;font-size:22px;font-weight:700;color:#111827;">Verify your email</h1>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.6;">
+        Hi ${customer.name}, please confirm this is your email address. This link expires in 24 hours.
+      </p>
+      <div style="text-align:center;">
+        <a href="${verifyUrl}" style="display:inline-block;background:#166534;color:white;text-decoration:none;padding:14px 32px;border-radius:12px;font-weight:600;font-size:14px;">
+          Verify email
+        </a>
+      </div>
+    </div>
+  </div>
+</body></html>`;
+
+  try {
+    await transporter.sendMail({ from: FROM, to: customer.email, subject: 'Verify your email — Mapili Plant Nursery', html });
+    console.log(`[Email] Verification email sent to ${customer.email}`);
+  } catch (err) {
+    console.error('[Email] Failed to send verification email:', err.message);
+  }
+}
+
+module.exports = { sendOrderConfirmation, sendWelcomeEmail, sendPasswordReset, sendOrderStatusUpdate, sendPasswordResetLink, sendEmailVerification };
