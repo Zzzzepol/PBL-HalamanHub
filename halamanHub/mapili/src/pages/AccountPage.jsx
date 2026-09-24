@@ -12,9 +12,10 @@ const AccountPage = () => {
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
-    name:  user?.name  || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
+    firstName: user?.firstName || '',
+    lastName:  user?.lastName  || '',
+    email:     user?.email     || '',
+    phone:     user?.phone     || '',
   });
   const [pwdForm, setPwdForm] = useState({ current: '', newPwd: '', confirm: '' });
   const [profileMsg, setProfileMsg] = useState(null);
@@ -107,10 +108,15 @@ const AccountPage = () => {
           )}
 
           <form onSubmit={handleProfileSave} className="flex flex-col gap-4">
-            <FormField label="Full name" id="name">
-              <Input id="name" value={form.name} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
-              <p className="text-xs text-gray-400 mt-1">Name cannot be changed.</p>
-            </FormField>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <FormField label="First name" id="firstName">
+                <Input id="firstName" value={form.firstName} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+              </FormField>
+              <FormField label="Last name" id="lastName">
+                <Input id="lastName" value={form.lastName} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+              </FormField>
+            </div>
+            <p className="text-xs text-gray-400 -mt-2">Name cannot be changed.</p>
             <FormField label="Email address" id="email">
               <Input id="email" type="email" value={form.email} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
               <p className="text-xs text-gray-400 mt-1">Email cannot be changed.</p>

@@ -63,6 +63,8 @@ function buildTokenPayload(customer) {
   return {
     id: customer._id.toString(),
     name: customer.name,
+    firstName: customer.firstName,
+    lastName: customer.lastName,
     email: customer.email,
     role: 'customer',
     profileComplete: customer.profileComplete,
@@ -131,7 +133,7 @@ router.post('/register', authLimiter, async (req, res) => {
     sendWelcomeEmail(customer).catch(() => {});
     sendEmailVerification(customer, `${CLIENT_ORIGIN}/verify-email?token=${verifyToken}`).catch(() => {});
 
-    const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', authProvider: customer.authProvider };
+    const payload = buildTokenPayload(customer);
     const token   = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     res.status(201).json({ token, user: { ...payload, phone: customer.phone } });
   } catch (err) {
@@ -160,7 +162,7 @@ router.post('/login', authLimiter, async (req, res) => {
     customer.lastActiveAt = new Date();
     await customer.save();
 
-    const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', authProvider: customer.authProvider };
+const payload = buildTokenPayload(customer);
     const token   = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
      res.json({ token, user: { ...payload, phone: customer.phone } });
@@ -409,11 +411,11 @@ router.put('/profile', requireCustomer, async (req, res) => {
     // findByIdAndUpdate) is what triggers the virtual setter that splits
     // it back into firstName/lastName — findByIdAndUpdate would silently
     // ignore a non-schema field like a virtual.
-    if (name !== undefined) customer.name = name;
+   if (name !== undefined) customer.name = name;
     if (phone !== undefined) customer.phone = phone;
     await customer.save();
 
-    const payload = { id: customer._id.toString(), name: customer.name, email: customer.email, role: 'customer', phone: customer.phone, authProvider: customer.authProvider };
+    const payload = { ...buildTokenPayload(customer), phone: customer.phone };
     res.json({ user: payload });
   } catch (err) {
     res.status(400).json({ message: friendlyErrorMessage(err) });

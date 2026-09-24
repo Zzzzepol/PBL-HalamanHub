@@ -293,12 +293,18 @@ const DashboardPage = () => {
         <Card>
           <CardHeader title="Water tank" subtitle="Live level sensor" />
           <CardBody className="!py-2.5">
-            <Badge variant={summary?.waterTank.status === 'offline' ? 'error' : summary?.waterTank.available ? 'ok' : 'warning'}>
-              <i className={`ti ${summary?.waterTank.status === 'offline' ? 'ti-wifi-off' : summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
-              {summary?.waterTank.status === 'offline' ? 'Sensor inactive' : summary?.waterTank.available ? 'Water available' : 'Tank low'}
-            </Badge>
+            {summary?.waterTank.status === 'offline' ? (
+              <Badge variant="error">
+                <i className="ti ti-wifi-off" aria-hidden="true" /> Sensor inactive
+              </Badge>
+            ) : (
+              <Badge variant={summary?.waterTank.tankStatus3Info?.tone || 'default'}>
+                <i className={`ti ${summary?.waterTank.tankStatus3Info?.tone === 'ok' ? 'ti-droplet' : 'ti-alert-triangle'}`} aria-hidden="true" />{' '}
+                {summary?.waterTank.tankStatus3Info?.label || 'No data'}
+              </Badge>
+            )}
             <div className="text-sm text-text-secondary mt-2">Raw reading: <strong>{summary?.waterTank.raw ?? '—'}</strong></div>
-            <div className="text-xs text-text-secondary mt-1">No flow meter installed — reflects on/off threshold only.</div>
+            <div className="text-xs text-text-secondary mt-1">Three-stage level — Low / Medium / Full, from the ultrasonic sensor.</div>
           </CardBody>
         </Card>
 

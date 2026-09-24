@@ -92,6 +92,7 @@ router.get('/summary', async (req, res) => {
     waterTank: {
       available: waterLevel?.status === 'ok',
       percent: waterLevel?.numericValue ?? null,
+      raw: waterLevel?.value ?? null,
       status: waterLevel?.status ?? 'offline',
       // Rainwater Harvesting additions
       tds: latestReading?.tds ?? null,

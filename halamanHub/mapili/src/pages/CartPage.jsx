@@ -65,6 +65,19 @@ const [insufficient, setInsufficient] = useState({});
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Items */}
           <div className="lg:col-span-2 flex flex-col gap-3">
+            {/* Fixed above the list so it never drifts down as items are added */}
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-semibold text-gray-800">
+                {items.length} item{items.length !== 1 ? 's' : ''} in cart
+              </h2>
+              <button
+                onClick={clearCart}
+                className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1.5 transition-colors"
+              >
+                <i className="ti ti-trash" /> Clear cart
+              </button>
+            </div>
+
             {items.map(item => {
               const issue = insufficient[item._id];
               return (
@@ -140,12 +153,7 @@ const [insufficient, setInsufficient] = useState({});
                 </div>
               );
             })}
-
-            <button onClick={clearCart} className="text-sm text-red-500 hover:text-red-700 self-start flex items-center gap-1.5 transition-colors mt-1">
-              <i className="ti ti-trash" /> Clear cart
-            </button>
           </div>
-
           {/* Summary */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sticky top-24">

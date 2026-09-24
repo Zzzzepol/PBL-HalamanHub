@@ -54,18 +54,18 @@ const MetricCard = ({ icon, label, value, unit, emphasis }) => (
 // an operator scanning the page quickly needs to see "is this fine or do I
 // need to act" at a glance, so it gets a dedicated visual treatment instead
 // of sharing a grid cell with everything else.
-const WaterTankCard = ({ levelPercent, pumpActive, solenoidActive }) => {
+const WaterTankCard = ({ levelPercent, tankStatus3Info, pumpActive, solenoidActive }) => {
   const hasReading = levelPercent != null;
   const pct = hasReading ? Math.max(0, Math.min(100, levelPercent)) : 0;
 
-  let status = 'No data';
-  let barColor = 'bg-gray-300';
-  let textColor = 'text-text-secondary';
-  if (hasReading) {
-    if (pct <= 15) { status = 'Critical — refill soon'; barColor = 'bg-red-500'; textColor = 'text-red-700'; }
-    else if (pct <= 35) { status = 'Low'; barColor = 'bg-amber-500'; textColor = 'text-amber-700'; }
-    else { status = 'Good'; barColor = 'bg-green-600'; textColor = 'text-green-700'; }
-  }
+  const toneToColor = {
+    ok:      { bar: 'bg-green-600', text: 'text-green-700' },
+    warning: { bar: 'bg-amber-500', text: 'text-amber-700' },
+    error:   { bar: 'bg-red-500',   text: 'text-red-700' },
+    default: { bar: 'bg-gray-300',  text: 'text-text-secondary' },
+  };
+  const colors = toneToColor[tankStatus3Info?.tone] || toneToColor.default;
+  const status = tankStatus3Info?.label || 'No data';
 
   const activeSource = pumpActive ? 'Pump running' : solenoidActive ? 'Solenoid open' : 'Idle';
 
@@ -76,9 +76,9 @@ const WaterTankCard = ({ levelPercent, pumpActive, solenoidActive }) => {
           <div className="w-7 h-7 rounded-sm flex items-center justify-center text-sm bg-blue-50 text-blue-700 flex-shrink-0">
             <i className="ti ti-glass-full" aria-hidden="true" />
           </div>
-          <div className="text-xs text-text-secondary leading-tight">Water tank level</div>
+ <div className="text-xs text-text-secondary leading-tight">Water tank level</div>
         </div>
-        <span className={`text-xs font-medium ${textColor}`}>{status}</span>
+        <span className={`text-xs font-medium ${colors.text}`}>{status}</span>
       </div>
 
       <div className="flex items-end gap-2 mb-2.5">
@@ -90,7 +90,7 @@ const WaterTankCard = ({ levelPercent, pumpActive, solenoidActive }) => {
 
       <div className="w-full h-2 rounded-full bg-bg-tertiary overflow-hidden mb-2.5">
         <div
-          className={`h-full rounded-full transition-[width] duration-500 ${barColor}`}
+          className={`h-full rounded-full transition-[width] duration-500 ${colors.bar}`}
           style={{ width: `${hasReading ? pct : 0}%` }}
         />
       </div>
@@ -264,6 +264,7 @@ const OfflineReadingsPage = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <WaterTankCard
               levelPercent={watering.levelPercent}
+              tankStatus3Info={tankStatus3Info}
               pumpActive={watering.pumpActive}
               solenoidActive={watering.solenoidActive}
             />
@@ -271,9 +272,9 @@ const OfflineReadingsPage = () => {
               <div className="text-xs text-text-secondary mb-1">Water availability</div>
               <div className="text-sm text-text-primary leading-snug">
                 {watering.levelPercent != null
-                  ? watering.levelPercent <= 15
+                  ? tankStatus3Info.tone === 'error'
                     ? 'Tank is critically low. Irrigation may pause automatically until refilled.'
-                    : watering.levelPercent <= 35
+                    : tankStatus3Info.tone === 'warning'
                     ? 'Tank is running low — plan a refill soon.'
                     : 'Tank level is healthy — no action needed.'
                   : 'No water level reading yet.'}

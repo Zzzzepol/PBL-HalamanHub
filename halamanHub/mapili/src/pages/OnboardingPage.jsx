@@ -16,9 +16,9 @@ const OnboardingPage = () => {
   // Auto-filled from the Google account (best-effort split on the first
   // space), but both stay fully editable — some people prefer a different
   // display name than what Google has, or the split guessed wrong.
-  const nameParts = (user?.name || '').trim().split(/\s+/);
-  const [firstName, setFirstName] = useState(nameParts[0] || '');
-  const [lastName, setLastName] = useState(nameParts.slice(1).join(' ') || '');
+const nameParts = (user?.name || '').trim().split(/\s+/);
+  const [firstName, setFirstName] = useState(user?.firstName || nameParts[0] || '');
+  const [lastName, setLastName] = useState(user?.lastName || nameParts.slice(1).join(' ') || '');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

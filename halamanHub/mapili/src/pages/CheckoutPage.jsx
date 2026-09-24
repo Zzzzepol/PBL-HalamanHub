@@ -35,12 +35,13 @@ const CheckoutPage = () => {
   // Form state
   const [fulfillment, setFulfillment] = useState('delivery'); // delivery | pickup
   const [form, setForm] = useState({
-    name:    user?.name  || '',
-    email:   user?.email || '',
-    phone:   user?.phone || '',
-    address: '',
-    city:    '',
-    note:    '',
+    firstName: user?.firstName || '',
+    lastName:  user?.lastName  || '',
+    email:     user?.email     || '',
+    phone:     user?.phone     || '',
+    address:   '',
+    city:      '',
+    note:      '',
     pickupDate: '',
   });
 
@@ -82,7 +83,7 @@ const CheckoutPage = () => {
       });
   }, [token, user, fulfillment]);
 
-  const canProceedStep0 = form.name && form.email && form.phone &&
+ const canProceedStep0 = form.firstName && form.lastName && form.email && form.phone &&
     (fulfillment === 'pickup' ? form.pickupDate : (form.address && form.city));
 
   const handleSavedAddressSelect = (addressId) => {
@@ -145,13 +146,13 @@ const CheckoutPage = () => {
       const paymentData = await paymongoApi.createLink({
         amount:      Math.round(grandTotal * 100), // centavos
         description: `Mapili Plant Nursery — ${itemsDesc}`,
-        remarks:     `Order for ${form.name}`,
+        remarks:     `Order for ${form.firstName} ${form.lastName}`.trim(),
         payMethod,
       }, token);
 
       // Create the order in our DB (status: pending, waiting for webhook)
       const orderPayload = {
-        customer:      form.name,
+        customer:      `${form.firstName} ${form.lastName}`.trim(),
         customerEmail: form.email,
         customerPhone: form.phone,
         product:       itemsDesc,
@@ -242,13 +243,16 @@ const CheckoutPage = () => {
                 {/* Contact info — locked to the account's saved details;
                     edit from Account settings instead of here at checkout */}
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField label="Full name" id="name" required>
-                    <Input id="name" value={form.name} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
+                  <FormField label="First name" id="firstName" required>
+                    <Input id="firstName" value={form.firstName} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
                   </FormField>
-                  <FormField label="Email address" id="email" required>
-                    <Input id="email" type="email" value={form.email} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
+                  <FormField label="Last name" id="lastName" required>
+                    <Input id="lastName" value={form.lastName} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
                   </FormField>
                 </div>
+                <FormField label="Email address" id="email" required>
+                  <Input id="email" type="email" value={form.email} disabled className="bg-gray-100 text-gray-500 cursor-not-allowed" />
+                </FormField>
                 <FormField label="Phone number" id="phone" required>
                   <Input
                     id="phone"
