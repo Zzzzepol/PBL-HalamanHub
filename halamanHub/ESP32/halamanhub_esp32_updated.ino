@@ -359,6 +359,18 @@ void updateIrrigationStateMachine() {
       break;
 
     case WATERING:
+      // Early exit — soil already reached target saturation before the
+      // pulse timer elapsed. No point continuing to pump; skip the soak
+      // phase entirely and go straight back to monitoring.
+      if (g_moisture >= g_thresholdWet) {
+        if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+        if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+        g_currentCycle = 0;
+        Serial.printf(">> Target moisture reached early (%.1f%% >= %.1f%%) — cutting pump, skipping soak.\n", g_moisture, g_thresholdWet);
+        enterState(IDLE);
+        break;
+      }
+
       if (!g_waterAvailable) {
         // No water to pump — fall back to the solenoid backup line and
         // hold in WATERING until the tank recovers or the pulse elapses.

@@ -20,7 +20,7 @@ const formatTime = (iso) => {
 };
 
 const SensorsPage = () => {
-  const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000);
+const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000, 'admin:sensors:list');
 
   // real-time updates — socket pushes new readings instantly, polling above
   // just stays as a slower fallback in case the socket ever drops.
