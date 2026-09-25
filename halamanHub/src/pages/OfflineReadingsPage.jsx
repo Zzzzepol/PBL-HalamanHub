@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { socket } from '../socket';
 import { getSoilRecommendations } from '../utils/soilRecommendations';
-import { getWaterQualityCategory, getPhStatus, getTankStatusInfo } from '../utils/waterQuality';
+import { getWaterQualityCategory, getTankStatusInfo } from '../utils/waterQuality';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
 
@@ -172,7 +172,6 @@ const OfflineReadingsPage = () => {
   const watering = reading?.watering || {};
   const water = reading?.water || {};
   const waterQuality = getWaterQualityCategory(water.tds ?? null);
-  const waterPhStatus = getPhStatus(water.ph ?? null);
   const tankStatus3Info = getTankStatusInfo(water.tankStatus ?? null);
 
   const recommendations = useMemo(() => {
@@ -285,8 +284,8 @@ const OfflineReadingsPage = () => {
 
         {/* Rainwater Harvesting — TDS, pH, 3-state float-switch tank level */}
         <section>
-          <SectionHeading icon="ti-droplet" title="Rainwater Quality" subtitle="TDS, pH & float-switch tank level" />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <SectionHeading icon="ti-droplet" title="Rainwater Quality" subtitle="TDS & float-switch tank level" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">
               <div className="text-xs text-text-secondary mb-2">Water quality (TDS)</div>
               <div className="text-2xl font-medium text-text-primary leading-tight">
@@ -299,19 +298,6 @@ const OfflineReadingsPage = () => {
                 waterQuality.tone === 'error' ? 'bg-red-50 text-red-800' : 'bg-bg-tertiary text-text-secondary'
               }`}>
                 {waterQuality.label}
-              </span>
-            </div>
-
-            <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">
-              <div className="text-xs text-text-secondary mb-2">Water pH</div>
-              <div className="text-2xl font-medium text-text-primary leading-tight">
-                {water.ph != null ? water.ph.toFixed(2) : '—'}
-              </div>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-2 ${
-                waterPhStatus.tone === 'ok' ? 'bg-green-50 text-green-800' :
-                waterPhStatus.tone === 'error' ? 'bg-red-50 text-red-800' : 'bg-bg-tertiary text-text-secondary'
-              }`}>
-                {waterPhStatus.label}
               </span>
             </div>
 

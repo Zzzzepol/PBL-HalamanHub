@@ -6,7 +6,7 @@ import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, dashboardApi, irrigationApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 import { socket } from '../socket';
-import { getWaterQualityCategory, getPhStatus, getTankStatusInfo } from '../utils/waterQuality';
+import { getWaterQualityCategory, getTankStatusInfo } from '../utils/waterQuality';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -119,7 +119,7 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
       </div>
 
       {/* Rainwater quality — TDS, pH, 3-state float-switch tank level */}
-      <div className={ps.grid.threeCol}>
+      <div className={ps.grid.twoCol}>
         <Card>
           <CardHeader title="Water quality (TDS)" subtitle="Total dissolved solids" />
           <CardBody>
@@ -129,18 +129,6 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
             </div>
             <Badge variant={summary?.waterTank.waterQuality?.tone || 'default'} className="mt-2.5">
               {summary?.waterTank.waterQuality?.label || 'No data'}
-            </Badge>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader title="Water pH" subtitle="Target range 6.5–7.5" />
-          <CardBody>
-            <div className="text-[28px] font-medium text-text-primary leading-tight">
-              {summary?.waterTank.waterPh != null ? summary.waterTank.waterPh.toFixed(2) : '—'}
-            </div>
-            <Badge variant={summary?.waterTank.waterPhStatus?.tone || 'default'} className="mt-2.5">
-              {summary?.waterTank.waterPhStatus?.label || 'No data'}
             </Badge>
           </CardBody>
         </Card>
