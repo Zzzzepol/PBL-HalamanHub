@@ -666,6 +666,9 @@ void loop() {
     parseDHTData();
     updateTankLevel();
 
+    // TEMPORARY — remove once you've found your blind zone
+    Serial.printf(">> DEBUG raw distance: %.1f cm\n", g_distanceCm);
+
     g_tds         = readTdsPpm(g_dhtTemp);
     g_waterPh     = readPh();
     g_tankStatus3 = readTankStatus3();
