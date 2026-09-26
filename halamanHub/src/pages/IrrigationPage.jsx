@@ -44,6 +44,8 @@ const IrrigationPage = () => {
 
   const [dryThreshold, setDryThreshold] = useState(30);
   const [wetThreshold, setWetThreshold] = useState(60);
+  const [pumpOnTimeSec, setPumpOnTimeSec] = useState(60);
+  const [soakTimeSec, setSoakTimeSec] = useState(300);
   const [savingThresholds, setSavingThresholds] = useState(false);
   const [thresholdSaved, setThresholdSaved] = useState(false);
   const [toggling, setToggling] = useState(false);
@@ -53,6 +55,8 @@ const IrrigationPage = () => {
     if (settings) {
       setDryThreshold(settings.moistureDryThreshold);
       setWetThreshold(settings.moistureWetThreshold);
+      setPumpOnTimeSec(settings.pumpOnTimeSec);
+      setSoakTimeSec(settings.soakTimeSec);
     }
   }, [settings]);
 
@@ -82,6 +86,8 @@ const IrrigationPage = () => {
       const updated = await irrigationApi.updateSettings({
         moistureDryThreshold: dryThreshold,
         moistureWetThreshold: wetThreshold,
+        pumpOnTimeSec,
+        soakTimeSec,
       }, token);
       setSettings(updated);
       setThresholdSaved(true);
@@ -158,6 +164,24 @@ const IrrigationPage = () => {
               value={wetThreshold}
               onChange={setWetThreshold}
             />
+
+            <SectionLabel>Pulse irrigation timing</SectionLabel>
+            <RangeInput
+              label="Pulse duration (how long the pump/solenoid runs)"
+              min={5} max={600} unit=" sec"
+              value={pumpOnTimeSec}
+              onChange={setPumpOnTimeSec}
+            />
+            <RangeInput
+              label="Soak / wait time before checking again"
+              min={30} max={3600} unit=" sec"
+              value={soakTimeSec}
+              onChange={setSoakTimeSec}
+            />
+            <div className="text-sm text-text-secondary -mt-2 mb-3.5">
+              If moisture reaches the "stop" threshold above before the pulse duration finishes, the pump cuts off immediately — it won't wait out the full pulse.
+            </div>
+
             <Button variant="primary" className="w-full justify-center mt-2" onClick={saveThresholds} disabled={savingThresholds}>
               {savingThresholds ? 'Saving…' : 'Save threshold settings'}
             </Button>

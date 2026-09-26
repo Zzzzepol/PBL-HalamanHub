@@ -292,13 +292,23 @@ const OfflineReadingsPage = () => {
                 {water.tds != null ? Math.round(water.tds) : '—'}
                 {water.tds != null && <span className="text-sm text-text-secondary ml-1 font-normal">ppm</span>}
               </div>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mt-2 ${
-                waterQuality.tone === 'ok' ? 'bg-green-50 text-green-800' :
-                waterQuality.tone === 'warning' ? 'bg-amber-50 text-amber-800' :
-                waterQuality.tone === 'error' ? 'bg-red-50 text-red-800' : 'bg-bg-tertiary text-text-secondary'
-              }`}>
-                {waterQuality.label}
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  waterQuality.tone === 'ok' ? 'bg-green-50 text-green-800' :
+                  waterQuality.tone === 'warning' ? 'bg-amber-50 text-amber-800' :
+                  waterQuality.tone === 'error' ? 'bg-red-50 text-red-800' : 'bg-bg-tertiary text-text-secondary'
+                }`}>
+                  {waterQuality.label}
+                </span>
+                {water.tds != null && water.tdsStable === false && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800"
+                    title="Sensor readings are fluctuating too much to trust right now — showing the last known-good value instead of a fresh one."
+                  >
+                    Unstable — last known value
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">

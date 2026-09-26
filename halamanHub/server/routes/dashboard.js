@@ -96,6 +96,7 @@ router.get('/summary', async (req, res) => {
       status: waterLevel?.status ?? 'offline',
       // Rainwater Harvesting additions
       tds: latestReading?.tds ?? null,
+      tdsStable: latestReading?.tdsStable ?? true,
       waterQuality: getWaterQualityCategory(latestReading?.tds ?? null),
       waterPh: latestReading?.waterPh ?? null,
       waterPhStatus: getPhStatus(latestReading?.waterPh ?? null),

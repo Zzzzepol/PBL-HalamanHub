@@ -55,8 +55,12 @@ const char* DEVICE_ID   = "ESP32-01"; // identifies this unit in the database
 // --- Pulse Irrigation / Cycle-and-Soak State Machine ---
 // Tune these three for your soil texture — see the notes at the bottom
 // of the accompanying explanation for clay vs. sandy soil guidance.
-#define PUMP_ON_TIME_MS   60000UL   // 60s pulse — how long the pump runs per cycle
-#define SOAK_TIME_MS      300000UL  // 5 min soak — time given for water to percolate
+// Defaults only — overwritten every 2s by fetchControlSettings() from the
+// admin panel's "Pulse irrigation timing" controls (Irrigation tab). Kept
+// as variables, not #define, specifically so they CAN change at runtime
+// without reflashing — handy while you're still testing thresholds.
+unsigned long g_pumpOnTimeMs = 60000UL;   // 60s pulse — how long the pump runs per cycle
+unsigned long g_soakTimeMs   = 300000UL;  // 5 min soak — time given for water to percolate
 #define MAX_CYCLES        5         // fail-safe cap before SAFETY_LOCKOUT
 
 const byte QUERY_FRAME[] = { 0x01, 0x03, 0x00, 0x00, 0x00, 0x07, 0x04, 0x08 };
@@ -77,9 +81,24 @@ float g_levelPercent  = 0;
 bool  g_waterAvailable = false;
 
 // TDS / pH / 3-state tank level — Rainwater Harvesting sensors
-float  g_tds         = 0;
-float  g_waterPh     = 0;
-String g_tankStatus3 = "Low"; // "Low" | "Medium" | "Full"
+float  g_tds            = 0;
+float  g_waterPh        = 0;
+String g_tankStatus3    = "Low"; // "Low" | "Medium" | "Full"
+bool   g_tdsSensorOnline = true; // false = probe unplugged/not detected
+bool   g_tdsStable       = true; // false = last batch was too noisy to trust
+
+// Raw ADC counts (12-bit, 0-4095) below this = "nothing plugged in", not
+// "perfectly pure water". Real rainwater always carries some dissolved
+// minerals, so a reading pinned at the floor only happens when the probe
+// (or its power/ground wiring) is disconnected. Adjust up slightly if you
+// see false "offline" flags with a genuinely connected probe.
+#define TDS_DISCONNECT_RAW_THRESHOLD 15
+
+// Coefficient of variation (stddev/mean) above which a batch of samples is
+// considered too noisy to trust. Start at 0.15 (15%) and tune it: log the
+// cv value for a few minutes of normal, quiet operation to see your real
+// noise floor, then set this comfortably above that.
+#define TDS_MAX_COEFF_VARIATION 0.15
 
 // Control state fetched from the server each cycle — replaces the old
 // hardcoded MOISTURE_DRY / MOISTURE_WET #defines
@@ -207,6 +226,11 @@ bool fetchControlSettings() {
   g_tankFullDistanceCm      = doc["tankFullDistanceCm"].as<float>();
   g_tankLowThresholdPercent = doc["tankLowThresholdPercent"].as<float>();
 
+  // Admin sends these in seconds (friendlier for a slider UI) — convert to
+  // ms once here so the state machine can keep comparing against millis().
+  g_pumpOnTimeMs = doc["pumpOnTimeSec"].as<unsigned long>() * 1000UL;
+  g_soakTimeMs   = doc["soakTimeSec"].as<unsigned long>() * 1000UL;
+
   return true;
 }
 
@@ -240,13 +264,42 @@ void updateTankLevel() {
 
 // Averages several ADC samples to smooth out sensor noise —
 // standard practice for both TDS and pH analog boards.
-float readAnalogAveraged(int pin, int samples = 20) {
+//
+// Optionally also reports the batch's coefficient of variation (stddev /
+// mean) via cvOut. A probe sitting in stable water gives a low CV; noise
+// coupled in from a shared power supply or nearby switching wiring makes
+// consecutive samples disagree with each other, spiking the CV even when
+// the average still looks like a plausible number.
+float readAnalogAveraged(int pin, int samples, float *cvOut) {
+  int raw[64]; // supports up to 64 samples
+  if (samples > 64) samples = 64;
+
   long sum = 0;
   for (int i = 0; i < samples; i++) {
-    sum += analogRead(pin);
+    raw[i] = analogRead(pin);
+    sum += raw[i];
     delay(5);
   }
-  return sum / (float)samples;
+  float mean = sum / (float)samples;
+
+  if (cvOut != nullptr) {
+    float variance = 0;
+    for (int i = 0; i < samples; i++) {
+      float d = raw[i] - mean;
+      variance += d * d;
+    }
+    variance /= samples;
+    float stdDev = sqrt(variance);
+    *cvOut = (mean > 0) ? (stdDev / mean) : 0;
+  }
+
+  return mean;
+}
+
+// Plain-average overload for callers (like readPh()) that don't need
+// stability info.
+float readAnalogAveraged(int pin, int samples = 20) {
+  return readAnalogAveraged(pin, samples, nullptr);
 }
 
 // DFRobot-standard TDS formula with temperature compensation.
@@ -254,7 +307,27 @@ float readAnalogAveraged(int pin, int samples = 20) {
 // air temperature as the best available approximation — close enough
 // for a rainwater tank, which tracks ambient temperature closely.
 float readTdsPpm(float temperatureC) {
-  float avgAdc = readAnalogAveraged(TDS_PIN);
+  float cv;
+  float avgAdc = readAnalogAveraged(TDS_PIN, 20, &cv);
+
+  // Disconnected probe: pulled-down pin settles low and stays low.
+  if (avgAdc < TDS_DISCONNECT_RAW_THRESHOLD) {
+    g_tdsSensorOnline = false;
+    g_tdsStable = true; // nothing to distrust — there's just no probe
+    return 0;
+  }
+  g_tdsSensorOnline = true;
+
+  // Connected, but this batch's samples disagree with each other more
+  // than a genuinely settled reading would — likely noise from the
+  // shared power supply or nearby wiring, not a real change in the
+  // water. Don't let it overwrite a good value; hold the last one.
+  if (cv > TDS_MAX_COEFF_VARIATION) {
+    g_tdsStable = false;
+    return g_tds;
+  }
+  g_tdsStable = true;
+
   float voltage = avgAdc / 4095.0 * 3.3; // ESP32 ADC: 12-bit, 3.3V reference
 
   float compensationCoefficient = 1.0 + 0.02 * (temperatureC - 25.0);
@@ -381,7 +454,7 @@ void updateIrrigationStateMachine() {
         if (!pumpOn) { digitalWrite(RELAY_PUMP, RELAY_ON); pumpOn = true; }
       }
 
-      if (elapsed >= PUMP_ON_TIME_MS) {
+      if (elapsed >= g_pumpOnTimeMs) {
         enterState(SOAKING);
       }
       break;
@@ -390,7 +463,7 @@ void updateIrrigationStateMachine() {
       if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
       if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
 
-      if (elapsed >= SOAK_TIME_MS) {
+      if (elapsed >= g_soakTimeMs) {
         // ---- Evaluation point: soak finished, check the latest reading ----
         if (g_moisture >= g_thresholdDry) {
           g_currentCycle = 0;
@@ -421,8 +494,8 @@ long computeTimeRemainingSec() {
   unsigned long elapsed = millis() - g_stateEnteredAt;
   long remainingMs = 0;
 
-  if (g_irrigationState == WATERING) remainingMs = (long)PUMP_ON_TIME_MS - (long)elapsed;
-  else if (g_irrigationState == SOAKING) remainingMs = (long)SOAK_TIME_MS - (long)elapsed;
+  if (g_irrigationState == WATERING) remainingMs = (long)g_pumpOnTimeMs - (long)elapsed;
+  else if (g_irrigationState == SOAKING) remainingMs = (long)g_soakTimeMs - (long)elapsed;
 
   if (remainingMs < 0) remainingMs = 0;
   return remainingMs / 1000;
@@ -471,6 +544,15 @@ void parseDHTData() {
 // Builds the telemetry JSON once, so both the USB-serial path (always works,
 // zero network needed) and the WiFi path (best-effort bonus) send identical data.
 void buildTelemetryPayload(char *payload, size_t payloadSize) {
+  // JSON has no way to interpolate "null" through a %.1f slot, so build the
+  // tds field as its own string first, then splice it in with %s.
+  char tdsJson[16];
+  if (g_tdsSensorOnline) {
+    snprintf(tdsJson, sizeof(tdsJson), "%.1f", g_tds);
+  } else {
+    snprintf(tdsJson, sizeof(tdsJson), "null");
+  }
+
   snprintf(payload, payloadSize,
     "{"
       "\"device\":\"%s\","
@@ -478,7 +560,7 @@ void buildTelemetryPayload(char *payload, size_t payloadSize) {
       "\"air\":{\"temperature\":%.1f,\"humidity\":%.1f},"
       "\"watering\":{\"tankWaterLevel\":\"%s\",\"distanceCm\":%.1f,\"levelPercent\":%.0f,\"pumpActive\":%s,\"solenoidActive\":%s,\"activeSource\":\"%s\","
         "\"irrigationState\":\"%s\",\"cycle\":%d,\"timeRemainingSec\":%ld,\"lockout\":%s},"
-      "\"water\":{\"tds\":%.1f,\"ph\":%.2f,\"tankStatus\":\"%s\"}"
+      "\"water\":{\"tds\":%s,\"tdsStable\":%s,\"ph\":%.2f,\"tankStatus\":\"%s\"}"
     "}",
     DEVICE_ID,
     g_moisture, g_soilTemp, g_ec, g_ph, g_nitrogen, g_phosphorus, g_potassium,
@@ -487,7 +569,7 @@ void buildTelemetryPayload(char *payload, size_t payloadSize) {
     pumpOn ? "true" : "false", solenoidOn ? "true" : "false",
     pumpOn ? "PUMP" : (solenoidOn ? "SOLENOID" : "NONE"),
     stateName(g_irrigationState), g_currentCycle, computeTimeRemainingSec(), g_lockoutError ? "true" : "false",
-    g_tds, g_waterPh, g_tankStatus3.c_str()
+    tdsJson, g_tdsStable ? "true" : "false", g_waterPh, g_tankStatus3.c_str()
   );
 }
 
@@ -536,7 +618,11 @@ void setup() {
   pinMode(ULTRASONIC_ECHO_PIN, INPUT);
   digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
 
-  // TDS_PIN / PH_PIN need no pinMode() — analogRead() configures them.
+  // PH_PIN needs no pinMode() — analogRead() configures it.
+  // TDS_PIN gets an internal pull-down so a disconnected probe reads a
+  // known-low, stable voltage instead of floating randomly — that's what
+  // readTdsPpm() checks to detect "sensor not connected".
+  pinMode(TDS_PIN, INPUT_PULLDOWN);
 
   connectWiFi();
   g_stateEnteredAt = millis();

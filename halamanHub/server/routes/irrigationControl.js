@@ -19,6 +19,8 @@ res.json({
       tankEmptyDistanceCm: settings.tankEmptyDistanceCm,
       tankFullDistanceCm: settings.tankFullDistanceCm,
       tankLowThresholdPercent: settings.tankLowThresholdPercent,
+      pumpOnTimeSec: settings.pumpOnTimeSec,
+      soakTimeSec: settings.soakTimeSec,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

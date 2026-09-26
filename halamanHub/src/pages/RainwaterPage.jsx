@@ -127,9 +127,16 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
               {summary?.waterTank.tds != null ? `${summary.waterTank.tds.toFixed(0)}` : '—'}
               <span className="text-sm text-text-secondary ml-1 font-normal">ppm</span>
             </div>
-            <Badge variant={summary?.waterTank.waterQuality?.tone || 'default'} className="mt-2.5">
-              {summary?.waterTank.waterQuality?.label || 'No data'}
-            </Badge>
+            <div className="flex items-center gap-2 mt-2.5">
+              <Badge variant={summary?.waterTank.waterQuality?.tone || 'default'}>
+                {summary?.waterTank.waterQuality?.label || 'No data'}
+              </Badge>
+              {summary?.waterTank.tds != null && summary?.waterTank.tdsStable === false && (
+                <Badge variant="warning" title="Sensor readings are fluctuating too much to trust right now — showing the last known-good value instead of a fresh one.">
+                  Unstable — showing last known value
+                </Badge>
+              )}
+            </div>
           </CardBody>
         </Card>
 

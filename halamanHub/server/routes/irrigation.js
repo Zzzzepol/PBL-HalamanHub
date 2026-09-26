@@ -87,6 +87,10 @@ if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moisture
     if (tankFullDistanceCm !== undefined) settings.tankFullDistanceCm = tankFullDistanceCm;
     if (tankLowThresholdPercent !== undefined) settings.tankLowThresholdPercent = tankLowThresholdPercent;
 
+    const { pumpOnTimeSec, soakTimeSec } = req.body;
+    if (pumpOnTimeSec !== undefined) settings.pumpOnTimeSec = pumpOnTimeSec;
+    if (soakTimeSec !== undefined) settings.soakTimeSec = soakTimeSec;
+
     settings.updatedBy = req.user.name;
 
     await settings.save();

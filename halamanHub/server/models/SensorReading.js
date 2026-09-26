@@ -24,7 +24,8 @@ const sensorReadingSchema = new mongoose.Schema(
     waterAvailable: { type: Boolean },
 
     // Rainwater Harvesting — TDS/pH/3-state float switches
-    tds:         { type: Number },  // water TDS in ppm
+    tds:         { type: Number },   // water TDS in ppm
+    tdsStable:   { type: Boolean, default: true }, // false = ESP32 held last known-good value; this reading is not fresh
     waterPh:     { type: Number },  // water pH (distinct from soil.ph above)
     tankStatus:  { type: String, enum: ['Low', 'Medium', 'Full'] },
 

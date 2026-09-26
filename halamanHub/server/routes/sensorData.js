@@ -101,6 +101,7 @@ router.post('/', async (req, res) => {
       solenoidActive,
       activeSource: watering.activeSource || 'NONE',
       tds: water.tds,
+      tdsStable: water.tdsStable !== false, // default true — only false when firmware explicitly says so
       waterPh: water.ph,
       tankStatus: water.tankStatus,
     });

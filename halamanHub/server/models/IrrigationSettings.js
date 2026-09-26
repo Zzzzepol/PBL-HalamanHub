@@ -26,6 +26,12 @@ const irrigationSettingsSchema = new mongoose.Schema(
     tankFullDistanceCm:     { type: Number, default: 10 },  // reading when tank is full (min distance)
     tankLowThresholdPercent:{ type: Number, default: 20, min: 0, max: 100 }, // below this % counts as "LOW" for the safety switch
 
+    // Pulse irrigation ("cycle-and-soak") timing — how long the pump/solenoid
+    // stays open per pulse, and how long it waits before checking again.
+    // In seconds (friendlier for a slider UI); the ESP32 converts to ms.
+    pumpOnTimeSec: { type: Number, default: 60, min: 5, max: 600 },     // 5s–10min per pulse
+    soakTimeSec:   { type: Number, default: 300, min: 30, max: 3600 }, // 30s–1hr wait
+
     updatedBy: { type: String, default: '' }, // admin name, for the activity log
   },
   { timestamps: true }
