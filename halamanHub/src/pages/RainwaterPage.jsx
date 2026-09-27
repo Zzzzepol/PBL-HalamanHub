@@ -6,9 +6,16 @@ import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, dashboardApi, irrigationApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 import { socket } from '../socket';
-import { getWaterQualityCategory, getTankStatusInfo } from '../utils/waterQuality';
+import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
+
+const recommendationTone = {
+  high:   { card: 'border-red-200 bg-red-50/60',     badge: 'bg-red-100 text-red-800' },
+  medium: { card: 'border-amber-200 bg-amber-50/60', badge: 'bg-amber-100 text-amber-800' },
+  low:    { card: 'border-blue-200 bg-blue-50/60',   badge: 'bg-blue-100 text-blue-800' },
+  ok:     { card: 'border-green-200 bg-green-50/60', badge: 'bg-green-100 text-green-800' },
+};
 
 const formatTime = (iso) => {
   if (!iso) return '—';
@@ -95,6 +102,9 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
   };
 
   const hasError = summaryError || historyError || settingsError;
+  const waterRec = summary?.waterTank.waterQualityRecommendation
+    || getWaterQualityRecommendation(summary?.waterTank.tds ?? null);
+  const waterRecTone = recommendationTone[waterRec.severity] || recommendationTone.low;
 
   return (
     <div>
@@ -164,6 +174,38 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
           </CardBody>
         </Card>
       </div>
+
+      {/* Recommendation — proper PPM for gardening use, based on the TDS reading above */}
+      <Card className="mb-3.5">
+        <CardHeader title="Gardening-use recommendation" subtitle="Is this water safe to irrigate with, based on TDS (ppm)?" />
+        <CardBody>
+          <div className={`border rounded-md p-3.5 ${waterRecTone.card}`}>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${waterRecTone.badge}`}>
+                  {waterRec.severity === 'ok' ? 'Good' : waterRec.severity}
+                </span>
+                <span className="text-sm font-medium text-text-primary">{waterRec.category}</span>
+              </div>
+              {waterRec.reading && <span className="text-sm font-semibold text-text-primary flex-shrink-0">{waterRec.reading}</span>}
+            </div>
+            <p className="text-sm text-text-secondary leading-snug">{waterRec.message}</p>
+            {waterRec.fix && (
+              <p className="text-sm mt-2 leading-snug">
+                <span className="font-medium text-text-primary">Fix: </span>
+                <span className="text-text-secondary">{waterRec.fix}</span>
+              </p>
+            )}
+            {waterRec.diyTip && (
+              <div className="text-sm mt-1.5 leading-snug bg-green-50/70 border border-green-100 rounded px-2.5 py-1.5">
+                <span className="font-medium text-green-800">DIY option: </span>
+                <span className="text-green-900/80">{waterRec.diyTip}</span>
+              </div>
+            )}
+          </div>
+        </CardBody>
+      </Card>
+
       <div className={ps.grid.twoCol}>
         {/* Trend */}
         <Card>

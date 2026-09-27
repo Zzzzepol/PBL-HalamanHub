@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { socket } from '../socket';
 import { getSoilRecommendations } from '../utils/soilRecommendations';
-import { getWaterQualityCategory, getTankStatusInfo } from '../utils/waterQuality';
+import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
 
@@ -185,6 +185,10 @@ const OfflineReadingsPage = () => {
       temperature: air.temperature,
       humidity: air.humidity,
     });
+
+    if (water.tds != null) {
+      recs.push(getWaterQualityRecommendation(water.tds));
+    }
     // Most actionable first — an operator scanning this list should see
     // what needs attention before what's already fine.
     return [...recs].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
@@ -344,7 +348,7 @@ const OfflineReadingsPage = () => {
         {recommendations.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3">
-              <SectionHeading icon="ti-bulb" title="Soil & Environment Recommendations" subtitle="Fertilizer guidance based on current readings" />
+              <SectionHeading icon="ti-bulb" title="Soil, Water & Environment Recommendations" subtitle="Fertilizer & gardening-use (ppm) guidance based on current readings" />
               {actionableCount > 0 && (
                 <span className="text-xs font-medium px-2 py-1 rounded-full bg-red-50 text-red-800 flex-shrink-0">
                   {actionableCount} need{actionableCount === 1 ? 's' : ''} attention

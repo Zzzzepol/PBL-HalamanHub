@@ -5,7 +5,7 @@ const SensorReading = require('../models/SensorReading');
 const IrrigationSettings = require('../models/IrrigationSettings');
 const Product = require('../models/Product');
 const { getSoilRecommendations, getPlantRecommendations } = require('../utils/soilRecommendations');
-const { getWaterQualityCategory, getPhStatus, getTankStatusInfo } = require('../utils/waterQuality');
+const { getWaterQualityCategory, getPhStatus, getTankStatusInfo, getWaterQualityRecommendation } = require('../utils/waterQuality');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -98,6 +98,7 @@ router.get('/summary', async (req, res) => {
       tds: latestReading?.tds ?? null,
       tdsStable: latestReading?.tdsStable ?? true,
       waterQuality: getWaterQualityCategory(latestReading?.tds ?? null),
+      waterQualityRecommendation: getWaterQualityRecommendation(latestReading?.tds ?? null),
       waterPh: latestReading?.waterPh ?? null,
       waterPhStatus: getPhStatus(latestReading?.waterPh ?? null),
       tankStatus3: latestReading?.tankStatus ?? null,
