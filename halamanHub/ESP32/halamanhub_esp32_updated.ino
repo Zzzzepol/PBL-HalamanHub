@@ -100,6 +100,15 @@ bool   g_tdsStable       = true; // false = last batch was too noisy to trust
 // noise floor, then set this comfortably above that.
 #define TDS_MAX_COEFF_VARIATION 0.15
 
+// Calibration factor for the TDS probe. Starts at 1.0 — no effect until you
+// tune it. To calibrate: dip the probe in a known TDS reference solution
+// (commonly sold as ~342ppm, 500ppm, or 1000ppm calibration fluid), watch
+// what the serial monitor reports, then set this to:
+//   TDS_CALIBRATION_FACTOR = (known reference ppm) / (reading your serial monitor shows)
+// Example: reference solution is 342ppm, serial monitor shows 300ppm before
+// calibrating -> set this to 342.0 / 300.0 = 1.14
+#define TDS_CALIBRATION_FACTOR 1.0
+
 // Control state fetched from the server each cycle — replaces the old
 // hardcoded MOISTURE_DRY / MOISTURE_WET #defines
 String g_mode           = "auto";
@@ -336,6 +345,8 @@ float readTdsPpm(float temperatureC) {
   float tds = (133.42 * compensationVoltage * compensationVoltage * compensationVoltage
              - 255.86 * compensationVoltage * compensationVoltage
              + 857.39 * compensationVoltage) * 0.5;
+
+  tds *= TDS_CALIBRATION_FACTOR;
 
   return tds < 0 ? 0 : tds;
 }
