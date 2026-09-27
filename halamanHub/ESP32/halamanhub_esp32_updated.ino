@@ -129,25 +129,32 @@ unsigned long   g_stateEnteredAt  = 0;
 int             g_currentCycle    = 0;
 bool            g_lockoutError    = false;
 
-// -------------------------------------------------------
 
+unsigned long g_lastWifiAttempt = 0;
+const unsigned long WIFI_RETRY_COOLDOWN_MS = 10000; // don't retry more than once per 10s
+bool g_wifiWasConnected = false; // tracks previous state so we print on CHANGE, not spam every loop
+
+// Non-blocking, but still prints the same "Connecting..." / "Connected! IP:
+// ..." lines you're used to on the Serial monitor — they just print as
+// WiFi.status() actually changes (checked every loop() iteration), instead
+// of freezing the whole loop() for up to 10 seconds to wait for them.
 void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
+  bool isConnected = (WiFi.status() == WL_CONNECTED);
 
-  Serial.print("Connecting to Wi-Fi");
+  if (isConnected && !g_wifiWasConnected) {
+    Serial.println("Wi-Fi Connected! IP: " + WiFi.localIP().toString());
+  } else if (!isConnected && g_wifiWasConnected) {
+    Serial.println("Wi-Fi disconnected.");
+  }
+  g_wifiWasConnected = isConnected;
+
+  if (isConnected) return;
+  if (millis() - g_lastWifiAttempt < WIFI_RETRY_COOLDOWN_MS) return;
+  g_lastWifiAttempt = millis();
+
+  Serial.println("Connecting to Wi-Fi...");
+  WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWi-Fi Connected! IP: " + WiFi.localIP().toString());
-  } else {
-    Serial.println("\nWi-Fi connection failed. Will retry next loop.");
-  }
-}
 
 void setRS485Mode(bool transmit) {
   digitalWrite(DE_PIN, transmit);
@@ -204,6 +211,7 @@ bool fetchControlSettings() {
   if (WiFi.status() != WL_CONNECTED) return false;
 
   HTTPClient http;
+  http.setTimeout(1500); // fail fast — see note in sendTelemetryToBackend()
   http.begin(CONTROL_URL);
   int httpCode = http.GET();
 
@@ -589,11 +597,14 @@ void buildTelemetryPayload(char *payload, size_t payloadSize) {
 // actually feeds the dashboard.
 void sendTelemetryToBackend(const char *payload) {
   if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-    if (WiFi.status() != WL_CONNECTED) return;
+    connectWiFi(); // non-blocking — just kicks off a reconnect if it's time
+    if (WiFi.status() != WL_CONNECTED) return; // still not connected, skip this cycle
   }
 
   HTTPClient http;
+  http.setTimeout(1500); // fail fast instead of the ~5s+ default — one slow or
+                          // unreachable request used to stall the whole 2s
+                          // loop, delaying every reading (WiFi AND USB) behind it
   http.begin(SERVER_URL);
   http.addHeader("Content-Type", "application/json");
 
@@ -642,6 +653,7 @@ void setup() {
 
 void loop() {
   // ---- Runs every iteration, NEVER blocked by delay() ----
+  connectWiFi(); // cheap status check + prints on change; real (re)connect attempts still respect the cooldown inside
   enforceTankSafety();
 
   if (g_mode == "manual") {

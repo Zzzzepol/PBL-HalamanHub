@@ -65,9 +65,14 @@ router.post('/', async (req, res) => {
     console.warn('[Socket.io] Broadcast skipped:', socketErr.message);
   }
 
-  // ---- Everything below here requires MongoDB. If it's unreachable, we
-  // still respond success above (live view already updated) — history,
-  // alerts, and irrigation logs are simply skipped until the DB is back. ----
+  // ---- Respond to the ESP32 right away. The live view above is already
+  // updated, and the ESP32's HTTP POST is BLOCKING on this main loop — every
+  // ms spent waiting here is a ms the next sensor reading (and the USB
+  // TELEMETRY line the offline dashboard reads from) is delayed. Everything
+  // below is MongoDB history/alerts bookkeeping the ESP32 doesn't need to
+  // wait on, so it now runs in the background, after we've already replied. ----
+  res.status(202).json({ status: 'ok-queued' });
+
   try {
     // ---- 1. Update live snapshots (Dashboard / Sensors page) ----
     await Promise.all([
@@ -179,12 +184,12 @@ if (events.length > 0) {
       console.warn('[Socket.io] Broadcast skipped:', socketErr.message);
     }
 
-    res.status(201).json({ status: 'ok', readingId: reading._id, mode: 'full' });
+    console.log(`[sensor-data] Background history save complete (reading ${reading._id}).`);
   } catch (err) {
-    console.error('Sensor ingestion (database) error — live view was still updated:', err.message);
-    // Live view already succeeded above, so this is not a hard failure —
-    // just tell the caller the DB-backed extras (history/alerts) were skipped.
-    res.status(201).json({ status: 'ok-live-only', message: 'Live reading updated; database unavailable, history/alerts skipped.' });
+    console.error('Sensor ingestion (database) error — live view/response were already sent:', err.message);
+    // The ESP32 already got its 202 response above and moved on to its next
+    // reading — this only means history/alerts for this one sample were
+    // skipped, not that the live dashboard missed it.
   }
 });
 

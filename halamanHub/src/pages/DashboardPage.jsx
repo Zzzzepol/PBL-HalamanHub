@@ -113,7 +113,7 @@ const DashboardPage = () => {
           long ones (e.g. "162 uS/cm") take up the same row height, no ragged
           whitespace from a variable-height card grid. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 !mb-3">
-        <StatRow icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" trend="Live" trendDir="ok" />
+        <StatRow icon="ti-radar" iconVariant="green" value={summary?.activeSensors ?? '—'} label="Active sensors" />
         <StatRow icon="ti-droplet" iconVariant="blue" value={summary?.soilMoisture.value != null ? `${summary.soilMoisture.value}%` : '—'} label="Soil moisture" trend={liveLabel(summary?.soilMoisture.status)} trendDir={liveTrend(summary?.soilMoisture.status)} />
         <StatRow icon="ti-seedling" iconVariant="green" value={summary?.npk.nitrogen != null ? `${summary.npk.nitrogen} mg/kg` : '—'} label="Nitrogen" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />
         <StatRow icon="ti-leaf" iconVariant="green" value={summary?.npk.phosphorus != null ? `${summary.npk.phosphorus} mg/kg` : '—'} label="Phosphorus" trend={liveLabel(summary?.npk.status)} trendDir={liveTrend(summary?.npk.status)} />

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardBody, StatCard, Badge, Button, RangeInput } from '../components/ui/UI';
 import { WaterLevelTrendChart } from '../components/charts/Charts';
 import { useAuth } from '../context/AuthContext';
@@ -38,8 +38,16 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
 
   // real-time updates — socket pushes new readings instantly, polling above
   // just stays as a slower fallback in case the socket ever drops.
+  const lastReadingRefetch = useRef(0);
   useEffect(() => {
     const handleReading = () => {
+      // Throttle — a live reading can arrive every ~2s. Without this, a
+      // burst (e.g. right after a reconnect) fires overlapping Mongo
+      // queries that can resolve out of order and make the dashboard look
+      // like it's lagging behind the actual sensor.
+      const now = Date.now();
+      if (now - lastReadingRefetch.current < 3000) return;
+      lastReadingRefetch.current = now;
       refetchSummary();
       refetchHistory();
     };
