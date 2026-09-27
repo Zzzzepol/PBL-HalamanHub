@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { irrigationApi, dashboardApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
-import { socket } from '../socket';
+import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
 const reasonLabel = {
   auto_dry: { label: 'Auto — soil dry', variant: 'default' },
@@ -24,23 +24,13 @@ const IrrigationPage = () => {
   const { data: logs, error: logsError, refetch: refetchLogs } = useApiData((t) => irrigationApi.getLogs(t, 50), [], 30000);
   const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
 
-  // real-time updates — socket pushes new readings instantly, polling above
-  // just stays as a slower fallback in case the socket ever drops.
-  useEffect(() => {
-    const handleReading = () => refetchSummary();
-    const handleLog = () => {
-      refetchLogs();
-      refetchSummary();
-    };
-    socket.on('sensor:reading', handleReading);
-    socket.on('sensor:status', handleReading);
-    socket.on('irrigation:log', handleLog);
-    return () => {
-      socket.off('sensor:reading', handleReading);
-      socket.off('sensor:status', handleReading);
-      socket.off('irrigation:log', handleLog);
-    };
-  }, [refetchSummary, refetchLogs]);
+  // real-time updates — sensor readings throttled; irrigation:log (pump/
+  // solenoid on/off) is a rare discrete event so it fires instantly.
+  useLiveRefetch(['sensor:reading', 'sensor:status'], refetchSummary);
+  useLiveRefetch('irrigation:log', () => {
+    refetchLogs();
+    refetchSummary();
+  }, 0);
 
   const [dryThreshold, setDryThreshold] = useState(30);
   const [wetThreshold, setWetThreshold] = useState(60);

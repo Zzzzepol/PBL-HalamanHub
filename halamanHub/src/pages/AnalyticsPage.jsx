@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, CardBody, Button } from '../components/ui/UI';
 import {
   PHTrendChart, ECTrendChart, NPKTrendChart, IrrigationHistoryChart, TempHumidityChart,
@@ -6,7 +6,7 @@ import {
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, irrigationApi, ApiError } from '../api/client';
 import * as s from './pageStyles';
-import { socket } from '../socket';
+import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
 const RANGE_HOURS = { Daily: 24, Weekly: 24 * 7, Monthly: 24 * 30 };
 const ranges = ['Daily', 'Weekly', 'Monthly'];
@@ -35,20 +35,10 @@ const { data: history, error: historyError, refetch: refetchHistory } =
   const { data: logs, error: logsError, refetch: refetchLogs } =
     useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours], 60000);
 
-  // real-time updates — socket pushes new readings instantly, polling above
-  // just stays as a slower fallback in case the socket ever drops.
-  useEffect(() => {
-    const handleReading = () => refetchHistory();
-    const handleLog = () => refetchLogs();
-    socket.on('sensor:reading', handleReading);
-    socket.on('sensor:status', handleReading);
-    socket.on('irrigation:log', handleLog);
-    return () => {
-      socket.off('sensor:reading', handleReading);
-      socket.off('sensor:status', handleReading);
-      socket.off('irrigation:log', handleLog);
-    };
-  }, [refetchHistory, refetchLogs]);
+  // real-time updates — sensor readings throttled to avoid overlapping
+  // refetches; irrigation:log is a rare discrete event so it stays instant.
+  useLiveRefetch(['sensor:reading', 'sensor:status'], refetchHistory);
+  useLiveRefetch('irrigation:log', refetchLogs, 0);
   const points = history || [];
 
   const pointLabel = (iso) =>

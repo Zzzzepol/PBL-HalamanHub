@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardHeader, Table, Badge, StatCard, SearchBar } from '../components/ui/UI';
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
-import { socket } from '../socket';
+import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
 const statusBadge = {
   ok: { variant: 'ok', label: 'Online' },
@@ -22,17 +22,8 @@ const formatTime = (iso) => {
 const SensorsPage = () => {
 const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000, 'admin:sensors:list');
 
-  // real-time updates — socket pushes new readings instantly, polling above
-  // just stays as a slower fallback in case the socket ever drops.
-  useEffect(() => {
-    const handleReading = () => refetch();
-    socket.on('sensor:reading', handleReading);
-    socket.on('sensor:status', handleReading);
-    return () => {
-      socket.off('sensor:reading', handleReading);
-      socket.off('sensor:status', handleReading);
-    };
-  }, [refetch]);
+  // real-time updates — throttled via useLiveRefetch.
+  useLiveRefetch(['sensor:reading', 'sensor:status'], refetch);
 
   const [search, setSearch] = useState('');
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardBody, Badge, Button, PulseDot } from '../components/ui/UI';
 import { NPKRing } from '../components/charts/Widgets';
@@ -6,7 +6,7 @@ import { MoistureTrendChart } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
 import { dashboardApi, sensorsApi, alertsApi, ApiError } from '../api/client';
 import * as s from './pageStyles';
-import { socket } from '../socket';
+import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -57,19 +57,9 @@ const DashboardPage = () => {
   const [selectedPlant, setSelectedPlant] = useState(null);
 
   const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
-  // real-time updates — socket pushes new readings instantly, polling above
-  // just stays as a slower fallback in case the socket ever drops.
-  useEffect(() => {
-    const handleReading = () => {
-      refetchSummary();
-    };
-    socket.on('sensor:reading', handleReading);
-    socket.on('sensor:status', handleReading);
-    return () => {
-      socket.off('sensor:reading', handleReading);
-      socket.off('sensor:status', handleReading);
-    };
-  }, [refetchSummary]);
+  // real-time updates — throttled via useLiveRefetch so a burst of socket
+  // events (e.g. right after a reconnect) can't fire overlapping refetches.
+  useLiveRefetch(['sensor:reading', 'sensor:status'], refetchSummary);
   const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
   const { data: history } = useApiData(
     (token) => sensorsApi.getHistory(token, RANGE_HOURS[range]),

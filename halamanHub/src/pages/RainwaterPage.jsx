@@ -1,11 +1,11 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardHeader, CardBody, StatCard, Badge, Button, RangeInput } from '../components/ui/UI';
 import { WaterLevelTrendChart } from '../components/charts/Charts';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, dashboardApi, irrigationApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
-import { socket } from '../socket';
+import { useLiveRefetch } from '../hooks/useLiveRefetch';
 import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
@@ -36,28 +36,12 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
   const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } =
     useApiData(irrigationApi.getSettings, [], 30000);
 
-  // real-time updates — socket pushes new readings instantly, polling above
-  // just stays as a slower fallback in case the socket ever drops.
-  const lastReadingRefetch = useRef(0);
-  useEffect(() => {
-    const handleReading = () => {
-      // Throttle — a live reading can arrive every ~2s. Without this, a
-      // burst (e.g. right after a reconnect) fires overlapping Mongo
-      // queries that can resolve out of order and make the dashboard look
-      // like it's lagging behind the actual sensor.
-      const now = Date.now();
-      if (now - lastReadingRefetch.current < 3000) return;
-      lastReadingRefetch.current = now;
-      refetchSummary();
-      refetchHistory();
-    };
-    socket.on('sensor:reading', handleReading);
-    socket.on('sensor:status', handleReading);
-    return () => {
-      socket.off('sensor:reading', handleReading);
-      socket.off('sensor:status', handleReading);
-    };
-  }, [refetchSummary, refetchHistory]);
+  // real-time updates — throttling now lives inside useLiveRefetch, shared
+  // across all admin pages instead of a page-local useRef/useEffect.
+  useLiveRefetch(['sensor:reading', 'sensor:status'], () => {
+    refetchSummary();
+    refetchHistory();
+  });
 
   const [emptyDist, setEmptyDist] = useState(100);
   const [fullDist, setFullDist] = useState(10);
@@ -125,12 +109,6 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
 
       {/* Stats */}
       <div className={ps.grid.stats4}>
-        <StatCard
-          icon={summary?.waterTank.available ? 'ti-droplet' : 'ti-alert-triangle'}
-          iconVariant={summary?.waterTank.available ? 'green' : 'red'}
-          value={summary?.waterTank.available ? 'OK' : 'LOW'}
-          label="Tank status"
-        />
         <StatCard icon="ti-gauge" iconVariant="blue" value={summary?.waterTank.percent != null ? `${summary.waterTank.percent}%` : '—'} label="Fill level" />
         <StatCard icon="ti-chart-line" iconVariant="teal" value={availablePct != null ? `${availablePct}%` : '—'} label={`Time above threshold (${range})`} />
         <StatCard icon="ti-clock" iconVariant="amber" value={formatTime(summary?.irrigation.lastUpdated)} label="Last reading" />
