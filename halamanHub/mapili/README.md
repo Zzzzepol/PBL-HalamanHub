@@ -50,13 +50,15 @@ npm install --legacy-peer-deps
 ```bash
 cp .env.example .env
 ```
-Edit `.env` if your backend runs on a different port.
+On Windows PowerShell, use `Copy-Item .env.example .env` if `cp` is unavailable. The example includes the Google OAuth client ID required to render the Google sign-in button. If you use a different Google OAuth client, set `REACT_APP_GOOGLE_CLIENT_ID` in `.env` and add `http://localhost:3001` as an authorized JavaScript origin in Google Cloud Console. Edit `REACT_APP_API_URL` if your backend runs on a different port.
 
 ### 3. Start the shop
 ```bash
 npm start
 ```
 Opens at `http://localhost:3001`
+
+Restart the development server after changing `.env`; Create React App reads these variables at startup.
 
 ---
 
