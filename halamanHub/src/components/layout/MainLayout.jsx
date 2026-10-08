@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import { useApiData } from '../../hooks/useApiData';
 import { alertsApi, ordersApi } from '../../api/client';
+import { WeatherProvider } from '../../context/WeatherContext';
 
 const formatTime = (iso) => {
   const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -30,7 +31,8 @@ const MainLayout = () => {
   }));
 
   return (
-    <div className="flex min-h-screen bg-bg-tertiary">
+    <WeatherProvider>
+      <div className="flex min-h-screen bg-bg-tertiary">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -50,7 +52,8 @@ const MainLayout = () => {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </WeatherProvider>
   );
 };
 

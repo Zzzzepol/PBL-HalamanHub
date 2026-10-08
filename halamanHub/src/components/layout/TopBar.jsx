@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { SearchBar, Avatar, Button, FormField, Input } from '../ui/UI';
+import { Avatar, Button, FormField, Input } from '../ui/UI';
 import { useAuth } from '../../context/AuthContext';
 import { alertsApi, usersApi, ApiError } from '../../api/client';
+import { useWeather } from '../../context/WeatherContext';
+import { WeatherModal, weatherIcon } from './WeatherForecast';
 
 const pageTitles = {
   '/':           { title: 'Dashboard',             sub: 'Farm overview & live readings' },
@@ -24,20 +26,15 @@ const notifIconBg = {
   ok:      'bg-green-50 text-green-800',
 };
 
-// Very small heuristic: if the search text looks like it's about sensors,
-// send them to Sensor Monitoring; otherwise Orders (by far the most common
-// thing an admin searches for — order number or customer name) is the
-// better default landing spot.
-const SENSOR_KEYWORDS = ['moisture', 'temp', 'ph', 'ec', 'humid', 'npk', 'nitrogen', 'phosphorus', 'potassium', 'water', 'tank', 'sensor'];
-
 const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, token } = useAuth();
-  const [search, setSearch] = useState('');
+  const { weather, locationName } = useWeather();
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showWeather, setShowWeather] = useState(false);
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [pwError, setPwError] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
@@ -63,18 +60,17 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
   };
   const page = pageTitles[location.pathname] || pageTitles['/'];
   const unreadCount = notifications.filter(n => !n.read).length;
+  const rainChance = weather?.daily?.precipitation_probability_max?.[0];
+  const rainText = rainChance == null
+    ? 'Rain chance unavailable'
+    : rainChance >= 60 ? `Rain likely today, ${rainChance}% chance`
+      : rainChance >= 30 ? `Rain possible today, ${rainChance}% chance`
+        : rainChance > 0 ? `Low chance of rain today, ${rainChance}%`
+          : 'No rain expected today';
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
-  };
-
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    const q = search.trim();
-    if (!q) return;
-    const looksLikeSensor = SENSOR_KEYWORDS.some(kw => q.toLowerCase().includes(kw));
-    navigate(looksLikeSensor ? '/sensors' : `/orders?q=${encodeURIComponent(q)}`);
   };
 
   const markOneRead = async (id) => {
@@ -114,10 +110,21 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
       </div>
 
       <div className="flex items-center gap-2.5 ml-auto flex-shrink-0">
-        {/* Search */}
-        <form className="w-60 max-lg:w-44 max-md:hidden" onSubmit={handleSearchSubmit}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Search orders, sensors… (Enter)" />
-        </form>
+        <button
+          type="button"
+          className="flex h-9 items-center gap-1.5 rounded-md border-[0.5px] border-border bg-bg-primary px-2 text-xs text-text-primary hover:bg-bg-secondary sm:gap-2 sm:px-2.5"
+          onClick={() => setShowWeather(true)}
+          aria-label={`Open local weather forecast for ${locationName || 'your detected location'}. ${rainText}`}
+          title={`${locationName || 'Detected location'} · ${rainText}`}
+        >
+          <i className={`ti ${weather?.current ? weatherIcon(weather.current.weather_code, weather.current.is_day) : 'ti-cloud-sun'} text-lg text-sky-700`} aria-hidden="true" />
+          {locationName && <span className="max-w-[52px] truncate text-[10px] text-text-secondary sm:max-w-[84px] sm:text-[11px]">{locationName.split(',')[0]}</span>}
+          <span className="font-semibold">{weather?.current ? `${Math.round(weather.current.temperature_2m)}°` : 'Weather'}</span>
+          <span className="flex items-center gap-1 border-l border-border pl-1.5 text-sky-800 sm:pl-2">
+            <i className="ti ti-cloud-rain" aria-hidden="true" />
+            <span>{rainChance == null ? '—' : `${rainChance}%`}</span>
+          </span>
+        </button>
 
         {/* Notifications */}
         <div className="relative">
@@ -241,6 +248,7 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
           </div>
         </div>
       )}
+      {showWeather && <WeatherModal onClose={() => setShowWeather(false)} />}
     </header>
   );
 };

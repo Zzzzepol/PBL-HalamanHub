@@ -6,7 +6,8 @@ import { useApiData } from '../hooks/useApiData';
 import { sensorsApi, dashboardApi, irrigationApi, ApiError } from '../api/client';
 import * as ps from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
-import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
+import { getWaterQualityRecommendation } from '../utils/waterQuality';
+import WeatherForecast from '../components/layout/WeatherForecast';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -57,7 +58,7 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
     }
   }, [settings]);
 
-  const points = history || [];
+  const points = useMemo(() => history || [], [history]);
 
   const chart = useMemo(() => ({
     labels: points.map(p =>
@@ -106,6 +107,13 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
           <button className="underline" onClick={() => { refetchSummary(); refetchHistory(); refetchSettings(); }}>Retry</button>
         </div>
       )}
+
+      <Card className="mb-3.5">
+        <CardHeader title="Local weather & rain outlook" subtitle="Live conditions and a location-based seven-day forecast to help plan rainwater collection and irrigation" />
+        <CardBody>
+          <WeatherForecast />
+        </CardBody>
+      </Card>
 
       {/* Stats */}
       <div className={ps.grid.stats4}>
@@ -253,8 +261,8 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
       <div className="text-sm text-text-secondary mt-2 flex items-start gap-1.5">
         <i className="ti ti-info-circle flex-shrink-0 mt-0.5" aria-hidden="true" />
         <span>
-          Fill level is calculated from ultrasonic distance, using the calibration above. There's still no flow meter or rain
-          gauge installed, so litres collected/used and rainfall forecasts aren't something this system measures.
+          Fill level is calculated from ultrasonic distance, using the calibration above. The forecast above is external
+          weather data; without an onsite rain gauge or flow meter, this system cannot verify rainfall or calculate litres collected/used.
         </span>
       </div>
     </div>
