@@ -1,6 +1,7 @@
 // HalamanHub Server — Irrigation Zone model
 
 const mongoose = require('mongoose');
+const { localConnection } = require('../config/connections');
 
 const irrigationZoneSchema = new mongoose.Schema(
   {
@@ -17,4 +18,4 @@ const irrigationZoneSchema = new mongoose.Schema(
 
 irrigationZoneSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('IrrigationZone', irrigationZoneSchema);
+module.exports = localConnection.model('IrrigationZone', irrigationZoneSchema);

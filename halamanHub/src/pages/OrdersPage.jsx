@@ -40,6 +40,7 @@ const PAYMENT_BADGE = {
 const PAGE_SIZE = 6;
 const formatDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const formatTime = (iso) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const manilaDateKey = (value) => value ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value)) : '';
 
 const emptyForm = { customer: '', customerEmail: '', customerPhone: '', product: '', quantity: 1, amount: '', note: '', payment: 'unpaid' };
 
@@ -82,10 +83,10 @@ const OrdersPage = () => {
   const paged       = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Advance order status
-  const advanceStatus = async (order, nextStatus) => {
+  const advanceStatus = async (order, nextStatus, note = '') => {
     setActionLoading(true);
     try {
-      const updated = await ordersApi.updateStatus(order._id, nextStatus, actionNote, token);
+      const updated = await ordersApi.updateStatus(order._id, nextStatus, note || actionNote, token);
       setOrders(list.map(o => o._id === updated._id ? updated : o));
       if (detailOrder?._id === updated._id) setDetailOrder(updated);
       setActionNote('');
@@ -157,6 +158,20 @@ const OrdersPage = () => {
   };
 
   const statusFilters = ['All', 'pending', 'confirmed', 'processing', 'ready', 'completed', 'cancelled'];
+  const todayKey = manilaDateKey(new Date());
+  const pickupReadyToday = list.filter(order => order.fulfillmentType === 'pickup'
+    && order.status === 'ready'
+    && (!order.pickupDate || manilaDateKey(order.pickupDate) <= todayKey));
+  const workQueue = list.filter(order => {
+    if (['completed', 'cancelled'].includes(order.status)) return false;
+    if (['pending', 'confirmed', 'processing'].includes(order.status)) return true;
+    return order.fulfillmentType === 'pickup' && order.status === 'ready'
+      && (!order.pickupDate || manilaDateKey(order.pickupDate) <= todayKey);
+  }).sort((a, b) => {
+    const orderRank = { pending: 0, confirmed: 1, processing: 2, ready: 3 };
+    return (orderRank[a.status] ?? 9) - (orderRank[b.status] ?? 9)
+      || new Date(a.pickupDate || a.orderDate) - new Date(b.pickupDate || b.orderDate);
+  });
 
   return (
     <div>
@@ -173,6 +188,39 @@ const OrdersPage = () => {
       {error && (
         <div className="mb-4"><ErrorState title="Orders are not loading" description="Check your connection, then try again." onRetry={refetch} /></div>
       )}
+
+      {!error && <Card className="mb-4">
+        <CardHeader title="Today’s nursery work" subtitle="The next step for orders that need staff attention." />
+        {loading && !orders ? <p className="px-4 pb-4 text-sm text-text-secondary" role="status">Loading today’s order tasks…</p> : <>
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+          <button type="button" className="rounded-xl border border-border bg-white p-3 text-left hover:bg-bg-secondary" onClick={() => { setStatusFilter('pending'); setPage(1); }}>
+            <span className="block text-sm text-text-secondary">Review new orders</span><strong className="mt-1 block text-2xl text-text-primary">{counts.pending}</strong>
+          </button>
+          <button type="button" className="rounded-xl border border-border bg-white p-3 text-left hover:bg-bg-secondary" onClick={() => { setStatusFilter('confirmed'); setPage(1); }}>
+            <span className="block text-sm text-text-secondary">Accepted, ready to prepare</span><strong className="mt-1 block text-2xl text-text-primary">{counts.confirmed}</strong>
+          </button>
+          <button type="button" className="rounded-xl border border-border bg-white p-3 text-left hover:bg-bg-secondary" onClick={() => { setStatusFilter('ready'); setPage(1); }}>
+            <span className="block text-sm text-text-secondary">Ready for pickup today</span><strong className="mt-1 block text-2xl text-text-primary">{pickupReadyToday.length}</strong>
+          </button>
+        </div>
+        {workQueue.length ? <div className="divide-y divide-border border-t border-border px-4">
+          {workQueue.slice(0, 5).map(order => {
+            const flow = getStatusFlow(order)[order.status];
+            const isFuturePickup = order.status === 'ready' && order.fulfillmentType === 'pickup'
+              && order.pickupDate && manilaDateKey(order.pickupDate) > todayKey;
+            return <div key={order._id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <button type="button" className="min-w-0 text-left" onClick={() => setDetailOrder(order)}>
+                <span className="block font-semibold text-text-primary">{order.orderNumber} · {order.customer}</span>
+                <span className="block truncate text-sm text-text-secondary">{order.product} · {order.fulfillmentType === 'pickup' ? `Pickup${order.pickupDate ? ` ${formatDate(order.pickupDate)}` : ''}` : 'Delivery'} · {flow?.label}</span>
+              </button>
+              {isFuturePickup
+                ? <Button size="sm" variant="default" icon="ti-eye" onClick={() => setDetailOrder(order)}>View order</Button>
+                : flow?.next && <Button size="sm" variant="primary" icon="ti-arrow-right" onClick={() => advanceStatus(order, flow.next, `Staff updated order from the daily work queue: ${flow.nextLabel}.`)} disabled={actionLoading}>{flow.nextLabel}</Button>}
+            </div>;
+          })}
+        </div> : <p className="border-t border-border px-4 py-4 text-sm text-text-secondary">No orders need a staff step right now.</p>}
+        </>}
+      </Card>}
 
       {/* Filters */}
       <div className={ps.filterBar}>

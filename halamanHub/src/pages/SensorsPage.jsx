@@ -21,7 +21,9 @@ const sensorTypeLabel = (type = '') => {
 
 const connectionFor = sensor => sensor.status === 'offline'
   ? { label: 'No signal', status: 'none', rank: 0 }
-  : { label: 'Connected', status: 'good', rank: 1 };
+  : sensor.status === 'warning'
+    ? { label: 'Connected · check reading', status: 'check', rank: 1 }
+    : { label: 'Connected', status: 'good', rank: 1 };
 
 const SensorsPage = () => {
   const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000, 'admin:sensors:list');

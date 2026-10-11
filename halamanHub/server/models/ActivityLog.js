@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { adminConnection } = require('../config/connections');
 
 const activityLogSchema = new mongoose.Schema(
   {
@@ -20,4 +21,4 @@ activityLogSchema.set('toJSON', {
   transform: (doc, ret) => { delete ret.__v; return ret; } 
 });
 
-module.exports = mongoose.model('ActivityLog', activityLogSchema);
+module.exports = adminConnection.model('ActivityLog', activityLogSchema);

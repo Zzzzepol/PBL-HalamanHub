@@ -7,7 +7,9 @@ import { getSoilRecommendations } from '../utils/soilRecommendations';
 import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
 import { timeAgo } from '../utils/timeAgo';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
+const PAGE_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const API_HOST = /^(localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|[a-z0-9-]+\.local)$/i.test(PAGE_HOST) ? PAGE_HOST : 'localhost';
+const API_BASE = process.env.REACT_APP_API_URL || `http://${API_HOST}:4000/api`;
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, ok: 3 };
 const statusFromSeverity = severity => ({ high: 'action', medium: 'check', low: 'check', ok: 'good' }[severity] || 'none');
 const friendlyCategory = (category = '') => category
@@ -22,6 +24,7 @@ const OfflineReadingsPage = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
   const loadReading = useCallback(() => {
     setLoading(true); setError(false);
@@ -35,6 +38,10 @@ const OfflineReadingsPage = () => {
 
   useEffect(() => { loadReading(); }, [loadReading]);
   useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 2000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
     const handleReading = data => { setReading(data); setLastUpdated(data.recordedAt || new Date().toISOString()); setError(false); };
     socket.on('sensor:reading', handleReading);
     return () => socket.off('sensor:reading', handleReading);
@@ -44,22 +51,28 @@ const OfflineReadingsPage = () => {
   const air = reading?.air || {};
   const watering = reading?.watering || {};
   const water = reading?.water || {};
-  const waterQuality = getWaterQualityCategory(water.tds ?? null);
+  const readingAt = reading?.recordedAt ? new Date(reading.recordedAt).getTime() : NaN;
+  const deviceOnline = Number.isFinite(readingAt) && now - readingAt <= 15000;
+  const soilReadingValid = deviceOnline && watering.soilReadingValid !== false;
+  const tankReadingValid = deviceOnline && watering.tankReadingValid !== false;
+  const airReadingValid = deviceOnline && air.readingValid !== false;
+  const tankTds = deviceOnline ? water.tds ?? null : null;
+  const waterQuality = getWaterQualityCategory(tankTds);
   const tankStatus = getTankStatusInfo(water.tankStatus ?? null);
   const recommendations = useMemo(() => {
-    if (!reading) return [];
-    const items = getSoilRecommendations({ ph: soil.ph, ec: soil.ec, nitrogen: soil.nitrogen, phosphorus: soil.phosphorus, potassium: soil.potassium, temperature: air.temperature, humidity: air.humidity });
-    if (water.tds != null) items.push(getWaterQualityRecommendation(water.tds));
+    if (!reading || !soilReadingValid) return [];
+    const items = getSoilRecommendations({ ph: soil.ph, ec: soil.ec, nitrogen: soil.nitrogen, phosphorus: soil.phosphorus, potassium: soil.potassium, temperature: airReadingValid ? air.temperature : null, humidity: airReadingValid ? air.humidity : null });
+    if (deviceOnline && water.tds != null) items.push(getWaterQualityRecommendation(water.tds));
     return items.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
     // The recommendation functions are pure and always read from this latest snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reading]);
+  }, [reading, deviceOnline, soilReadingValid, tankReadingValid, airReadingValid]);
 
   const needsAction = recommendations.filter(item => item.severity === 'high').length;
   const needsCheck = recommendations.filter(item => item.severity === 'medium').length;
-  const hasReadings = Boolean(reading && (soil.moisture != null || watering.levelPercent != null || air.temperature != null));
+  const hasReadings = Boolean(reading && ((soilReadingValid && soil.moisture != null) || (tankReadingValid && watering.levelPercent != null) || (airReadingValid && air.temperature != null)));
   const overallStatus = !hasReadings ? 'none' : needsAction ? 'action' : needsCheck ? 'check' : 'good';
-  const wateringNow = Boolean(watering.pumpActive || watering.solenoidActive);
+  const wateringNow = Boolean(deviceOnline && (watering.pumpActive || watering.solenoidActive));
 
   return (
     <div className="min-h-screen bg-bg-tertiary">
@@ -72,6 +85,11 @@ const OfflineReadingsPage = () => {
 
       <main className="mx-auto max-w-5xl space-y-5 px-4 py-5 pb-8 sm:px-6">
         <p className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><i className="ti ti-info-circle mt-0.5" aria-hidden="true" />No internet. Showing live readings from the device.</p>
+        {reading?.monitoringLocation && <p className="rounded-xl border border-border bg-white p-3 text-sm text-text-secondary"><strong className="text-text-primary">Monitoring area:</strong> {reading.monitoringLocation}{reading.monitoredPlantNames?.length ? ` · shared sample for ${reading.monitoredPlantNames.join(', ')}` : ''}</p>}
+        {reading?.bufferDroppedSamples > 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">The device buffer filled during a local connection gap. {reading.bufferDroppedSamples} readings were skipped since the ESP32 last restarted.</p>}
+        {reading?.bufferRestartLossCount > 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">The ESP32 restarted with unsent readings {reading.bufferRestartLossCount} time{reading.bufferRestartLossCount === 1 ? '' : 's'}; history may have gaps.</p>}
+        {reading && !deviceOnline && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">No recent reading from the device. Check its local Wi-Fi connection.</p>}
+        {reading && (!soilReadingValid || !tankReadingValid || !airReadingValid) && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">{!soilReadingValid || !tankReadingValid ? `${!soilReadingValid && !tankReadingValid ? 'Soil and tank readings have not updated.' : !soilReadingValid ? 'The soil reading has not updated.' : 'The tank reading has not updated.'} Watering is paused for safety.${!airReadingValid ? ' The air reading also needs attention.' : ''}` : 'The air reading has not updated. Soil and tank readings are still available.'}</p>}
         <section className={`rounded-2xl border p-4 ${overallStatus === 'action' ? 'border-red-200 bg-red-50' : overallStatus === 'check' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-live="polite">
           <div className="flex items-start gap-3"><i className={`ti ${overallStatus === 'action' ? 'ti-alert-circle text-red-700' : overallStatus === 'check' ? 'ti-alert-triangle text-amber-800' : overallStatus === 'none' ? 'ti-hourglass text-gray-700' : 'ti-circle-check text-green-800'} mt-0.5 text-xl`} aria-hidden="true" /><div><h2 className="font-semibold text-text-primary">{!hasReadings ? 'Waiting for a reading.' : needsAction ? `${needsAction} thing${needsAction === 1 ? '' : 's'} need your attention.` : needsCheck ? 'A few readings are worth checking soon.' : 'Your plants look healthy.'}</h2><p className="mt-1 text-sm text-text-secondary">{needsAction || needsCheck ? 'See the next steps below.' : 'This screen updates when the device sends a new reading.'}</p></div></div>
         </section>
@@ -81,10 +99,10 @@ const OfflineReadingsPage = () => {
 
         <section aria-label="Key readings">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <BigStat icon="ti-droplet" label="Soil wetness" value={soil.moisture ?? '—'} unit={soil.moisture != null ? '%' : ''} status={soil.moisture == null ? 'none' : 'good'} />
-            <BigStat icon="ti-glass-full" label="Water tank" value={watering.levelPercent != null ? watering.levelPercent : tankStatus.label} unit={watering.levelPercent != null ? '%' : ''} status={watering.levelPercent == null ? 'none' : statusFromSeverity(tankStatus.tone === 'ok' ? 'ok' : tankStatus.tone === 'warning' ? 'medium' : tankStatus.tone === 'error' ? 'high' : 'low')} />
-            <BigStat icon="ti-droplet" label="Watering now" value={wateringNow ? 'On' : 'Off'} status={reading ? 'good' : 'none'} />
-            <BigStat icon="ti-temperature" label="Temperature & humidity" value={`${air.temperature ?? '—'}${air.temperature != null ? '°C' : ''} · ${air.humidity ?? '—'}${air.humidity != null ? '%' : ''}`} status={air.temperature == null && air.humidity == null ? 'none' : 'good'} />
+            <BigStat icon="ti-droplet" label="Soil wetness" value={!soilReadingValid ? 'Not updated' : soil.moisture ?? '—'} unit={soilReadingValid && soil.moisture != null ? '%' : ''} status={!soilReadingValid ? 'check' : soil.moisture == null ? 'none' : 'good'} />
+            <BigStat icon="ti-glass-full" label="Water tank" value={!tankReadingValid ? 'Not updated' : watering.levelPercent != null ? watering.levelPercent : tankStatus.label} unit={tankReadingValid && watering.levelPercent != null ? '%' : ''} status={!tankReadingValid ? 'check' : watering.levelPercent == null ? 'none' : statusFromSeverity(tankStatus.tone === 'ok' ? 'ok' : tankStatus.tone === 'warning' ? 'medium' : tankStatus.tone === 'error' ? 'high' : 'low')} />
+            <BigStat icon="ti-droplet" label="Watering now" value={!deviceOnline ? 'No signal' : wateringNow ? 'On' : 'Off'} status={!deviceOnline ? 'none' : 'good'} />
+            <BigStat icon="ti-temperature" label="Temperature & humidity" value={!airReadingValid ? 'Not updated' : `${air.temperature ?? '—'}${air.temperature != null ? '°C' : ''} · ${air.humidity ?? '—'}${air.humidity != null ? '%' : ''}`} status={!airReadingValid ? 'check' : air.temperature == null && air.humidity == null ? 'none' : 'good'} />
           </div>
           <p className="mt-2 text-sm text-text-secondary">Last updated {timeAgo(lastUpdated)}</p>
         </section>
@@ -97,10 +115,10 @@ const OfflineReadingsPage = () => {
         <details className="rounded-xl border border-border bg-white">
           <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-text-primary">Show more details</summary>
           <div className="space-y-5 border-t border-border p-4">
-            <section><h2 className="mb-3 font-semibold text-text-primary">Plant food levels (N, P, K)</h2><div className="grid grid-cols-1 gap-3 sm:grid-cols-3">{[['Nitrogen (N)', soil.nitrogen], ['Phosphorus (P)', soil.phosphorus], ['Potassium (K)', soil.potassium]].map(([label, value]) => <div key={label} className="rounded-xl border border-border bg-bg-secondary p-4"><p className="text-sm text-text-secondary">{label}</p><p className="mt-1 text-lg font-semibold text-text-primary">{value ?? '—'}{value != null ? ' mg/kg' : ''}</p></div>)}</div></section>
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Soil salt level (EC)</h2><p className="mt-1 text-lg font-semibold">{soil.ec ?? '—'}{soil.ec != null ? ' µS/cm' : ''}</p></div><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Soil acidity (pH)</h2><p className="mt-1 text-lg font-semibold">{soil.ph ?? '—'}</p></div></section>
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Water purity (TDS)</h2><p className="mt-1 text-lg font-semibold">{water.tds != null ? `${Math.round(water.tds)} ppm` : '—'}</p><StatusBadge className="mt-2" status={water.tds == null ? 'none' : waterQuality.tone === 'ok' ? 'good' : waterQuality.tone === 'warning' ? 'check' : 'action'} /></div><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Tank level</h2><div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={tankStatus.tone === 'ok' ? 'good' : tankStatus.tone === 'warning' ? 'check' : tankStatus.tone === 'error' ? 'action' : 'none'} /><span className="text-sm text-text-secondary">Level: {tankStatus.label}</span></div><div className="mt-3 flex gap-1.5" aria-label={`Tank level: ${tankStatus.label}`}>{[1, 2, 3].map(step => <span key={step} className={`h-2 flex-1 rounded-full ${tankStatus.step >= step ? step === 3 ? 'bg-green-700' : step === 2 ? 'bg-amber-600' : 'bg-red-700' : 'bg-gray-200'}`} />)}</div></div></section>
-            <section><h2 className="mb-3 font-semibold text-text-primary">Air conditions</h2><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Soil temperature</p><p className="mt-1 font-semibold">{soil.temperature ?? '—'}{soil.temperature != null ? '°C' : ''}</p></div><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Air temperature</p><p className="mt-1 font-semibold">{air.temperature ?? '—'}{air.temperature != null ? '°C' : ''}</p></div><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Air humidity</p><p className="mt-1 font-semibold">{air.humidity ?? '—'}{air.humidity != null ? '%' : ''}</p></div></div></section>
+            <section><h2 className="mb-3 font-semibold text-text-primary">Plant food levels (N, P, K)</h2><div className="grid grid-cols-1 gap-3 sm:grid-cols-3">{[['Nitrogen (N)', soil.nitrogen], ['Phosphorus (P)', soil.phosphorus], ['Potassium (K)', soil.potassium]].map(([label, value]) => <div key={label} className="rounded-xl border border-border bg-bg-secondary p-4"><p className="text-sm text-text-secondary">{label}</p><p className="mt-1 text-lg font-semibold text-text-primary">{soilReadingValid ? value ?? '—' : 'Not updated'}{soilReadingValid && value != null ? ' mg/kg' : ''}</p></div>)}</div></section>
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Soil salt level (EC)</h2><p className="mt-1 text-lg font-semibold">{soilReadingValid ? `${soil.ec ?? '—'}${soil.ec != null ? ' µS/cm' : ''}` : 'Not updated'}</p></div><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Soil acidity (pH)</h2><p className="mt-1 text-lg font-semibold">{soilReadingValid ? soil.ph ?? '—' : 'Not updated'}</p></div></section>
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Water purity (TDS)</h2><p className="mt-1 text-lg font-semibold">{tankTds != null ? `${Math.round(tankTds)} ppm` : '—'}</p><StatusBadge className="mt-2" status={tankTds == null ? 'none' : waterQuality.tone === 'ok' ? 'good' : waterQuality.tone === 'warning' ? 'check' : 'action'} /></div><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Tank level</h2><div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={!tankReadingValid ? 'none' : tankStatus.tone === 'ok' ? 'good' : tankStatus.tone === 'warning' ? 'check' : tankStatus.tone === 'error' ? 'action' : 'none'} /><span className="text-sm text-text-secondary">Level: {tankReadingValid ? tankStatus.label : 'No fresh reading'}</span></div><div className="mt-3 flex gap-1.5" aria-label={`Tank level: ${tankReadingValid ? tankStatus.label : 'No fresh reading'}`}>{[1, 2, 3].map(step => <span key={step} className={`h-2 flex-1 rounded-full ${tankReadingValid && tankStatus.step >= step ? step === 3 ? 'bg-green-700' : step === 2 ? 'bg-amber-600' : 'bg-red-700' : 'bg-gray-200'}`} />)}</div></div></section>
+            <section><h2 className="mb-3 font-semibold text-text-primary">Air conditions</h2><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Soil temperature</p><p className="mt-1 font-semibold">{soilReadingValid ? `${soil.temperature ?? '—'}${soil.temperature != null ? '°C' : ''}` : 'Not updated'}</p></div><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Air temperature</p><p className="mt-1 font-semibold">{airReadingValid ? `${air.temperature ?? '—'}${air.temperature != null ? '°C' : ''}` : 'Not updated'}</p></div><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Air humidity</p><p className="mt-1 font-semibold">{airReadingValid ? `${air.humidity ?? '—'}${air.humidity != null ? '%' : ''}` : 'Not updated'}</p></div></div></section>
           </div>
         </details>
       </main>

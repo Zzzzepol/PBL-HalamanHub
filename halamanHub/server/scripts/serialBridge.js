@@ -1,10 +1,7 @@
 // HalamanHub — USB Serial bridge
 //
-// Reads live telemetry JSON printed by the ESP32 over USB (no WiFi/internet
-// needed — this is just the same cable already used for power/flashing) and
-// forwards each reading into the SAME ingestion endpoint the WiFi path uses
-// (POST http://localhost:4000/api/sensor-data), so the admin dashboard
-// updates live either way.
+// Optional fallback for bench use. Normal operation sends telemetry directly
+// from the ESP32 to the laptop over local Wi-Fi; this USB bridge is not needed.
 //
 // Run this ALONGSIDE your normal server, in a second terminal:
 //   cd server
@@ -25,7 +22,11 @@ function postTelemetry(json) {
     LOCAL_API,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': body.length },
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': body.length,
+        ...(process.env.IOT_DEVICE_TOKEN ? { 'x-device-token': process.env.IOT_DEVICE_TOKEN } : {}),
+      },
     },
     (res) => {
       if (res.statusCode >= 400) {
@@ -65,7 +66,7 @@ async function start() {
 
   port.on('open', () => {
     console.log(`[serial-bridge] Connected to ESP32 on ${portPath}`);
-    console.log('[serial-bridge] Reading offline telemetry — no WiFi/internet needed for this path.');
+    console.log('[serial-bridge] Optional USB fallback connected. Wi-Fi gateway mode does not need this bridge.');
   });
 
   port.on('error', (err) => {

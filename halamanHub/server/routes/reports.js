@@ -4,6 +4,7 @@ const ExcelJS = require('exceljs');
 
 const { requireAuth } = require('../middleware/auth');
 const { buildReportData } = require('../utils/reportBuilders');
+const { isShopConnected } = require('../config/connections');
 
 const router = express.Router();
 
@@ -1642,6 +1643,13 @@ router.get(
                 'The from date cannot be later than the to date.',
             });
         }
+      }
+
+      if (dataType === 'Orders & sales' && !isShopConnected()) {
+        return res.status(503).json({
+          message: 'The online shop database is unavailable. Plant sensor reports are still available from the laptop.',
+          code: 'SHOP_DATABASE_UNAVAILABLE',
+        });
       }
 
       /*

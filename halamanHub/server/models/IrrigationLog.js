@@ -4,6 +4,7 @@
 // actually turned on/off, and why.
 
 const mongoose = require('mongoose');
+const { localConnection } = require('../config/connections');
 
 const irrigationLogSchema = new mongoose.Schema(
   {
@@ -25,6 +26,11 @@ const irrigationLogSchema = new mongoose.Schema(
     },
 
     moistureAtEvent: { type: Number }, // soil moisture % at the time, for context
+    durationSec: { type: Number, min: 0, default: null },
+    moistureBefore: { type: Number, default: null },
+    moistureAfterRun: { type: Number, default: null },
+    wateringResult: { type: String, enum: ['target_reached', 'improved', 'no_change', null], default: null },
+    monitoringLocation: { type: String, default: '' },
 
     occurredAt: { type: Date, default: Date.now },
   },
@@ -36,4 +42,4 @@ irrigationLogSchema.index({ occurredAt: -1 });
 
 irrigationLogSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('IrrigationLog', irrigationLogSchema);
+module.exports = localConnection.model('IrrigationLog', irrigationLogSchema);

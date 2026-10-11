@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, CardBody, Button, Toggle, FormField, Input, Select, ErrorState } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, Button, Toggle, FormField, Input, Select, ErrorState, StatusBadge } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { settingsApi } from '../api/client';
+import { settingsApi, monitoringSetupApi, plantProfilesApi } from '../api/client';
 import * as ps from './pageStyles';
 
 const SettingsPage = () => {
   const { token } = useAuth();
   const { data: settings, loading, error, refetch } = useApiData(settingsApi.get);
+  const { data: station, loading: stationLoading, error: stationError, refetch: refetchStation, setData: setStation } = useApiData(monitoringSetupApi.get);
+  const { data: profiles } = useApiData(plantProfilesApi.getAll, [], 30000);
 
   const [farmName, setFarmName] = useState('');
   const [location, setLocation] = useState('');
@@ -25,6 +27,13 @@ const SettingsPage = () => {
     lowStock: true,
   });
   const [savingNotifs, setSavingNotifs] = useState(false);
+  const [stationName, setStationName] = useState('Main System');
+  const [stationLocation, setStationLocation] = useState('');
+  const [monitoredProfileIds, setMonitoredProfileIds] = useState([]);
+  const [savingStation, setSavingStation] = useState(false);
+  const [stationSaved, setStationSaved] = useState(false);
+  const [stationMessage, setStationMessage] = useState('');
+  const [checkNotes, setCheckNotes] = useState({});
 
   // Populate local form state once settings load
   useEffect(() => {
@@ -35,6 +44,13 @@ const SettingsPage = () => {
       setNotifs(settings.notifications);
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (!station) return;
+    setStationName(station.name || 'Main System');
+    setStationLocation(station.location || '');
+    setMonitoredProfileIds((station.plantProfileIds || []).map(id => String(id?._id || id)));
+  }, [station]);
 
   const toggleNotif = async (key) => {
     const updated = { ...notifs, [key]: !notifs[key] };
@@ -65,6 +81,50 @@ const SettingsPage = () => {
       setSavingFarm(false);
     }
   };
+
+  const saveMonitoringStation = async (event) => {
+    event.preventDefault();
+    setSavingStation(true);
+    setStationSaved(false);
+    setStationMessage('');
+    try {
+      const updated = await monitoringSetupApi.update({
+        name: stationName,
+        location: stationLocation,
+        plantProfileIds: monitoredProfileIds,
+      }, token);
+      setStation(updated);
+      setStationSaved(true);
+      setTimeout(() => setStationSaved(false), 2500);
+    } catch {
+      setStationMessage('We could not save the monitoring area. Please try again.');
+    } finally {
+      setSavingStation(false);
+    }
+  };
+
+  const completeSetupCheck = async (key) => {
+    setStationMessage('');
+    try {
+      setStation(await monitoringSetupApi.completeCheck(key, checkNotes[key] || '', token));
+      setCheckNotes(current => ({ ...current, [key]: '' }));
+    } catch {
+      setStationMessage('We could not save this field check. Please try again.');
+    }
+  };
+
+  const toggleMonitoredPlant = (profileId) => {
+    setMonitoredProfileIds(current => current.includes(profileId)
+      ? current.filter(id => id !== profileId)
+      : [...current, profileId]);
+  };
+
+  const setupChecks = [
+    { key: 'probePlacement', title: 'Place the probe in the growing area', description: 'Put the single soil probe near the roots in the bed it represents.' },
+    { key: 'readingsVerified', title: 'Check the soil readings', description: 'Compare the probe readings with its maker’s guide or a known reference. This records the check; it does not change the probe’s built-in calibration.' },
+    { key: 'waterOutputsTested', title: 'Test the pump and backup line', description: 'Use Manual mode with water available. Check that each output turns on and off.' },
+    { key: 'autoCycleTested', title: 'Check the Auto watering cycle', description: 'Review the start and stop wetness levels, then confirm one short watering and soak cycle.' },
+  ];
 
   return (
     <div>
@@ -156,6 +216,60 @@ const SettingsPage = () => {
           </CardBody>
         </Card>
       </div>
+
+      <Card className={ps.lastCard}>
+        <CardHeader title="Soil monitoring setup" subtitle="Tell staff where the single soil probe is placed and which plants it represents." />
+        <CardBody>
+          {stationError && <div className="mb-4"><ErrorState title="Monitoring setup is not loading" description="Try again to load the saved area and field checks." onRetry={refetchStation} /></div>}
+          {stationMessage && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900" role="alert">{stationMessage}</p>}
+          <form onSubmit={saveMonitoringStation} className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField label="Monitoring station" id="station-name">
+                <Input id="station-name" value={stationName} onChange={event => setStationName(event.target.value)} maxLength={80} disabled={stationLoading} />
+              </FormField>
+              <FormField label="Bed or area" id="station-location">
+                <Input id="station-location" value={stationLocation} onChange={event => setStationLocation(event.target.value)} maxLength={120} placeholder="e.g. Propagation bed A" disabled={stationLoading} />
+              </FormField>
+            </div>
+            <fieldset className="rounded-xl border border-border p-4">
+              <legend className="px-1 text-sm font-semibold text-text-primary">Plants represented by this probe</legend>
+              <p className="mb-3 text-sm text-text-secondary">These plant profiles share one reading from this area. They do not have separate sensors.</p>
+              {profiles?.length ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {profiles.map(profile => <label key={profile._id} className="flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-text-primary">
+                  <input type="checkbox" checked={monitoredProfileIds.includes(String(profile._id))} onChange={() => toggleMonitoredPlant(String(profile._id))} />
+                  <span>{profile.name}<span className="ml-1 text-text-secondary">· {profile.category}</span></span>
+                </label>)}
+              </div> : <p className="text-sm text-text-secondary">Add plant profiles first, then choose the plants growing in this area.</p>}
+            </fieldset>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="primary" type="submit" disabled={savingStation || stationLoading}>{savingStation ? 'Saving…' : 'Save monitoring area'}</Button>
+              {stationSaved && <span className="text-sm font-medium text-green-800" role="status">Monitoring area saved.</span>}
+              <span className="text-sm text-text-secondary">Changing the bed or selected plants clears the two soil placement checks.</span>
+            </div>
+          </form>
+
+          <div className="mt-6 border-t border-border pt-5">
+            <div className="mb-3"><h3 className="font-semibold text-text-primary">Field setup checks</h3><p className="mt-1 text-sm text-text-secondary">Record the checks staff complete before relying on automatic watering.</p></div>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {setupChecks.map(check => {
+                const savedCheck = station?.checks?.[check.key];
+                return <article key={check.key} className="rounded-xl border border-border bg-bg-secondary p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div><h4 className="font-medium text-text-primary">{check.title}</h4><p className="mt-1 text-sm text-text-secondary">{check.description}</p></div>
+                    <StatusBadge status={savedCheck?.checkedAt ? 'good' : 'check'} label={savedCheck?.checkedAt ? 'Checked' : 'To check'} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+                    <span className="text-sm text-text-secondary">{savedCheck?.checkedAt ? `Checked ${new Date(savedCheck.checkedAt).toLocaleString()}${savedCheck.checkedBy ? ` by ${savedCheck.checkedBy}` : ''}` : 'No check recorded yet'}</span>
+                    <Button size="sm" variant={savedCheck?.checkedAt ? 'default' : 'primary'} onClick={() => completeSetupCheck(check.key)} disabled={stationLoading}>{savedCheck?.checkedAt ? 'Check again' : 'Mark checked'}</Button>
+                  </div>
+                  {savedCheck?.notes && <p className="mt-2 text-sm text-text-secondary">Last note: {savedCheck.notes}</p>}
+                  <Input aria-label={`Notes for ${check.title}`} className="mt-3" value={checkNotes[check.key] ?? ''} onChange={event => setCheckNotes(current => ({ ...current, [check.key]: event.target.value }))} maxLength={500} placeholder="Optional check notes" />
+                </article>;
+              })}
+            </div>
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Where the real hardware controls actually live now */}
       <Card className={ps.lastCard}>

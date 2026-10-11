@@ -2,8 +2,11 @@ const express = require('express');
 const { requireAuth } = require('../middleware/auth');
 const IrrigationZone = require('../models/IrrigationZone');
 const IrrigationSettings = require('../models/IrrigationSettings');
+const SensorReading = require('../models/SensorReading');
 const IrrigationLog = require('../models/IrrigationLog');
 const log = require('../utils/logger');
+const MANUAL_CONTROL_LEASE_MS = 5 * 60 * 1000;
+const DEVICE_ONLINE_WINDOW_MS = 15 * 1000;
 
 const router = express.Router();
 router.use(requireAuth);
@@ -76,11 +79,49 @@ router.put('/settings', async (req, res) => {
 
     const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid } = req.body;
 
-if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;
+    if (mode !== undefined && !['auto', 'manual'].includes(mode)) {
+      return res.status(400).json({ message: 'Choose Auto or Manual mode.' });
+    }
+    if (manualPump !== undefined && typeof manualPump !== 'boolean') {
+      return res.status(400).json({ message: 'The water pump setting must be on or off.' });
+    }
+    if (manualSolenoid !== undefined && typeof manualSolenoid !== 'boolean') {
+      return res.status(400).json({ message: 'The backup water line setting must be on or off.' });
+    }
+
+    if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;
     if (moistureWetThreshold !== undefined) settings.moistureWetThreshold = moistureWetThreshold;
     if (mode !== undefined) settings.mode = mode;
     if (manualPump !== undefined) settings.manualPump = manualPump;
     if (manualSolenoid !== undefined) settings.manualSolenoid = manualSolenoid;
+
+    if (mode === 'auto') {
+      settings.manualPump = false;
+      settings.manualSolenoid = false;
+      settings.manualControlExpiresAt = null;
+    } else if (manualPump === true || manualSolenoid === true) {
+      const deviceIsOnline = settings.deviceLastSeenAt
+        && Date.now() - settings.deviceLastSeenAt.getTime() <= DEVICE_ONLINE_WINDOW_MS;
+      if (!deviceIsOnline || !settings.deviceBootId) {
+        return res.status(409).json({ message: 'The ESP32 is not connected yet. Wait for a fresh sensor reading, then try again.' });
+      }
+      const latestReading = await SensorReading.findOne().sort({ recordedAt: -1 }).select('recordedAt tankReadingValid lockout').lean();
+      const readingIsSafe = latestReading?.recordedAt
+        && Date.now() - new Date(latestReading.recordedAt).getTime() <= DEVICE_ONLINE_WINDOW_MS
+        && latestReading.tankReadingValid !== false
+        && latestReading.lockout !== true;
+      if (!readingIsSafe) {
+        return res.status(409).json({ message: 'Manual watering needs a fresh tank reading and no safety pause.' });
+      }
+      if (settings.mode !== 'manual') {
+        return res.status(409).json({ message: 'Choose Manual mode before turning on a water control.' });
+      }
+      settings.manualControlExpiresAt = new Date(Date.now() + MANUAL_CONTROL_LEASE_MS);
+    } else if (!settings.manualPump && !settings.manualSolenoid) {
+      settings.manualControlExpiresAt = null;
+    }
+
+    settings.settingsVersion = (settings.settingsVersion || 0) + 1;
 
     const { tankEmptyDistanceCm, tankFullDistanceCm, tankLowThresholdPercent } = req.body;
     if (tankEmptyDistanceCm !== undefined) settings.tankEmptyDistanceCm = tankEmptyDistanceCm;
@@ -105,6 +146,26 @@ if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moisture
     res.json(settings);
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+});
+
+// POST /api/irrigation/reset-lockout — one-shot command acknowledged by ESP32 telemetry.
+router.post('/reset-lockout', async (req, res) => {
+  try {
+    const settings = await IrrigationSettings.findOneAndUpdate(
+      {},
+      { $inc: { lockoutResetVersion: 1, settingsVersion: 1 }, $set: { updatedBy: req.user.name } },
+      { new: true, upsert: true, runValidators: true }
+    );
+    await log({
+      user: req.user.name,
+      userId: req.user.id,
+      action: 'Requested a watering safety reset',
+      category: 'irrigation',
+    });
+    res.json(settings);
+  } catch (err) {
+    res.status(400).json({ message: 'We could not request a safety reset. Please try again.' });
   }
 });
 

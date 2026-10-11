@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, Table, Badge, Button, SearchBar, FormField, Input, Select, ConfirmDialog, EmptyState, ErrorState } from '../components/ui/UI';
+import { Card, CardBody, CardHeader, Table, Badge, Button, SearchBar, FormField, Input, Select, ConfirmDialog, EmptyState, ErrorState } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { productsApi } from '../api/client';
+import { plantProfilesApi, productsApi } from '../api/client';
+import { DEFAULT_PRODUCT_CATEGORY, PRODUCT_CATEGORIES } from '../constants/plantCategories';
 import * as ps from './pageStyles';
 
 const statusBadge = {
@@ -11,28 +12,26 @@ const statusBadge = {
   'out-of-stock': { variant: 'error', label: 'Out of stock', icon: 'ti-circle-x' },
 };
 
-const emptySoilTargets = {
-  useDefault: true,
-  npk: { nitrogen: '', phosphorus: '', potassium: '' },
-  ec: '',
-  ph: '',
-};
-
 // FIXED: Default unit changed to 'bundle' to align with your dropdown options
-const emptyForm = { name: '', category: 'Grafted Fruit Bearing Trees', price: '', unit: 'bundle', stock: '', imageUrl: '', soilTargets: emptySoilTargets };
+const emptyForm = { name: '', category: DEFAULT_PRODUCT_CATEGORY, price: '', unit: 'bundle', stock: '', imageUrl: '' };
+const normalizePlantPart = value => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+const plantIdentityKey = (name, category) => `${normalizePlantPart(category)}::${normalizePlantPart(name)}`;
 
 const ProductsPage = () => {
   const { token } = useAuth();
   const { data: products, loading, error, refetch, setData: setProducts } = useApiData(productsApi.getAll, [], 15000);
+  const { data: plantProfiles, loading: profilesLoading, error: profilesError, refetch: refetchProfiles } = useApiData(plantProfilesApi.getAll, [], 60000, 'products-local-plant-profiles');
 
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [sourceProfile, setSourceProfile] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [notice, setNotice] = useState('');
 
   const list = useMemo(() => products || [], [products]);
 
@@ -41,9 +40,20 @@ const ProductsPage = () => {
     [list, search]
   );
 
+  const profilesNotInInventory = useMemo(() => {
+    if (!products || !plantProfiles) return [];
+    const productKeys = new Set(list.map(product => plantIdentityKey(product.name, product.category)));
+    const linkedProfileIds = new Set(list.map(product => product.sourcePlantProfileId).filter(Boolean));
+    return plantProfiles.filter(profile =>
+      !linkedProfileIds.has(profile._id)
+      && !productKeys.has(plantIdentityKey(profile.name, profile.category))
+    ).sort((a, b) => a.name.localeCompare(b.name));
+  }, [list, products, plantProfiles]);
+
   const openAdd = () => { 
     setEditing(null); 
-    setForm({ ...emptyForm, soilTargets: { ...emptySoilTargets, npk: { ...emptySoilTargets.npk } } }); 
+    setSourceProfile(null);
+    setForm({ ...emptyForm });
     setImagePreview(''); 
     setSaveError(''); 
     setModalOpen(true); 
@@ -51,24 +61,36 @@ const ProductsPage = () => {
 
   const openEdit = (p) => {
     setEditing(p);
-    const nextSoilTargets = {
-      useDefault: p.soilTargets?.useDefault ?? true,
-      npk: {
-        nitrogen: p.soilTargets?.npk?.nitrogen ?? '',
-        phosphorus: p.soilTargets?.npk?.phosphorus ?? '',
-        potassium: p.soilTargets?.npk?.potassium ?? '',
-      },
-      ec: p.soilTargets?.ec ?? '',
-      ph: p.soilTargets?.ph ?? '',
-    };
-    setForm({ name: p.name, category: p.category, price: p.price, unit: p.unit, stock: p.stock, imageUrl: p.imageUrl || '', soilTargets: nextSoilTargets });
+    setSourceProfile(null);
+    setForm({ name: p.name, category: p.category, price: p.price, unit: p.unit, stock: p.stock, imageUrl: p.imageUrl || '' });
     setImagePreview(p.imageUrl || ''); 
     setSaveError('');
     setModalOpen(true);
   };
 
+  const openPlantListing = (profile) => {
+    setEditing(null);
+    setSourceProfile(profile);
+    setForm({
+      name: profile.name,
+      category: profile.category || DEFAULT_PRODUCT_CATEGORY,
+      price: '',
+      unit: 'bundle',
+      stock: '',
+      imageUrl: profile.imageUrl || '',
+    });
+    setImagePreview(profile.imageUrl || '');
+    setSaveError('');
+    setNotice('');
+    setModalOpen(true);
+  };
+
   const triggerFileSelect = () => {
-    document.getElementById('hidden-file-input').click();
+    const input = document.getElementById('hidden-file-input');
+    if (input) {
+      input.value = '';
+      input.click();
+    }
   };
 
   const handleImageChange = (e) => {
@@ -105,29 +127,26 @@ const ProductsPage = () => {
       ...form,
       price: Number(form.price),
       stock: Number(form.stock),
-      soilTargets: {
-        useDefault: Boolean(form.soilTargets?.useDefault),
-        npk: {
-          nitrogen: form.soilTargets?.npk?.nitrogen === '' ? null : Number(form.soilTargets?.npk?.nitrogen),
-          phosphorus: form.soilTargets?.npk?.phosphorus === '' ? null : Number(form.soilTargets?.npk?.phosphorus),
-          potassium: form.soilTargets?.npk?.potassium === '' ? null : Number(form.soilTargets?.npk?.potassium),
-        },
-        ec: form.soilTargets?.ec === '' ? null : Number(form.soilTargets?.ec),
-        ph: form.soilTargets?.ph === '' ? null : Number(form.soilTargets?.ph),
-      },
     };
 
     try {
       if (editing) {
         const updated = await productsApi.update(editing._id, payload, token);
         setProducts(list.map(p => p._id === editing._id ? updated : p));
+        setNotice(`${updated.name} was updated in the product inventory.`);
+      } else if (sourceProfile) {
+        const created = await productsApi.createFromPlantProfile(sourceProfile._id, payload, token);
+        setProducts([...list, created]);
+        await refetchProfiles({ background: true });
+        setNotice(`${created.name} was added to the online shop.`);
       } else {
         const created = await productsApi.create(payload, token);
         setProducts([...list, created]);
+        setNotice(`${created.name} was added to the product inventory.`);
       }
       setModalOpen(false);
-    } catch {
-      setSaveError('We could not save this product. Check the details and try again.');
+    } catch (error) {
+      setSaveError(error?.status === 409 ? error.message : 'We could not save this product. Check the details and try again.');
     } finally {
       setSaving(false);
     }
@@ -143,9 +162,38 @@ const ProductsPage = () => {
         <Button variant="primary" icon="ti-plus" onClick={openAdd}>Add product</Button>
       </div>
 
+      {notice && <p className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900" role="status">{notice}</p>}
+
       {error && (
         <div className="mb-4"><ErrorState title="Products are not loading" description="Check your connection, then try again." onRetry={refetch} /></div>
       )}
+
+      <Card className="mb-4">
+        <CardHeader title="Local plants not in product inventory" subtitle="Set a shop image, price, and stock before adding a local plant to the online shop." />
+        <CardBody>
+          {profilesError ? (
+            <ErrorState title="Local plants are not loading" description="Your product inventory still works. Check the local database, then try again." onRetry={refetchProfiles} />
+          ) : loading || profilesLoading ? (
+            <p className="py-3 text-sm text-text-secondary" role="status">Checking saved plants against the online inventory…</p>
+          ) : error ? (
+            <p className="py-3 text-sm text-text-secondary">Reconnect to the online product inventory to check which plants are already listed.</p>
+          ) : profilesNotInInventory.length ? (
+            <div className="divide-y divide-border rounded-lg border border-border">
+              {profilesNotInInventory.map(profile => (
+                <div key={profile._id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {profile.imageUrl ? <img src={profile.imageUrl} alt="" className="h-11 w-11 rounded-lg border border-border object-cover" /> : <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-green-50 text-green-800"><i className="ti ti-plant-2" aria-hidden="true" /></span>}
+                    <div className="min-w-0"><p className="truncate font-medium text-text-primary">{profile.name}</p><p className="text-sm text-text-secondary">{profile.category}</p></div>
+                  </div>
+                  <Button variant="primary" size="sm" onClick={() => openPlantListing(profile)} icon="ti-cloud-upload">Set up shop listing</Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon="ti-circle-check" title="All local plants are in the inventory" description={plantProfiles?.length ? 'Every saved local plant already has a matching shop product.' : 'Save a plant profile first. It will appear here when it is not already in the shop.'} />
+          )}
+        </CardBody>
+      </Card>
 
       {/* Table */}
       <Card className={ps.lastCard}>
@@ -195,11 +243,12 @@ const ProductsPage = () => {
         <div className={ps.modalOverlay} onClick={() => setModalOpen(false)}>
           <div className={ps.modal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
             <div className={ps.modalHeader}>
-              <span className={ps.modalTitle} id="product-modal-title">{editing ? 'Edit product' : 'Add product'}</span>
+              <span className={ps.modalTitle} id="product-modal-title">{editing ? 'Edit product' : sourceProfile ? 'Set up online product' : 'Add product'}</span>
               <button className={ps.modalClose} onClick={() => setModalOpen(false)} aria-label="Close"><i className="ti ti-x" aria-hidden="true" /></button>
             </div>
             <form onSubmit={saveProduct}>
               <div className={ps.modalBody}>
+                {sourceProfile && <p className="mb-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-sm text-green-900">This plant is saved for local monitoring. Add its shop details below to list it for customers.</p>}
                 <FormField label="Product image">
                   <input 
                     type="file" 
@@ -229,10 +278,8 @@ const ProductsPage = () => {
                   </FormField>
                   <FormField label="Category" id="p-cat">
                     <Select id="p-cat" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                      <option>Grafted Fruit Bearing Trees</option>
-                      <option>Forest Trees</option>
-                      <option>Bonsai</option>
-                      <option>Ornamental Plants</option>
+                      {!PRODUCT_CATEGORIES.includes(form.category) && <option>{form.category}</option>}
+                      {PRODUCT_CATEGORIES.map(category => <option key={category}>{category}</option>)}
                     </Select>
                   </FormField>
                 </div>
@@ -252,44 +299,6 @@ const ProductsPage = () => {
                   <Input id="p-stock" type="number" min="0" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} placeholder="0" required />
                 </FormField>
 
-                <details open={!form.soilTargets?.useDefault} className="mt-4 rounded-xl border border-border p-3">
-                  <summary className="min-h-11 cursor-pointer py-2 font-medium text-text-primary">Optional soil targets</summary>
-                  <div className="pt-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-text-primary">Soil reading targets</div>
-                      <div className="text-xs text-text-secondary">Use the default settings for most plants, or enter your own targets.</div>
-                    </div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!form.soilTargets?.useDefault}
-                        onChange={(e) => setForm({ ...form, soilTargets: { ...form.soilTargets, useDefault: e.target.checked } })}
-                      />
-                      <span className="text-sm text-text-secondary">Use default settings</span>
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                    <FormField label="Plant food level — Nitrogen (N)" id="p-nitrogen">
-                      <Input id="p-nitrogen" type="number" value={form.soilTargets?.npk?.nitrogen ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, npk: { ...form.soilTargets.npk, nitrogen: e.target.value } } })} placeholder="mg/kg" disabled={form.soilTargets?.useDefault} />
-                    </FormField>
-                    <FormField label="Plant food level — Phosphorus (P)" id="p-phosphorus">
-                      <Input id="p-phosphorus" type="number" value={form.soilTargets?.npk?.phosphorus ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, npk: { ...form.soilTargets.npk, phosphorus: e.target.value } } })} placeholder="mg/kg" disabled={form.soilTargets?.useDefault} />
-                    </FormField>
-                    <FormField label="Plant food level — Potassium (K)" id="p-potassium">
-                      <Input id="p-potassium" type="number" value={form.soilTargets?.npk?.potassium ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, npk: { ...form.soilTargets.npk, potassium: e.target.value } } })} placeholder="mg/kg" disabled={form.soilTargets?.useDefault} />
-                    </FormField>
-                    <FormField label="Soil salt level (EC)" id="p-ec">
-                      <Input id="p-ec" type="number" value={form.soilTargets?.ec ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, ec: e.target.value } })} placeholder="µS/cm" disabled={form.soilTargets?.useDefault} />
-                    </FormField>
-                    <FormField label="pH target" id="p-ph">
-                      <Input id="p-ph" type="number" step="0.1" value={form.soilTargets?.ph ?? ''} onChange={e => setForm({ ...form, soilTargets: { ...form.soilTargets, ph: e.target.value } })} placeholder="6.2" disabled={form.soilTargets?.useDefault} />
-                    </FormField>
-                  </div>
-                  </div>
-                </details>
-
                 {saveError && (
                   <div className="mt-3 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">{saveError}</div>
                 )}
@@ -297,7 +306,7 @@ const ProductsPage = () => {
               <div className={ps.modalFooter}>
                 <Button variant="default" type="button" onClick={() => setModalOpen(false)}>Cancel</Button>
                 <Button variant="primary" type="submit" disabled={saving}>
-                  {saving ? 'Saving…' : editing ? 'Save changes' : 'Add product'}
+                  {saving ? 'Saving…' : editing ? 'Save changes' : sourceProfile ? 'Add to online shop' : 'Add product'}
                 </Button>
               </div>
             </form>

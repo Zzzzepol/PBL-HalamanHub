@@ -1,6 +1,7 @@
 // HalamanHub Server — Alert / Notification model
 
 const mongoose = require('mongoose');
+const { adminConnection } = require('../config/connections');
 
 const alertSchema = new mongoose.Schema(
   {
@@ -15,4 +16,4 @@ const alertSchema = new mongoose.Schema(
 
 alertSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('Alert', alertSchema);
+module.exports = adminConnection.model('Alert', alertSchema);

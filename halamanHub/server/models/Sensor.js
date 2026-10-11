@@ -1,5 +1,6 @@
 
 const mongoose = require('mongoose');
+const { localConnection } = require('../config/connections');
 
 const sensorSchema = new mongoose.Schema(
   {
@@ -19,6 +20,9 @@ const sensorSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+sensorSchema.index({ type: 1, zone: 1 });
+sensorSchema.index({ status: 1 });
+
 sensorSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('Sensor', sensorSchema);
+module.exports = localConnection.model('Sensor', sensorSchema);

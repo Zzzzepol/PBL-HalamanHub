@@ -10,6 +10,7 @@ const pageTitles = {
   '/': { title: 'Home', sub: 'See how your plants, water, and orders are doing.' },
   '/analytics': { title: 'History and trends', sub: 'See how readings change over time.' },
   '/sensors': { title: 'Sensors', sub: 'See which devices are connected and when they last checked in.' },
+  '/plant-profiles': { title: 'Plant profiles', sub: 'Save local soil targets for the plants you are growing.' },
   '/irrigation': { title: 'Watering', sub: 'Choose how and when your plants get water.' },
   '/rainwater': { title: 'Rain tank', sub: 'Check the tank level and water quality.' },
   '/products': { title: 'Products', sub: 'Add plants and keep stock up to date.' },

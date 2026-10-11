@@ -3,8 +3,9 @@
 // Safe to run multiple times — skips collections that already have data
 
 require('dotenv').config();
-const mongoose = require('mongoose');
 const connectDB = require('../config/db');
+const { closeDBs } = require('../config/db');
+const { isShopConnected } = require('../config/connections');
 
 const User               = require('../models/User');
 const Product            = require('../models/Product');
@@ -39,12 +40,14 @@ async function seed() {
       });
       await user.setPassword(ADMIN_PASSWORD);
       await user.save();
-      console.log(`✓ Seeded 1 admin user (login: ${ADMIN_USERNAME} / ${ADMIN_PASSWORD})`);
+      console.log(`✓ Seeded 1 admin user (login: ${ADMIN_USERNAME})`);
     }
   } else {
     console.log(`✓ Users already exist (${userCount}) — skipping`);
   }
 
+  // Cloud shop sample data. Skip cleanly while the optional cloud database is down.
+  if (isShopConnected()) {
   // Products
   const productCount = await Product.countDocuments();
   if (productCount === 0) {
@@ -81,6 +84,9 @@ async function seed() {
     console.log('✓ Seeded 8 orders');
   } else {
     console.log(`✓ Orders already exist (${orderCount}) — skipping`);
+  }
+  } else {
+    console.log('Cloud shop database is unavailable — skipped sample products and orders.');
   }
 
   // Sensors
@@ -160,13 +166,10 @@ async function seed() {
   } else {
     console.log('✓ Settings already exist — skipping');
   }
-
   console.log('\nDone!');
-  await mongoose.connection.close();
-  process.exit(0);
 }
 
 seed().catch(err => {
   console.error('Seed failed:', err.message);
-  process.exit(1);
-}); 
+  process.exitCode = 1;
+}).finally(closeDBs);

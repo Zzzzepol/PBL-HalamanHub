@@ -5,7 +5,7 @@ const Sensor = require('../models/Sensor');
 const { createAlertIfEnabled } = require('./alerts');
 const { getIO } = require('../socket');
 
-const OFFLINE_AFTER_MS = 5 * 60 * 1000; // no reading in 5 minutes = offline
+const OFFLINE_AFTER_MS = 30 * 1000; // the ESP32 targets a reading every 2 seconds
 
 async function checkSensorHealth() {
   try {

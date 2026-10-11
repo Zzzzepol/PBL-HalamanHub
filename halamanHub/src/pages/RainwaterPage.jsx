@@ -23,7 +23,7 @@ const RainwaterPage = () => {
   const [range, setRange] = useState('24h');
   const hours = RANGE_HOURS[range];
 
-const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
+const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000, 'admin:dashboard-summary');
   const { data: history, error: historyError, refetch: refetchHistory } =
     useApiData((t) => sensorsApi.getHistory(t, hours), [hours], 30000);
   const { data: settings, error: settingsError, refetch: refetchSettings, setData: setSettings } =
@@ -96,6 +96,9 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
       {hasError && (
         <div className="mb-4"><ErrorState title="Rain tank information is not loading" description="Check your connection, then try again." onRetry={() => { refetchSummary(); refetchHistory(); refetchSettings(); }} /></div>
       )}
+
+      {summary && !summary.irrigation?.deviceOnline && <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">No recent reading from the ESP32. Water quality and tank values are hidden until it reconnects.</p>}
+      {summary?.irrigation?.deviceOnline && !summary.irrigation?.tankReadingFresh && <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">The tank level has not updated. Watering is paused for safety until a new reading arrives.</p>}
 
       <div className={`mb-4 rounded-xl border p-4 ${waterRec.severity === 'high' ? 'border-red-200 bg-red-50' : waterRec.severity === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-live="polite">
         <h2 className="font-semibold text-text-primary">{summary?.waterTank?.tds == null ? 'Waiting for a water reading.' : waterRec.severity === 'high' ? 'This water needs attention before use.' : waterRec.severity === 'medium' ? 'Check this water before using it on sensitive plants.' : 'This water is ready for plants.'}</h2>

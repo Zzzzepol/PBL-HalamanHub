@@ -16,6 +16,8 @@
 .env.development.local
 .env.test.local
 .env.production.local
+ESP32/halamanhub_config.h
+/server/backups/
 
 npm-debug.log*
 yarn-debug.log*

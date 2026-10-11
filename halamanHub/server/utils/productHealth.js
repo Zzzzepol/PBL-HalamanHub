@@ -3,11 +3,13 @@
 // Product model already uses for its "low-stock" status badge,
 
 const Product = require('../models/Product');
+const { isShopConnected } = require('../config/connections');
 const { createAlertIfEnabled } = require('./alerts');
 
 const LOW_STOCK_CUTOFF = 8;
 
 async function checkProductStock() {
+  if (!isShopConnected()) return;
   try {
     const low = await Product.find({ stock: { $lte: LOW_STOCK_CUTOFF }, lowStockAlerted: false });
     for (const product of low) {

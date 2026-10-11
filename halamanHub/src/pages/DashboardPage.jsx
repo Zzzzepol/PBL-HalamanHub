@@ -27,9 +27,10 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const [range, setRange] = useState('24h');
   const [selectedPlant, setSelectedPlant] = useState(null);
-  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
+  const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000, 'admin:dashboard-summary');
   const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
-  const { data: history } = useApiData((token) => sensorsApi.getHistory(token, RANGE_HOURS[range]), [range], 20000);
+  const monitoringLocation = summary?.monitoringStation?.location || '';
+  const { data: history } = useApiData((token) => sensorsApi.getHistory(token, RANGE_HOURS[range], monitoringLocation), [range, monitoringLocation], 20000);
   useLiveRefetch(['sensor:reading', 'sensor:status'], refetchSummary);
 
   const trend = useMemo(() => {
@@ -42,12 +43,14 @@ const DashboardPage = () => {
 
   const recommendations = [...(summary?.recommendations || [])].sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
   const plantRecommendations = summary?.plantRecommendations || [];
+  const monitoringStation = summary?.monitoringStation || { name: 'Main System', location: '', monitoredPlants: [] };
+  const hasMonitoredPlants = monitoringStation.monitoredPlants?.length > 0;
   const plantsNeedingAction = plantRecommendations.filter(plant => plantStatus(plant) === 'action').length;
   const plantsToCheck = plantRecommendations.filter(plant => plantStatus(plant) === 'check').length;
   const needsAction = recommendations.filter(item => item.severity === 'high');
   const needsCheck = recommendations.filter(item => item.severity === 'medium');
-  const noSignal = [summary?.soilMoisture?.status, summary?.npk?.status, summary?.pH?.status, summary?.ec?.status, summary?.waterTank?.status]
-    .some(status => status === 'offline');
+  const noSignal = [summary?.soilMoisture?.status, summary?.npk?.status, summary?.pH?.status, summary?.ec?.status, summary?.waterTank?.status, summary?.temperature?.status, summary?.humidity?.status]
+    .some(status => status === 'offline' || status === 'warning');
   const tankStatus = statusFromTone(summary?.waterTank?.tankStatus3Info?.tone || summary?.waterTank?.status);
   const irrigation = summary?.irrigation;
   const wateringActive = Boolean(irrigation?.pumpActive || irrigation?.solenoidActive);
@@ -59,7 +62,8 @@ const DashboardPage = () => {
     : plantsNeedingAction > 0 ? `${plantsNeedingAction} plant${plantsNeedingAction === 1 ? '' : 's'} need attention.`
       : needsAction.length > 0 ? 'Some soil readings need attention.'
         : plantsToCheck > 0 ? `${plantsToCheck} plant${plantsToCheck === 1 ? '' : 's'} to check soon.`
-          : needsCheck.length > 0 ? 'Some soil readings are worth checking soon.' : 'Soil readings look good.';
+          : needsCheck.length > 0 ? 'Some soil readings are worth checking soon.'
+            : !hasMonitoredPlants ? 'Choose which plants this soil probe represents.' : 'Soil readings look good.';
   const soilMetrics = [
     { label: 'Soil wetness', value: summary?.soilMoisture?.value, unit: '%', icon: 'ti-droplet', sensorStatus: summary?.soilMoisture?.status, match: /soil moisture|soil wetness/i },
     { label: 'Nitrogen (N)', value: summary?.npk?.nitrogen, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, match: /nitrogen/i },
@@ -79,27 +83,31 @@ const DashboardPage = () => {
     <div className="space-y-5">
       {summaryError && !summary && <ErrorState onRetry={refetchSummary} description="Check the connection, then try loading your readings again." />}
 
-      <section className={`rounded-2xl border p-4 sm:p-5 ${bannerStatus === 'action' ? 'border-red-200 bg-red-50' : bannerStatus === 'check' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-live="polite">
+      <section className={`rounded-2xl border p-4 sm:p-5 ${bannerStatus === 'action' ? 'border-red-200 bg-red-50' : bannerStatus === 'check' || (!hasMonitoredPlants && hasReadings) ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-live="polite">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <i className={`ti ${bannerStatus === 'action' ? 'ti-alert-circle text-red-700' : bannerStatus === 'check' ? 'ti-alert-triangle text-amber-800' : bannerStatus === 'none' ? 'ti-hourglass text-gray-600' : 'ti-circle-check text-green-800'} mt-0.5 text-base`} aria-hidden="true" />
             <div>
               <h2 className="text-lg font-semibold text-text-primary">{bannerMessage}</h2>
               <p className="mt-0.5 text-sm text-text-secondary">
-                {summaryError ? 'Some readings may be out of date.' : noSignal ? 'No signal from one or more sensors. Check the sensor list for details.' : 'Here is the latest from your nursery.'}
+                {summaryError ? 'Some readings may be out of date.' : noSignal ? 'A reading is stale or a sensor needs checking. See sensor connections for details.' : 'Here is the latest from your nursery.'}
               </p>
             </div>
           </div>
-          <Button variant={bannerStatus === 'action' ? 'danger' : 'primary'} onClick={() => document.getElementById(plantsNeedingAction || plantsToCheck ? 'your-plants-title' : 'soil-monitoring')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-            {plantsNeedingAction || plantsToCheck ? 'Review plant checks' : 'View soil readings'}
+          <Button variant={bannerStatus === 'action' ? 'danger' : 'primary'} onClick={() => !hasMonitoredPlants ? navigate('/settings') : document.getElementById(plantsNeedingAction || plantsToCheck ? 'your-plants-title' : 'soil-monitoring')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            {!hasMonitoredPlants ? 'Set up monitored plants' : plantsNeedingAction || plantsToCheck ? 'Review plant checks' : 'View soil readings'}
           </Button>
         </div>
       </section>
 
-      {noSignal && (
+      {(noSignal || summary?.sensorBufferDrops > 0 || summary?.sensorBufferRestartLosses > 0) && (
         <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-text-secondary" role="status">
-          <i className="ti ti-wifi-off mt-0.5 text-base" aria-hidden="true" />
-          <p>One or more sensors have no signal. The last reading is shown until they reconnect.</p>
+          <i className={`ti ${summary?.sensorBufferDrops > 0 || summary?.sensorBufferRestartLosses > 0 ? 'ti-history' : 'ti-wifi-off'} mt-0.5 text-base`} aria-hidden="true" />
+          <p>{[
+            noSignal ? 'One or more readings need attention. Values from stale sensors are hidden until they reconnect.' : '',
+            summary?.sensorBufferDrops > 0 ? `${summary.sensorBufferDrops} readings were skipped after the ESP32 buffer filled.` : '',
+            summary?.sensorBufferRestartLosses > 0 ? `The ESP32 restarted with unsent readings ${summary.sensorBufferRestartLosses} time${summary.sensorBufferRestartLosses === 1 ? '' : 's'}; history may have gaps.` : '',
+          ].filter(Boolean).join(' ')}</p>
           <Button className="ml-auto" size="sm" variant="ghost" onClick={() => navigate('/sensors')}>View sensors</Button>
         </div>
       )}
@@ -108,7 +116,7 @@ const DashboardPage = () => {
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 id="soil-monitoring-title" className="text-lg font-semibold text-text-primary">Soil monitoring</h2>
-            <p className="text-sm text-text-secondary">The latest wetness and plant food readings from your nursery.</p>
+            <p className="text-sm text-text-secondary">One shared probe at {monitoringStation.location || 'your main growing area'} provides these readings.</p>
           </div>
           <span className="text-sm text-text-secondary">Updated {timeAgo(irrigation?.lastUpdated)}</span>
         </div>
@@ -137,16 +145,20 @@ const DashboardPage = () => {
               <i className="ti ti-seeding text-base text-green-800" aria-hidden="true" />
               <h2 id="your-plants-title" className="text-lg font-semibold text-text-primary">Your plants</h2>
             </div>
-            <p className="mt-1 text-sm text-text-secondary">Each plant is checked against its own soil targets using the latest nursery readings.</p>
+            <p className="mt-1 text-sm text-text-secondary">One probe at {monitoringStation.location || 'the main growing area'} represents the plants selected in Soil monitoring setup. Each plant does not have a separate sensor.</p>
           </div>
-          {plantRecommendations.length > 0 && (
-            <div className="flex flex-wrap gap-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Button size="sm" variant="default" onClick={() => navigate('/plant-profiles')}>Manage profiles</Button>
+            <Button size="sm" variant="default" onClick={() => navigate('/settings')}>Monitoring setup</Button>
+            {plantRecommendations.length > 0 && (
+              <>
               <span className="rounded-full border border-border bg-white px-3 py-1.5 font-medium text-text-primary">{plantRecommendations.length} plants</span>
               {plantsNeedingAction > 0 && <StatusBadge status="action" label={`${plantsNeedingAction} need attention`} />}
               {plantsToCheck > 0 && <StatusBadge status="check" label={`${plantsToCheck} to check`} />}
               {plantsNeedingAction === 0 && plantsToCheck === 0 && <StatusBadge status={plantRecommendations.some(plant => plantStatus(plant) === 'good') ? 'good' : 'none'} label={plantRecommendations.some(plant => plantStatus(plant) === 'good') ? 'Targets look good' : 'Waiting for readings'} />}
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
 
         {plantRecommendations.length ? (
@@ -199,7 +211,7 @@ const DashboardPage = () => {
                           </span>;
                         })}
                       </span>
-                    ) : <span className="mt-2 text-xs text-text-secondary">No plant-specific readings yet.</span>}
+                    ) : <span className="mt-2 text-xs text-text-secondary">No matching soil readings are available yet.</span>}
                     <span className="mt-3 flex items-center gap-1 text-xs font-semibold text-green-800">Open plant checks <i className="ti ti-arrow-right text-xs" aria-hidden="true" /></span>
                   </button>
                 </article>
@@ -208,8 +220,8 @@ const DashboardPage = () => {
           </div>
         ) : (
           <div className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="font-medium text-text-primary">No plants to monitor yet.</p><p className="mt-1 text-sm text-text-secondary">Add plants to your product list to see their soil checks here.</p></div>
-            <Button variant="outline" onClick={() => navigate('/products')}>Open products</Button>
+            <div><p className="font-medium text-text-primary">No plants are assigned to this probe yet.</p><p className="mt-1 text-sm text-text-secondary">Choose which plant profiles grow in this area in Soil monitoring setup.</p></div>
+            <Button variant="default" onClick={() => navigate('/settings')}>Choose monitored plants</Button>
           </div>
         )}
       </section>
@@ -241,7 +253,7 @@ const DashboardPage = () => {
         <div className="mb-3"><h2 id="other-readings-title" className="text-lg font-semibold text-text-primary">Water and air</h2><p className="text-sm text-text-secondary">Other readings for your nursery.</p></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <BigStat icon="ti-glass-full" label="Water tank" value={summary?.waterTank?.percent ?? summary?.waterTank?.tankStatus3Info?.label ?? '—'} unit={summary?.waterTank?.percent != null ? '%' : ''} status={tankStatus} />
-          <BigStat icon="ti-droplet" label="Watering now" value={wateringActive ? 'On' : 'Off'} status={irrigation?.lastUpdated ? 'good' : 'none'} />
+          <BigStat icon="ti-droplet" label="Watering now" value={!irrigation?.deviceOnline ? 'No signal' : wateringActive ? 'On' : 'Off'} status={!irrigation?.deviceOnline ? 'none' : 'good'} />
           <BigStat icon="ti-temperature" label="Temperature & humidity" value={`${summary?.temperature?.value ?? '—'}${summary?.temperature?.value != null ? '°C' : ''} · ${summary?.humidity?.value ?? '—'}${summary?.humidity?.value != null ? '%' : ''}`} status={statusFromTone(summary?.temperature?.status || summary?.humidity?.status)} />
         </div>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm text-text-secondary">

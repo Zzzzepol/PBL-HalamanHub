@@ -23,17 +23,73 @@ router.get('/summary', async (req, res) => {
   res.json({ ok, warning, offline, total });
 });
 
-// GET /api/sensors/history?hours=24 — raw readings over time, for trend charts
+router.get('/locations', async (req, res) => {
+  try {
+    const locations = await SensorReading.distinct('monitoringLocation', { monitoringLocation: { $nin: ['', null] } });
+    res.json(locations.filter(Boolean).sort((a, b) => a.localeCompare(b)));
+  } catch (error) {
+    res.status(500).json({ message: 'Monitoring areas are not available right now.' });
+  }
+});
+
+// GET /api/sensors/history?hours=24 — averaged buckets across the full time range.
 router.get('/history', async (req, res) => {
   try {
-    const hours = Math.min(Number(req.query.hours) || 24, 24 * 30); // cap at 30 days
+    const requestedHours = Number(req.query.hours) || 24;
+    const hours = Math.max(1, Math.min(requestedHours, 24 * 30)); // cap at 30 days
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-
-    const readings = await SensorReading
-      .find({ recordedAt: { $gte: since } })
-      .sort({ recordedAt: 1 }) // oldest first, for left-to-right charts
-      .limit(2000);
-
+    const location = String(req.query.location || '').trim().slice(0, 120);
+    const match = { recordedAt: { $gte: since } };
+    if (location) match.monitoringLocation = location;
+    const bucketCount = 600;
+    const bucketMs = Math.max(2000, Math.floor((hours * 60 * 60 * 1000) / bucketCount));
+    const readings = await SensorReading.aggregate([
+      { $match: match },
+      {
+        $addFields: {
+          historyBucket: {
+            $toDate: {
+              $multiply: [
+                { $floor: { $divide: [{ $toLong: '$recordedAt' }, bucketMs] } },
+                bucketMs,
+              ],
+            },
+          },
+        },
+      },
+      { $group: {
+        _id: '$historyBucket',
+        soilMoisture: { $avg: '$soilMoisture' },
+        soilTemp: { $avg: '$soilTemp' },
+        ec: { $avg: '$ec' },
+        ph: { $avg: '$ph' },
+        nitrogen: { $avg: '$nitrogen' },
+        phosphorus: { $avg: '$phosphorus' },
+        potassium: { $avg: '$potassium' },
+        airTemp: { $avg: '$airTemp' },
+        airHumidity: { $avg: '$airHumidity' },
+        levelPercent: { $avg: '$levelPercent' },
+        waterAvailableRatio: { $avg: { $cond: [{ $eq: ['$waterAvailable', true] }, 1, 0] } },
+        sampleCount: { $sum: 1 },
+      } },
+      { $project: {
+        _id: 0,
+        recordedAt: '$_id',
+        soilMoisture: 1,
+        soilTemp: 1,
+        ec: 1,
+        ph: 1,
+        nitrogen: 1,
+        phosphorus: 1,
+        potassium: 1,
+        airTemp: 1,
+        airHumidity: 1,
+        levelPercent: 1,
+        waterAvailable: { $gte: ['$waterAvailableRatio', 0.5] },
+        sampleCount: 1,
+      } },
+      { $sort: { recordedAt: 1 } },
+    ]);
     res.json(readings);
   } catch (err) {
     res.status(500).json({ message: err.message });
