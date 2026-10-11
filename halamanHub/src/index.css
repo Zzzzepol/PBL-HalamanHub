@@ -1,6 +1,9 @@
 /* HalamanHub Admin — Global Styles */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 @tailwind base;
 @tailwind components;
@@ -13,11 +16,11 @@
   --bg-tertiary:  #f3f4f6;
 
   --text-primary:   #111827;
-  --text-secondary: #6b7280;
-  --text-tertiary:  #9ca3af;
+  --text-secondary: #4b5563;
+  --text-tertiary:  #4b5563;
 
-  --border-default: rgba(0, 0, 0, 0.08);
-  --border-medium:  rgba(0, 0, 0, 0.14);
+  --border-default: rgba(15, 23, 42, 0.12);
+  --border-medium:  rgba(15, 23, 42, 0.18);
   --border-strong:  rgba(0, 0, 0, 0.22);
 }
 
@@ -31,6 +34,9 @@ html {
 body {
   -webkit-font-smoothing: antialiased;
   @apply font-sans text-base text-text-primary bg-bg-tertiary leading-relaxed;
+}
+@media (max-width: 767px) {
+  body { font-size: 16px; }
 }
 button {
   font-family: inherit;
@@ -61,6 +67,15 @@ img {
 :focus-visible {
   outline: 2px solid #27a85a;
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {

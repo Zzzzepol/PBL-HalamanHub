@@ -23,8 +23,8 @@ const ForgotPasswordPage = () => {
       // probe which emails are registered.
       await customerAuthApi.forgotPassword(email);
       setSent(true);
-    } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+    } catch {
+      setError('We could not send the reset link. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -33,7 +33,7 @@ const ForgotPasswordPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-3xl shadow-lift border border-gray-100 p-8">
+        <div className="bg-white rounded-3xl shadow-lift border border-gray-200 p-8">
           <h1 className="font-display text-2xl font-bold text-gray-800 mb-1">Forgot password</h1>
           <p className="text-gray-500 text-sm mb-6">
             {sent

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { addressesApi, ApiError } from '../api/client';
+import React, { useState, useEffect, useCallback } from 'react';
+import { addressesApi } from '../api/client';
 import { Button, FormField, Input, Alert, Badge } from './ui/UI';
 
 const emptyForm = { label: 'Home', address: '', city: '' };
@@ -14,15 +14,15 @@ const AddressManager = ({ token }) => {
   const [saving, setSaving]       = useState(false);
   const [busyId, setBusyId]       = useState(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     addressesApi.getAll(token)
       .then(res => setAddresses(res.addresses || []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
+  }, [token]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+  useEffect(() => { load(); }, [load]);
 
   const f = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
@@ -47,8 +47,8 @@ const AddressManager = ({ token }) => {
       setAddresses(res.addresses);
       setMsg({ type: 'success', text: editingId ? 'Address updated.' : 'Address added.' });
       cancelForm();
-    } catch (err) {
-      setMsg({ type: 'error', text: err instanceof ApiError ? err.message : 'Failed to save address.' });
+    } catch {
+      setMsg({ type: 'error', text: 'We could not save this address. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -60,8 +60,8 @@ const AddressManager = ({ token }) => {
     try {
       const res = await addressesApi.remove(id, token);
       setAddresses(res.addresses);
-    } catch (err) {
-      setMsg({ type: 'error', text: err instanceof ApiError ? err.message : 'Failed to delete address.' });
+    } catch {
+      setMsg({ type: 'error', text: 'We could not delete this address. Please try again.' });
     } finally {
       setBusyId(null);
     }
@@ -72,15 +72,15 @@ const AddressManager = ({ token }) => {
     try {
       const res = await addressesApi.setPrimary(id, token);
       setAddresses(res.addresses);
-    } catch (err) {
-      setMsg({ type: 'error', text: err instanceof ApiError ? err.message : 'Failed to set primary address.' });
+    } catch {
+      setMsg({ type: 'error', text: 'We could not set this as your main address. Please try again.' });
     } finally {
       setBusyId(null);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 mb-5">
+    <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6 mb-5">
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-semibold text-gray-800">Saved addresses</h2>
         {!showForm && (
@@ -91,15 +91,15 @@ const AddressManager = ({ token }) => {
 
       {msg && <Alert type={msg.type} message={msg.text} onClose={() => setMsg(null)} />}
 
-      {loading && <p className="text-sm text-gray-400">Loading addresses…</p>}
+      {loading && <p className="text-sm text-gray-600">Loading addresses…</p>}
 
       {!loading && addresses.length === 0 && !showForm && (
-        <p className="text-sm text-gray-400 mb-2">No saved addresses yet.</p>
+        <p className="text-sm text-gray-600 mb-2">No saved addresses yet.</p>
       )}
 
       <div className="flex flex-col gap-3 mb-4">
         {addresses.map(addr => (
-          <div key={addr._id} className="border border-gray-100 rounded-xl p-4 flex items-start justify-between gap-3">
+          <div key={addr._id} className="border border-gray-200 rounded-xl p-4 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-gray-800">{addr.label}</span>
@@ -121,7 +121,7 @@ const AddressManager = ({ token }) => {
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="border-t border-gray-100 pt-4 flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="border-t border-gray-200 pt-4 flex flex-col gap-4">
           <FormField label="Label" id="addr-label">
             <Input id="addr-label" value={form.label} onChange={e => f('label', e.target.value)} placeholder="Home, Work, etc." />
           </FormField>

@@ -21,16 +21,16 @@ const VerifyEmailPage = () => {
         setStatus('success');
         setMessage(data.message || 'Email verified successfully.');
       })
-      .catch((err) => {
+      .catch(() => {
         setStatus('error');
-        setMessage(err.message || 'This verification link is invalid or has expired.');
+        setMessage('This verification link is invalid or has expired. Request a new one.');
       });
   }, [token]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-3xl shadow-lift border border-gray-100 p-8 text-center">
+        <div className="bg-white rounded-3xl shadow-lift border border-gray-200 p-8 text-center">
           {status === 'verifying' && (
             <>
               <div className="flex justify-center mb-4">
@@ -63,4 +63,4 @@ const VerifyEmailPage = () => {
   );
 };
 
-export default VerifyEmailPage; 
+export default VerifyEmailPage;

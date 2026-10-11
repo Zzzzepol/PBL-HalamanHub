@@ -1,24 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { productsApi } from '../api/client';
 import { useCart } from '../context/CartContext';
-import { Button, Spinner } from '../components/ui/UI';
+import { Button, Spinner, ErrorState } from '../components/ui/UI';
 
 const ProductDetailPage = () => {
   const { id }       = useParams();
-  const navigate     = useNavigate();
   const { addItem, items } = useCart();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [qty, setQty]         = useState(1);
   const [added, setAdded]     = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    setError(false);
     productsApi.getOne(id)
       .then(setProduct)
-      .catch(() => navigate('/shop', { replace: true }))
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
-  }, [id, navigate]);
+  }, [id, retry]);
 
   const inCart = items.find(i => i._id === id);
 
@@ -35,6 +38,8 @@ const handleAdd = () => {
       <Spinner size="lg" />
     </div>
   );
+
+  if (error) return <div className="min-h-screen bg-gray-50 px-4 py-16"><div className="mx-auto max-w-xl"><ErrorState title="Product details are not loading" description="Check your connection, then try again." onRetry={() => setRetry(value => value + 1)} /></div></div>;
 
   if (!product) return null;
 
@@ -54,7 +59,7 @@ const handleAdd = () => {
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-5xl mx-auto">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-gray-400 mb-6">
+        <nav className="flex items-center gap-2 text-sm text-gray-600 mb-6">
           <Link to="/" className="hover:text-brand-700">Home</Link>
           <i className="ti ti-chevron-right text-xs" />
           <Link to="/shop" className="hover:text-brand-700">Shop</Link>
@@ -62,7 +67,7 @@ const handleAdd = () => {
           <span className="text-gray-700">{product.name}</span>
         </nav>
 
-        <div className="bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-soft border border-gray-200 overflow-hidden">
           <div className="grid md:grid-cols-2 gap-0">
             {/* Image */}
             <div className="aspect-square bg-gradient-to-br from-brand-50 to-brand-100 flex items-center justify-center relative">
@@ -87,7 +92,7 @@ const handleAdd = () => {
               {/* Price */}
               <div className="mb-8">
                 <span className="text-4xl font-bold text-brand-800">₱{product.price}</span>
-                <span className="text-gray-400 ml-2">per {product.unit}</span>
+                <span className="text-gray-600 ml-2">per {product.unit}</span>
               </div>
 
               {/* Quantity */}
@@ -97,7 +102,7 @@ const handleAdd = () => {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => setQty(q => Math.max(1, q - 1))}
-                      className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                      className="min-h-11 min-w-11 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
                       aria-label="Decrease quantity"
                     >
                       <i className="ti ti-minus text-sm" />
@@ -119,12 +124,12 @@ const handleAdd = () => {
                     />
                     <button
                       onClick={() => setQty(q => q + 1)}
-                      className="w-10 h-10 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
+                      className="min-h-11 min-w-11 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors"
                       aria-label="Increase quantity"
                     >
                       <i className="ti ti-plus text-sm" />
                     </button>
-                    <span className="text-sm text-gray-400 ml-2">
+                    <span className="text-sm text-gray-600 ml-2">
                       Total: <strong className="text-gray-700">₱{(product.price * (qty || 0)).toFixed(2)}</strong>
                     </span>
                   </div>
@@ -157,7 +162,7 @@ const handleAdd = () => {
               )}
 
               {/* Info */}
-              <div className="mt-8 pt-6 border-t border-gray-100 grid grid-cols-2 gap-4">
+              <div className="mt-8 pt-6 border-t border-gray-200 grid grid-cols-2 gap-4">
                 {[
                   { icon: 'ti-leaf',          label: 'Organically grown' },
                   { icon: 'ti-truck-delivery',label: 'Delivery available' },

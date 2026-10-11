@@ -32,8 +32,8 @@ const ResetPasswordPage = () => {
       await customerAuthApi.resetPassword(token, newPassword);
       setDone(true);
       setTimeout(() => navigate('/login'), 2500);
-    } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+    } catch {
+      setError('We could not reset your password. The link may have expired. Request a new one and try again.');
     } finally {
       setLoading(false);
     }
@@ -42,7 +42,7 @@ const ResetPasswordPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-3xl shadow-lift border border-gray-100 p-8">
+        <div className="bg-white rounded-3xl shadow-lift border border-gray-200 p-8">
           <h1 className="font-display text-2xl font-bold text-gray-800 mb-1">Reset password</h1>
 
           {!token ? (

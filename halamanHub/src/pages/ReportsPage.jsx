@@ -3,7 +3,7 @@ import {
   Card, CardHeader, CardBody, Button, FormField, Input, Select,
 } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
-import { reportsApi, ApiError } from '../api/client';
+import { reportsApi } from '../api/client';
 import * as ps from './pageStyles';
 
 const downloadBlob = (blob, filename) => {
@@ -55,10 +55,8 @@ const ReportsPage = () => {
       setTimeout(() => {
         setDone(false);
       }, 3000);
-    } catch (err) {
-      setGenError(
-        err instanceof ApiError ? err.message : 'Failed to generate report.'
-      );
+    } catch {
+      setGenError('We could not create the report. Check the date range and try again.');
     } finally {
       setGenerating(false);
     }
@@ -86,18 +84,18 @@ const ReportsPage = () => {
       <Card className={ps.lastCard}>
         <CardHeader
           title="Custom report"
-          subtitle="Generate a professional report from your live MongoDB data for any period"
+          subtitle="Create a report from readings and nursery activity for any period."
         />
 
         <CardBody>
           <form onSubmit={generate}>
             {/* Date range tabs */}
             <div className="text-xs font-medium text-text-secondary mb-1.5">Date range</div>
-            <div className="inline-flex rounded-md border-[0.5px] border-border overflow-hidden mb-3.5">
+            <div className="inline-flex rounded-md border border-border overflow-hidden mb-3.5">
               <button
                 type="button"
                 onClick={() => setDateMode('custom')}
-                className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                className={`min-h-11 px-3.5 py-1.5 text-sm font-medium transition-colors ${
                   dateMode === 'custom' ? 'bg-green-700 text-white' : 'bg-bg-secondary text-text-secondary hover:text-text-primary'
                 }`}
               >
@@ -106,7 +104,7 @@ const ReportsPage = () => {
               <button
                 type="button"
                 onClick={() => { setDateMode('all'); setFromDate(''); setToDate(''); }}
-                className={`px-3.5 py-1.5 text-sm font-medium border-l-[0.5px] border-border transition-colors ${
+                className={`min-h-11 px-3.5 py-1.5 text-sm font-medium border-l border-border transition-colors ${
                   dateMode === 'all' ? 'bg-green-700 text-white' : 'bg-bg-secondary text-text-secondary hover:text-text-primary'
                 }`}
               >
@@ -144,11 +142,11 @@ const ReportsPage = () => {
                   onChange={(e) => setDataType(e.target.value)}
                 >
                   <option>All sensor data</option>
-                  <option>Soil moisture only</option>
-                  <option>pH & EC trends</option>
-                  <option>NPK nutrient levels</option>
+                  <option value="Soil moisture only">Soil wetness</option>
+                  <option value="pH & EC trends">Soil acidity and salt levels</option>
+                  <option value="NPK nutrient levels">Plant food levels (N, P, K)</option>
                   <option>Irrigation history</option>
-                  <option>Rainwater harvesting</option>
+                  <option value="Rainwater harvesting">Rain tank readings</option>
                   <option>Orders & sales</option>
                 </Select>
               </FormField>

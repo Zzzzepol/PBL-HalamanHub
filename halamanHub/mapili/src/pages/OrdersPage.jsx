@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { shopOrdersApi, ApiError } from '../api/client';
+import { shopOrdersApi } from '../api/client';
 import { useCart } from '../context/CartContext';
-import { Button, Badge, Spinner, EmptyState, orderStatusBadge, Alert } from '../components/ui/UI';
+import { Button, Badge, Spinner, EmptyState, orderStatusBadge, Alert, StepIndicator, ErrorState } from '../components/ui/UI';
 
 const formatDate = (iso) => new Date(iso).toLocaleDateString('en-US', {
   year: 'numeric', month: 'long', day: 'numeric',
@@ -16,6 +16,8 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
   const [expanded, setExpanded] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const sb = orderStatusBadge[order.status] || orderStatusBadge.pending;
+  const statusLabel = order.status === 'ready' ? order.fulfillmentType === 'pickup' ? 'Ready for pickup' : 'Out for delivery' : sb.label;
+  const stepIndex = order.status === 'completed' ? 3 : order.status === 'ready' ? 2 : order.status === 'processing' ? 1 : 0;
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -30,18 +32,18 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
 
   const paymentColor = {
     unpaid:   'text-red-600',
-    paid:     'text-green-600',
+    paid:     'text-green-700',
   }[order.payment] || 'text-gray-500';
 
   return (
-    <div className="bg-white rounded-2xl shadow-soft border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-soft border border-gray-200 overflow-hidden">
       {/* Header */}
       <div className="p-5 flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-gray-800">{order.orderNumber}</span>
             <Badge variant={sb.variant}>
-              <i className={`ti ${sb.icon}`} /> {sb.label}
+              <i className={`ti ${sb.icon}`} aria-hidden="true" /> {statusLabel}
             </Badge>
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{formatDate(order.orderDate)}</p>
@@ -49,7 +51,8 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
         <div className="text-right flex-shrink-0">
           <div className="font-bold text-brand-800 text-lg">₱{order.amount?.toFixed(2)}</div>
           <div className={`text-xs font-medium capitalize ${paymentColor}`}>
-            {order.payment}
+            <i className={`ti ${order.payment === 'paid' ? 'ti-circle-check' : order.payment === 'unpaid' ? 'ti-clock' : 'ti-alert-circle'} mr-1`} aria-hidden="true" />
+            {order.payment === 'paid' ? 'Paid' : order.payment === 'unpaid' ? 'Waiting for payment' : 'Payment update'}
           </div>
         </div>
       </div>
@@ -58,6 +61,8 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
       <div className="px-5 pb-4">
         <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">{order.product}</p>
       </div>
+
+      {order.status !== 'cancelled' && <div className="px-5 pb-5"><StepIndicator steps={['Received', 'Preparing', order.fulfillmentType === 'pickup' ? 'Ready for pickup' : 'Out for delivery', 'Completed']} current={stepIndex} /></div>}
 
       {/* Actions */}
       <div className="px-5 pb-5 flex items-center gap-2 flex-wrap border-t border-gray-50 pt-4">
@@ -73,8 +78,8 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
             {downloading ? '…' : 'Receipt'}
           </Button>
           {['pending', 'confirmed', 'processing', 'ready'].includes(order.status) && (
-            <span className="text-xs text-gray-400 flex items-center gap-1">
-              <i className="ti ti-clock" /> In progress
+            <span className="text-sm text-gray-600 flex items-center gap-1">
+              <i className="ti ti-clock" /> We will update you as it moves along.
             </span>
           )}
           {order.status === 'completed' && (
@@ -98,7 +103,7 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
 
       {/* Expanded details */}
       {expanded && (
-        <div className="border-t border-gray-100 bg-gray-50 p-5">
+        <div className="border-t border-gray-200 bg-gray-50 p-5">
           {/* Status history */}
           {order.statusHistory?.length > 0 && (
             <div className="mb-5">
@@ -108,9 +113,9 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
                   <div key={i} className="flex items-start gap-3">
                     <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${i === order.statusHistory.length - 1 ? 'bg-brand-600' : 'bg-gray-300'}`} />
                     <div>
-                      <div className="text-sm font-medium text-gray-700 capitalize">{h.status}</div>
+                      <div className="text-sm font-medium text-gray-700"><i className={`ti ${orderStatusBadge[h.status]?.icon || 'ti-help-circle'} mr-1`} aria-hidden="true" />{orderStatusBadge[h.status]?.label || 'Order updated'}</div>
                       {h.note && <div className="text-xs text-gray-500">{h.note}</div>}
-                      <div className="text-xs text-gray-400">{formatDate(h.changedAt)} at {formatTime(h.changedAt)}</div>
+                      <div className="text-xs text-gray-600">{formatDate(h.changedAt)} at {formatTime(h.changedAt)}</div>
                     </div>
                   </div>
                 ))}
@@ -122,23 +127,23 @@ const OrderCard = ({ order, onReorder, reordering, token }) => {
           <div className="grid sm:grid-cols-2 gap-4 text-sm">
             {order.note && (
               <div>
-                <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Note</div>
+                <div className="text-xs font-semibold text-gray-600 uppercase mb-1">Note</div>
                 <div className="text-gray-600">{order.note}</div>
               </div>
             )}
             <div>
-              <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Fulfillment</div>
+              <div className="text-xs font-semibold text-gray-600 uppercase mb-1">Fulfillment</div>
               <div className="text-gray-600 capitalize flex items-center gap-1.5">
                 <i className={`ti ${order.fulfillmentType === 'pickup' ? 'ti-building-store' : 'ti-truck-delivery'} text-brand-500`} />
                 {order.fulfillmentType === 'pickup' ? 'Farm pickup' : 'Home delivery'}
               </div>
             </div>
             <div>
-              <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Payment</div>
+              <div className="text-xs font-semibold text-gray-600 uppercase mb-1">Payment</div>
               <div className={`capitalize font-medium ${paymentColor}`}>{order.payment}</div>
             </div>
             <div>
-              <div className="text-xs font-semibold text-gray-400 uppercase mb-1">Order date</div>
+              <div className="text-xs font-semibold text-gray-600 uppercase mb-1">Order date</div>
               <div className="text-gray-600">{formatDate(order.orderDate)}</div>
             </div>
           </div>
@@ -161,16 +166,19 @@ const OrdersPage = () => {
   const navigate                      = useNavigate();
   const [orders, setOrders]           = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [loadError, setLoadError]     = useState(false);
   const [activeTab, setActiveTab]     = useState('all');
   const [reordering, setReordering]   = useState(null);
   const [reorderMsg, setReorderMsg]   = useState(null);
 
-  useEffect(() => {
-    shopOrdersApi.getAll(token)
-      .then(setOrders)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const loadOrders = useCallback(async () => {
+    setLoading(true);
+    setLoadError(false);
+    try { setOrders(await shopOrdersApi.getAll(token)); }
+    catch { setLoadError(true); }
+    finally { setLoading(false); }
   }, [token]);
+  useEffect(() => { loadOrders(); }, [loadOrders]);
 
   const filtered = useMemo(() => {
     if (activeTab === 'all')       return orders;
@@ -199,8 +207,8 @@ const OrdersPage = () => {
       });
       setReorderMsg({ type: 'success', text: 'Items added to your cart!' });
       setTimeout(() => navigate('/cart'), 1200);
-    } catch (err) {
-      setReorderMsg({ type: 'error', text: err instanceof ApiError ? err.message : 'Reorder failed. Please try again.' });
+    } catch {
+      setReorderMsg({ type: 'error', text: 'Some products may no longer be available. Check your cart and try again.' });
     } finally {
       setReordering(null);
     }
@@ -224,8 +232,10 @@ const OrdersPage = () => {
           <Alert type={reorderMsg.type} message={reorderMsg.text} onClose={() => setReorderMsg(null)} className="mb-5" />
         )}
 
+        {loadError && <div className="mb-5"><ErrorState title="Your orders are not loading" description="Check your connection, then try again." onRetry={loadOrders} /></div>}
+
         {/* Tabs */}
-        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-soft border border-gray-100 mb-6 overflow-x-auto">
+        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-soft border border-gray-200 mb-6 overflow-x-auto">
           {STATUS_TABS.map(tab => (
             <button
               key={tab.key}

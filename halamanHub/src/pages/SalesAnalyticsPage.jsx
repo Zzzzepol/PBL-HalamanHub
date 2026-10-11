@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Card, CardHeader, CardBody, StatCard, Table, Badge, EmptyState } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, StatCard, Table, Badge, EmptyState, ErrorState } from '../components/ui/UI';
 import { SalesRevenueChart, TopProductsChart } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
 import { ordersApi } from '../api/client';
@@ -33,37 +33,28 @@ const SalesAnalyticsPage = () => {
 
   const trendLabel =
     forecastTrend > 0
-      ? `+${forecastTrend}% trend`
+      ? `Up ${forecastTrend}%`
       : forecastTrend < 0
-        ? `${forecastTrend}% trend`
-        : 'Stable trend';
+        ? `Down ${Math.abs(forecastTrend)}%`
+        : 'No change';
 
   const confidenceLabel =
     forecastConfidence >= 75
-      ? 'High confidence'
+      ? 'Likely close'
       : forecastConfidence >= 50
-        ? 'Moderate confidence'
-        : 'Low confidence';
+        ? 'Use as a guide'
+        : 'Rough estimate';
 
   return (
     <div className="space-y-3.5">
       <div className={s.filterBar}>
         <div>
-          <div className="text-lg font-semibold text-text-primary">Sales Analytics</div>
-          <div className="text-sm text-text-secondary">
-            Revenue, top-selling items, and data-driven sales forecast
-          </div>
+          <div className="text-lg font-semibold text-text-primary">Sales history</div>
+          <div className="text-sm text-text-secondary">See your revenue, best sellers, and an estimate for next week.</div>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load sales analytics.{' '}
-          <button className="underline" onClick={refetch}>
-            Retry
-          </button>
-        </div>
-      )}
+      {error && <ErrorState title="Sales history is not loading" description="Check your connection, then try again." onRetry={refetch} />}
 
       <div className={s.grid.stats4}>
         <StatCard
@@ -82,7 +73,7 @@ const SalesAnalyticsPage = () => {
           icon="ti-chart-bar"
           iconVariant="amber"
           value={formatCurrency(analytics.averageOrderValue)}
-          label="Avg. order value"
+          label="Average sale"
         />
         <StatCard
           icon="ti-trending-up"
@@ -90,17 +81,14 @@ const SalesAnalyticsPage = () => {
           value={formatCurrency(analytics.forecastRevenue)}
           label="Next 7-day forecast"
           trend={trendLabel}
-          trendDir={forecastTrend >= 0 ? 'up' : 'down'}
+          trendDir={forecastTrend > 0 ? 'up' : forecastTrend < 0 ? 'dn' : 'ok'}
         />
       </div>
 
-      {/* Forecast explanation */}
-      <Card>
-        <CardHeader
-          title="Sales forecast"
-          subtitle="Estimated revenue for the next 7 days based on historical sales behavior"
-        />
-        <CardBody>
+      <details className="rounded-xl border border-border bg-bg-primary">
+        <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-text-primary">How this estimate was made</summary>
+        <div className="border-t border-border p-4">
+          <p className="mb-4 text-sm text-text-secondary">See the past sales data used to estimate revenue for the next 7 days.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="rounded-md border border-border bg-bg-secondary px-3 py-3">
               <div className="text-xs text-text-secondary">Forecast revenue</div>
@@ -136,8 +124,8 @@ const SalesAnalyticsPage = () => {
               result.
             </div>
           </div>
-        </CardBody>
-      </Card>
+        </div>
+      </details>
 
       <div className={s.grid.twoCol}>
         <Card>

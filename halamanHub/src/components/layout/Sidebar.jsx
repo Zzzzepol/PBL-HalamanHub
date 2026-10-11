@@ -3,132 +3,58 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
-  { section: 'Monitor' },
-  { path: '/',label: 'Dashboard',icon: 'ti-dashboard'},
-  { path: '/analytics',label: 'Analytics',icon: 'ti-chart-line'},
-  { path: '/sensors',label: 'Sensor monitoring',icon: 'ti-radar'},
-  { section: 'Control' },
-  { path: '/irrigation',label: 'Irrigation control',icon: 'ti-droplet'},
-  { path: '/rainwater',label: 'Rainwater harvesting',icon: 'ti-cloud-rain'},
-  { section: 'Commerce' },
-  { path: '/products',label: 'Products',icon: 'ti-package'},
-  { path: '/orders',label: 'Orders', icon: 'ti-shopping-cart' },
-  { path: '/sales-analytics',label: 'Sales Analytics', icon: 'ti-chart-bar' },
-  { path: '/pos',label: 'Point of sale', icon: 'ti-basket' },
-  { path: '/schedule',label: 'Pickup schedule', icon: 'ti-calendar'},
-  { section: 'Admin' },
-  { path: '/users',label: 'Users',icon: 'ti-users', adminOnly: true },
-  { path: '/reports',label: 'Reports', icon: 'ti-file-analytics' },
-  { path: '/settings',label: 'Settings', icon: 'ti-settings', adminOnly: true },
-  { path: '/logs', label: 'Activity logs', icon: 'ti-clipboard-list', adminOnly: true },
+  { path: '/', label: 'Home', icon: 'ti-home' },
+  { section: 'My Plants' },
+  { path: '/sensors', label: 'Sensors', icon: 'ti-radar' },
+  { path: '/irrigation', label: 'Watering', icon: 'ti-droplet' },
+  { path: '/rainwater', label: 'Rain tank', icon: 'ti-cloud-rain' },
+  { path: '/analytics', label: 'History and trends', icon: 'ti-chart-line' },
+  { section: 'Shop' },
+  { path: '/products', label: 'Products', icon: 'ti-package' },
+  { path: '/orders', label: 'Orders', icon: 'ti-shopping-cart' },
+  { path: '/pos', label: 'Walk-in sale', icon: 'ti-basket' },
+  { path: '/schedule', label: 'Pickup schedule', icon: 'ti-calendar' },
+  { path: '/sales-analytics', label: 'Sales history', icon: 'ti-chart-bar' },
+  { section: 'Manage' },
+  { path: '/reports', label: 'Reports', icon: 'ti-file-analytics' },
+  { path: '/users', label: 'Users', icon: 'ti-users', adminOnly: true },
+  { path: '/settings', label: 'Settings', icon: 'ti-settings', adminOnly: true },
+  { path: '/logs', label: 'Activity history', icon: 'ti-clipboard-list', adminOnly: true },
 ];
 
-const Sidebar = ({ collapsed, onToggle, mobileOpen, pendingOrders }) => {
+const Sidebar = ({ mobileOpen, pendingOrders, onNavigate }) => {
   const location = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const isOfflineOnly = user?.role === 'offline-readonly';
-  // Offline-readonly sessions should never render any nav items — this is
-  // a defensive fallback in case a page is ever mistakenly added inside
-  // MainLayout for that role; the real guard is App.jsx's route structure.
+  // The offline account stays outside MainLayout. Keep this defensive fallback.
   const visibleItems = isOfflineOnly ? [] : navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
-    <aside
-      className={`
-        group flex flex-col h-screen sticky top-0 overflow-hidden z-20
-        bg-bg-primary border-r-[0.5px] border-border
-        transition-[width] duration-[220ms] ease-in-out
-        ${collapsed ? 'w-[60px]' : 'w-sidebar'}
-        max-md:fixed max-md:left-0 max-md:top-0 max-md:z-[100] max-md:h-screen max-md:shadow-lg
-        max-md:transition-transform max-md:duration-[250ms] max-md:ease-in-out
-        ${mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}
-        ${collapsed ? 'max-md:w-sidebar' : ''}
-      `}
-      aria-label="Main navigation"
-    >
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-3.5 pt-[18px] pb-3.5 border-b-[0.5px] border-border flex-shrink-0 min-h-[64px] relative">
-        <img src="/logo.jpg" alt="Mapili Plant Nursery logo" className="w-[34px] h-[34px] rounded-md object-cover flex-shrink-0" />
-        {!collapsed && (
-          <div className="flex flex-col flex-1 min-w-0 leading-tight">
-            <span className="text-md font-semibold text-text-primary whitespace-nowrap">Mapili Plant Nursery</span>
-            <span className="text-[10px] text-text-secondary whitespace-nowrap">HalamanHub</span>
-          </div>
-        )}
-        <button
-          className="absolute -right-px top-1/2 -translate-y-1/2 translate-x-1/2 w-5 h-5 rounded-full bg-bg-primary border-[0.5px] border-border-medium flex items-center justify-center text-text-secondary text-[11px] cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
-          onClick={onToggle}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <i className={`ti ${collapsed ? 'ti-chevron-right' : 'ti-chevron-left'}`} aria-hidden="true" />
-        </button>
+    <aside className={`flex h-screen w-sidebar flex-shrink-0 flex-col sticky top-0 overflow-hidden z-20 bg-bg-primary border-r border-border max-md:fixed max-md:left-0 max-md:top-0 max-md:z-[100] max-md:h-screen max-md:shadow-lg max-md:transition-transform ${mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}`} aria-label="Main navigation">
+      <div className="border-b border-border px-3 py-4">
+        <div className="flex min-h-11 items-center gap-3">
+          <img src="/logo.jpg" alt="" className="h-10 w-10 flex-shrink-0 rounded-lg object-cover" />
+          <span className="text-sm font-semibold leading-tight text-text-primary">Mapili Plant Nursery</span>
+        </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="px-2 py-2.5 flex-1 overflow-y-auto overflow-x-hidden">
-        {visibleItems.map((item, i) => {
-          if (item.section) {
-            return !collapsed ? (
-              <div key={i} className="text-[10px] font-medium text-text-tertiary uppercase tracking-wider px-2 pt-2.5 pb-1 whitespace-nowrap">
-                {item.section}
-              </div>
-            ) : null;
-          }
-
-          const isActive = item.path === '/'
-            ? location.pathname === '/'
-            : location.pathname.startsWith(item.path);
-
-      const badgeValue = item.path === '/orders' ? pendingOrders : null;
-
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/'}
-              className={`
-                flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer text-base mb-0.5 whitespace-nowrap relative overflow-hidden no-underline
-                transition-colors duration-150
-                ${isActive
-                  ? 'bg-green-50 text-green-800 font-medium [&_.ti]:text-green-800'
-                  : 'text-text-secondary hover:bg-bg-secondary hover:text-text-primary'}
-              `}
-              title={collapsed ? item.label : undefined}
-            >
-              <i className={`ti ${item.icon} text-[17px] w-5 text-center flex-shrink-0`} aria-hidden="true" />
-              {!collapsed && <span className="flex-1 overflow-hidden text-ellipsis">{item.label}</span>}
-              {!collapsed && !!badgeValue && (
-                <span className="ml-auto bg-red-100 text-red-800 text-[10px] px-[7px] py-0.5 rounded-full font-medium">
-                  {badgeValue}
-                </span>
-              )}
-              {collapsed && !!badgeValue && (
-                <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-600 rounded-full text-[8px] text-white flex items-center justify-center">
-                  {badgeValue}
-                </span>
-              )}
-            </NavLink>
-          );
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3">
+        {visibleItems.map(item => {
+          if (item.section) return <div key={item.section} className="px-2 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-text-secondary">{item.section}</div>;
+          const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+          const badge = item.path === '/orders' ? pendingOrders : null;
+          return <NavLink key={item.path} to={item.path} end={item.path === '/'} onClick={onNavigate} className={`relative mb-1 flex min-h-11 items-center gap-2.5 overflow-hidden rounded-lg px-2.5 py-2 text-base no-underline transition-colors ${active ? 'bg-green-50 font-semibold text-green-800 [&_.ti]:text-green-800' : 'text-text-secondary hover:bg-bg-secondary hover:text-text-primary'}`}>
+            <i className={`ti ${item.icon} w-5 flex-shrink-0 text-center text-base`} aria-hidden="true" />
+            <span className="flex-1 overflow-hidden text-ellipsis">{item.label}</span>
+            {Number(badge) > 0 && <span className="ml-auto rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{badge}</span>}
+          </NavLink>;
         })}
       </nav>
 
-      {/* Bottom */}
-      {!collapsed && (
-        <div className="px-2 pt-2 pb-4 border-t-[0.5px] border-border flex-shrink-0">
-          <NavLink
-            to="/settings"
-            className="flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-pointer text-base text-text-secondary hover:bg-bg-secondary hover:text-text-primary transition-colors duration-150 no-underline"
-          >
-            <i className="ti ti-help-circle text-[17px] w-5 text-center flex-shrink-0" aria-hidden="true" />
-            <span className="flex-1 overflow-hidden text-ellipsis">Help & documentation</span>
-          </NavLink>
-          <div className="flex items-center gap-[5px] text-xs text-text-tertiary px-2.5 pt-1.5">
-            <i className="ti ti-map-pin text-[12px]" aria-hidden="true" />
-            <span>Talisay, Batangas</span>
-          </div>
-        </div>
-      )}
+      <div className="flex-shrink-0 border-t border-border px-2 pt-2 pb-4">
+        <div className="flex items-center gap-2 px-2.5 pt-2 text-xs text-text-secondary"><i className="ti ti-map-pin" aria-hidden="true" /><span>Talisay, Batangas</span></div>
+      </div>
     </aside>
   );
 };

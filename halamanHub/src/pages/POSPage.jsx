@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, CardBody, Button, SearchBar, Input, Badge, EmptyState } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, Button, SearchBar, Input, Badge, EmptyState, ErrorState, ConfirmDialog } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { productsApi, ordersApi, ApiError } from '../api/client';
@@ -16,6 +16,7 @@ const POSPage = () => {
   const [processing, setProcessing] = useState(false);
   const [saleError, setSaleError] = useState('');
   const [receipt, setReceipt] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const list = useMemo(() => products || [], [products]);
   const filtered = useMemo(
@@ -65,7 +66,7 @@ const POSPage = () => {
       if (err instanceof ApiError && err.status === 409) {
         setSaleError('Some items no longer have enough stock. Please adjust the cart.');
       } else {
-        setSaleError(err instanceof ApiError ? err.message : 'Failed to complete sale.');
+        setSaleError('We could not complete this sale. Please try again.');
       }
     } finally {
       setProcessing(false);
@@ -83,9 +84,7 @@ const POSPage = () => {
               <SearchBar value={search} onChange={setSearch} placeholder="Search products…" />
             </div>
             {error && (
-              <div className="mb-3 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-                Failed to load products. <button className="underline" onClick={refetch}>Retry</button>
-              </div>
+              <ErrorState title="Products are not loading" description="Check your connection, then try again." onRetry={refetch} />
             )}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
               {filtered.map(p => (
@@ -93,7 +92,7 @@ const POSPage = () => {
                   key={p._id}
                   onClick={() => addToCart(p)}
                   disabled={p.stock <= 0}
-                  className={`text-left border-[0.5px] border-border rounded-lg p-3 hover:bg-bg-secondary transition-colors ${p.stock <= 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  className={`min-h-[96px] text-left border border-border rounded-xl p-3 hover:bg-bg-secondary transition-colors ${p.stock <= 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                   <div className="text-sm font-medium truncate">{p.name}</div>
                   <div className="text-xs text-text-secondary">₱{p.price}/{p.unit}</div>
@@ -128,34 +127,34 @@ const POSPage = () => {
                         <div className="text-sm font-medium truncate">{item.name}</div>
                         <div className="text-xs text-text-secondary">₱{item.price} × {item.qty} = ₱{(item.price * item.qty).toFixed(2)}</div>
                       </div>
-                      <button onClick={() => changeQty(item.productId, -1)} className="w-6 h-6 rounded border-[0.5px] border-border text-sm" aria-label="Decrease">−</button>
+                      <button onClick={() => changeQty(item.productId, -1)} className="min-h-11 min-w-11 rounded-lg border border-border text-base" aria-label={`Decrease ${item.name}`}>−</button>
                       <span className="w-5 text-center text-sm">{item.qty}</span>
-                      <button onClick={() => changeQty(item.productId, 1)} disabled={item.qty >= item.stock} className="w-6 h-6 rounded border-[0.5px] border-border text-sm disabled:opacity-40" aria-label="Increase">+</button>
-                      <button onClick={() => removeFromCart(item.productId)} className="text-red-600 ml-1" aria-label={`Remove ${item.name}`}>
+                      <button onClick={() => changeQty(item.productId, 1)} disabled={item.qty >= item.stock} className="min-h-11 min-w-11 rounded-lg border border-border text-base disabled:opacity-40" aria-label={`Increase ${item.name}`}>+</button>
+                      <button onClick={() => removeFromCart(item.productId)} className="min-h-11 min-w-11 text-red-700 ml-1" aria-label={`Remove ${item.name}`}>
                         <i className="ti ti-x" aria-hidden="true" />
                       </button>
                     </div>
                   ))}
                 </div>
 
-                <div className="border-t-[0.5px] border-border pt-3 mb-3 flex justify-between font-medium">
+                <div className="border-t border-border pt-3 mb-3 flex justify-between font-medium">
                   <span>Total</span>
                   <span>₱{total.toFixed(2)}</span>
                 </div>
 
                 <div className="mb-3">
-                  <Input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="Customer name (optional)" />
+                  <Input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="Customer name (optional)" aria-label="Customer name, optional" />
                 </div>
                 <div className="mb-3">
-                  <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)" />
+                  <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Note (optional)" aria-label="Sale note, optional" />
                 </div>
 
                 {saleError && <div className="mb-3 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">{saleError}</div>}
 
                 <Button variant="primary" className="w-full justify-center" icon="ti-cash-register" onClick={completeSale} disabled={processing}>
-                  {processing ? 'Processing…' : `Complete sale — ₱${total.toFixed(2)}`}
+                  {processing ? 'Processing…' : `Charge customer — ₱${total.toFixed(2)}`}
                 </Button>
-                <Button variant="default" className="w-full justify-center mt-2" onClick={clearSale} disabled={processing}>
+                <Button variant="default" className="w-full justify-center mt-2" onClick={() => setConfirmClear(true)} disabled={processing}>
                   Clear sale
                 </Button>
               </>
@@ -177,6 +176,7 @@ const POSPage = () => {
       </div>
 
       <WalkInReceipt order={receipt} />
+      <ConfirmDialog open={confirmClear} title="Clear this sale?" message="This removes the items and customer details from the current sale." confirmLabel="Clear sale" onConfirm={() => { clearSale(); setConfirmClear(false); }} onCancel={() => setConfirmClear(false)} />
     </div>
   );
 };

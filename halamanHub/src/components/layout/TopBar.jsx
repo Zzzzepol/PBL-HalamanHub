@@ -7,17 +7,20 @@ import { useWeather } from '../../context/WeatherContext';
 import { WeatherModal, weatherIcon } from './WeatherForecast';
 
 const pageTitles = {
-  '/':           { title: 'Dashboard',             sub: 'Farm overview & live readings' },
-  '/analytics':  { title: 'Analytics',             sub: 'Sensor trends & crop data'     },
-  '/sensors':    { title: 'Sensor monitoring',     sub: 'All ESP32 devices & readings'  },
-  '/irrigation': { title: 'Irrigation control',   sub: 'Manage zones & schedules'      },
-  '/rainwater':  { title: 'Rainwater harvesting',  sub: 'Tank levels & collection data' },
-  '/products':   { title: 'Products',              sub: 'Inventory management'          },
-  '/orders':     { title: 'Orders',                sub: 'Customer order management'     },
-  '/pos':        { title: 'Point of sale',          sub: 'Walk-in customer sales'        },
-  '/users':      { title: 'Users',                 sub: 'Account & access management'   },
-  '/reports':    { title: 'Reports & export',      sub: 'Generate and download reports' },
-  '/settings':   { title: 'Settings',              sub: 'System configuration'          },
+  '/': { title: 'Home', sub: 'See how your plants, water, and orders are doing.' },
+  '/analytics': { title: 'History and trends', sub: 'See how readings change over time.' },
+  '/sensors': { title: 'Sensors', sub: 'See which devices are connected and when they last checked in.' },
+  '/irrigation': { title: 'Watering', sub: 'Choose how and when your plants get water.' },
+  '/rainwater': { title: 'Rain tank', sub: 'Check the tank level and water quality.' },
+  '/products': { title: 'Products', sub: 'Add plants and keep stock up to date.' },
+  '/orders': { title: 'Orders', sub: 'See what customers ordered and what to do next.' },
+  '/sales-analytics': { title: 'Sales history', sub: 'Review sales totals and trends.' },
+  '/pos': { title: 'Walk-in sale', sub: 'Add items and charge a customer.' },
+  '/schedule': { title: 'Pickup schedule', sub: 'See upcoming customer pickups.' },
+  '/users': { title: 'Users', sub: 'Manage who can use the nursery tools.' },
+  '/reports': { title: 'Reports', sub: 'Create and download nursery reports.' },
+  '/settings': { title: 'Settings', sub: 'Update how your nursery tools work.' },
+  '/logs': { title: 'Activity history', sub: 'See recent changes and actions.' },
 };
 
 const notifIconBg = {
@@ -53,7 +56,7 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
       setPwForm({ currentPassword: '', newPassword: '', confirm: '' });
       window.alert('Password updated successfully.');
     } catch (err) {
-      setPwError(err instanceof ApiError ? err.message : 'Failed to update password.');
+      setPwError(err instanceof ApiError ? 'We could not update your password. Check your current password and try again.' : 'We could not update your password. Please try again.');
     } finally {
       setPwSaving(false);
     }
@@ -93,10 +96,10 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
   };
 
   return (
-    <header className="flex items-center gap-3 px-5 py-2.5 border-b-[0.5px] border-border bg-bg-primary sticky top-0 z-10 min-h-[58px] max-md:px-3 max-md:gap-2">
+    <header className="flex items-center gap-3 px-5 py-2.5 border-b border-border bg-bg-primary sticky top-0 z-10 min-h-[68px] max-md:px-3 max-md:gap-2">
       {/* Mobile menu button */}
       <button
-        className="hidden max-md:flex w-9 h-9 rounded-md border-[0.5px] border-border bg-bg-primary items-center justify-center text-text-secondary text-lg flex-shrink-0"
+        className="hidden max-md:flex min-h-11 min-w-11 rounded-lg border border-border bg-bg-primary items-center justify-center text-text-secondary text-lg flex-shrink-0"
         onClick={onMenuToggle}
         aria-label="Open navigation"
       >
@@ -104,21 +107,21 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
       </button>
 
       {/* Page title */}
-      <div className="flex flex-col min-w-0">
-        <h1 className="text-lg font-medium text-text-primary leading-tight whitespace-nowrap max-md:text-md">{page.title}</h1>
-        <span className="text-xs text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis max-md:hidden">{page.sub}</span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <h1 className="text-lg font-semibold text-text-primary leading-tight whitespace-nowrap max-md:text-base">{page.title}</h1>
+        <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs text-text-secondary max-sm:text-[12px]">{page.sub}</span>
       </div>
 
       <div className="flex items-center gap-2.5 ml-auto flex-shrink-0">
         <button
           type="button"
-          className="flex h-9 items-center gap-1.5 rounded-md border-[0.5px] border-border bg-bg-primary px-2 text-xs text-text-primary hover:bg-bg-secondary sm:gap-2 sm:px-2.5"
+          className="flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg-primary px-2 text-xs text-text-primary hover:bg-bg-secondary sm:gap-2 sm:px-2.5"
           onClick={() => setShowWeather(true)}
           aria-label={`Open local weather forecast for ${locationName || 'your detected location'}. ${rainText}`}
           title={`${locationName || 'Detected location'} · ${rainText}`}
         >
           <i className={`ti ${weather?.current ? weatherIcon(weather.current.weather_code, weather.current.is_day) : 'ti-cloud-sun'} text-lg text-sky-700`} aria-hidden="true" />
-          {locationName && <span className="max-w-[52px] truncate text-[10px] text-text-secondary sm:max-w-[84px] sm:text-[11px]">{locationName.split(',')[0]}</span>}
+          {locationName && <span className="hidden max-w-[84px] truncate text-xs text-text-secondary sm:block">{locationName.split(',')[0]}</span>}
           <span className="font-semibold">{weather?.current ? `${Math.round(weather.current.temperature_2m)}°` : 'Weather'}</span>
           <span className="flex items-center gap-1 border-l border-border pl-1.5 text-sky-800 sm:pl-2">
             <i className="ti ti-cloud-rain" aria-hidden="true" />
@@ -129,7 +132,7 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
         {/* Notifications */}
         <div className="relative">
           <button
-            className="w-9 h-9 border-[0.5px] border-border rounded-md flex items-center justify-center cursor-pointer bg-bg-primary text-text-secondary hover:bg-bg-secondary transition-colors duration-150 relative text-lg"
+            className="relative flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border bg-bg-primary text-lg text-text-secondary transition-colors hover:bg-bg-secondary"
             onClick={() => setShowNotifs(!showNotifs)}
             aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
           >
@@ -140,16 +143,16 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
           </button>
 
           {showNotifs && (
-            <div className="absolute top-[calc(100%+8px)] right-0 w-80 max-h-96 overflow-y-auto bg-bg-primary border-[0.5px] border-border rounded-lg shadow-lg z-50" role="dialog" aria-label="Notifications">
-              <div className="flex items-center justify-between px-3.5 py-3 border-b-[0.5px] border-border text-base font-medium sticky top-0 bg-bg-primary">
+            <div className="absolute top-[calc(100%+8px)] right-0 w-80 max-h-96 overflow-y-auto bg-bg-primary border border-border rounded-lg shadow-lg z-50" role="dialog" aria-label="Notifications">
+              <div className="flex items-center justify-between px-3.5 py-3 border-b border-border text-base font-medium sticky top-0 bg-bg-primary">
                 <span>Notifications</span>
                 <div className="flex items-center gap-2.5">
                   {unreadCount > 0 && (
-                    <button className="bg-transparent border-none text-primary text-xs cursor-pointer" onClick={markAllRead}>
-                      Mark all read
+                    <button className="min-h-11 bg-transparent border-none text-text-primary text-sm cursor-pointer" onClick={markAllRead}>
+                    Mark all as read
                     </button>
                   )}
-                  <button className="bg-transparent border-none text-text-secondary cursor-pointer text-base flex" onClick={() => setShowNotifs(false)} aria-label="Close">
+                  <button className="min-h-11 min-w-11 bg-transparent border-none text-text-secondary cursor-pointer text-base flex items-center justify-center" onClick={() => setShowNotifs(false)} aria-label="Close notifications">
                     <i className="ti ti-x" aria-hidden="true" />
                   </button>
                 </div>
@@ -157,7 +160,7 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
               {notifications.slice(0, 5).map(n => (
                 <button
                   key={n.id}
-                  className={`flex gap-2.5 px-3.5 py-2.5 border-b-[0.5px] border-border last:border-b-0 items-start w-full text-left bg-transparent border-x-0 border-t-0 cursor-pointer hover:bg-bg-secondary ${!n.read ? 'bg-bg-secondary/40' : ''}`}
+                  className={`flex gap-2.5 px-3.5 py-2.5 border-b border-border last:border-b-0 items-start w-full text-left bg-transparent border-x-0 border-t-0 cursor-pointer hover:bg-bg-secondary ${!n.read ? 'bg-bg-secondary/40' : ''}`}
                   onClick={() => !n.read && markOneRead(n.id)}
                 >
                   <div className={`w-7 h-7 rounded-sm flex items-center justify-center flex-shrink-0 text-sm ${notifIconBg[n.type] || notifIconBg.ok}`}>
@@ -170,7 +173,7 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
                 </button>
               ))}
               {notifications.length === 0 && (
-                <div className="px-3.5 py-6 text-center text-sm text-text-secondary">No notifications yet.</div>
+                <div className="px-3.5 py-6 text-center text-sm text-text-secondary">You are all caught up. New alerts will show here.</div>
               )}
             </div>
           )}
@@ -179,7 +182,7 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
         {/* Avatar / user menu */}
         <div className="relative">
           <button
-            className="flex items-center gap-2 cursor-pointer px-1.5 py-1 rounded-md hover:bg-bg-secondary transition-colors duration-150 bg-transparent border-none font-sans"
+            className="flex min-h-11 items-center gap-2 cursor-pointer px-1.5 py-1 rounded-md hover:bg-bg-secondary transition-colors duration-150 bg-transparent border-none font-sans"
             onClick={() => setShowUserMenu(!showUserMenu)}
             aria-haspopup="true"
             aria-expanded={showUserMenu}
@@ -193,8 +196,8 @@ const TopBar = ({ onMenuToggle, notifications = [], onNotificationsChanged }) =>
           </button>
 
           {showUserMenu && (
-            <div className="absolute top-[calc(100%+8px)] right-0 w-[200px] bg-bg-primary border-[0.5px] border-border rounded-lg shadow-lg z-50 overflow-hidden" role="menu">
-              <div className="px-3.5 py-3 border-b-[0.5px] border-border flex flex-col gap-0.5">
+            <div className="absolute top-[calc(100%+8px)] right-0 w-[200px] bg-bg-primary border border-border rounded-lg shadow-lg z-50 overflow-hidden" role="menu">
+              <div className="px-3.5 py-3 border-b border-border flex flex-col gap-0.5">
                 <span className="text-sm font-medium text-text-primary">{user?.name || 'Juan Manalo'}</span>
                 <span className="text-xs text-text-secondary">@{user?.username || 'admin'}</span>
               </div>

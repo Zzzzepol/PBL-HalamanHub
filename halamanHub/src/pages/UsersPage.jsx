@@ -1,26 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, Table, Badge, Button, SearchBar, Select, Avatar, FormField, Input } from '../components/ui/UI';
+import { Card, CardHeader, Table, Badge, Button, SearchBar, Select, Avatar, FormField, Input, ConfirmDialog, ErrorState, EmptyState } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { usersApi, ApiError } from '../api/client';
+import { usersApi } from '../api/client';
 import * as ps from './pageStyles';
+import { timeAgo } from '../utils/timeAgo';
 
 const roleBadge = {
   admin: { variant: 'blue',   label: 'Admin' },
   staff: { variant: 'purple', label: 'Staff' },
 };
 
-const sectionBlock = 'mt-3.5 pt-3.5 border-t-[0.5px] border-border';
+const sectionBlock = 'mt-3.5 pt-3.5 border-t border-border';
 const emptyForm = { name: '', email: '', password: '', role: 'staff' };
-
-const formatDate = (iso) => {
-  if (!iso) return '—';
-  const diffH = (Date.now() - new Date(iso).getTime()) / 3600000;
-  if (diffH < 1)  return 'Just now';
-  if (diffH < 24) return `${Math.floor(diffH)}h ago`;
-  if (diffH < 48) return 'Yesterday';
-  return `${Math.floor(diffH / 24)} days ago`;
-};
 
 const UsersPage = () => {
   const { token, user: currentUser } = useAuth();
@@ -42,6 +34,7 @@ const [search, setSearch]         = useState('');
   const [pwError, setPwError]     = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
   const [changingPw, setChangingPw] = useState(false);
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null);
 
   const list = useMemo(() => users || [], [users]);
 
@@ -66,8 +59,8 @@ const openEdit = (u) => {
       const updated = await usersApi.setRole(modalUser._id, newRole, token);
       setUsers(list.map(u => u._id === modalUser._id ? updated : u));
       setModalUser(updated);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to update role.');
+    } catch {
+      alert('We could not change this user’s role. Please try again.');
     }
   };
 
@@ -77,8 +70,8 @@ const openEdit = (u) => {
       const updated = await usersApi.setStatus(modalUser._id, newStatus, token);
       setUsers(list.map(u => u._id === modalUser._id ? updated : u));
       setModalUser(updated);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to update status.');
+    } catch {
+      alert('We could not update this account. Please try again.');
     }
   };
 
@@ -86,8 +79,8 @@ const openEdit = (u) => {
     try {
       const result = await usersApi.resetPassword(modalUser._id, token);
       setResetInfo(result);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to reset password.');
+    } catch {
+      alert('We could not create a temporary password. Please try again.');
     }
   };
 
@@ -108,21 +101,22 @@ const openEdit = (u) => {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err) {
-      setPwError(err instanceof ApiError ? err.message : 'Failed to change password.');
+    } catch {
+      setPwError('We could not change your password. Check the current password and try again.');
     } finally {
       setChangingPw(false);
     }
   };
 
-  const deleteUser = async (u) => { 
-    if (!window.confirm(`Permanently delete ${u.name}'s account? This cannot be undone.`)) return;
+  const deleteUser = async () => {
+    if (!confirmDeleteUser) return;
     try {
-      await usersApi.delete(u._id, token);
-      setUsers(list.filter(x => x._id !== u._id));
+      await usersApi.delete(confirmDeleteUser._id, token);
+      setUsers(list.filter(x => x._id !== confirmDeleteUser._id));
       setModalUser(null);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to delete user.');
+      setConfirmDeleteUser(null);
+    } catch {
+      alert('We could not delete this account. Please try again.');
     }
   };
 
@@ -137,8 +131,8 @@ const openEdit = (u) => {
       setUsers([...list, created]);
       setAddModalOpen(false);
       setForm(emptyForm);
-    } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : 'Failed to create user.');
+    } catch {
+      setSaveError('We could not create this account. Check the details and try again.');
     } finally {
       setSaving(false);
     }
@@ -157,11 +151,7 @@ const openEdit = (u) => {
         <Button variant="primary" icon="ti-user-plus" onClick={openAdd}>Add user</Button>
       </div>
 
-      {error && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load users. <button className="underline" onClick={refetch}>Retry</button>
-        </div>
-      )}
+      {error && <div className="mb-4"><ErrorState title="User accounts are not loading" description="Check your connection, then try again." onRetry={refetch} /></div>}
 
       {/* Table */}
       <Card className={ps.lastCard}>
@@ -169,7 +159,7 @@ const openEdit = (u) => {
           title="System users"
           subtitle={loading ? 'Loading…' : `${filtered.length} of ${list.length} accounts`}
         />
-        <Table headers={['User', 'Email', 'Role', 'Last active', 'Status', 'Actions']}>
+        <div className="hidden xl:block"><Table headers={['User', 'Email', 'Role', 'Last active', 'Status', 'Actions']}>
           {filtered.map(u => {
             const rb = roleBadge[u.role] || roleBadge.staff;
             const isSelf = currentUser?.id === u._id || currentUser?.username === u.username;
@@ -183,13 +173,13 @@ const openEdit = (u) => {
                 </td>
                 <td>{u.email}</td>
                 <td><Badge variant={rb.variant}>{rb.label}</Badge></td>
-                <td>{formatDate(u.lastActiveAt)}</td>
-                <td><Badge variant={u.status === 'active' ? 'ok' : 'default'}>{u.status === 'active' ? 'Active' : 'Inactive'}</Badge></td>
+                <td>{timeAgo(u.lastActiveAt)}</td>
+                <td><Badge variant={u.status === 'active' ? 'ok' : 'default'}><i className={`ti ${u.status === 'active' ? 'ti-circle-check' : 'ti-pause'}`} aria-hidden="true" />{u.status === 'active' ? 'Active' : 'Not active'}</Badge></td>
                 <td>
                   <div className={ps.actionBtns}>
                     <Button size="sm" icon="ti-edit" onClick={() => openEdit(u)}>Manage</Button>
                     {!isSelf && (
-                      <Button size="sm" icon="ti-trash" onClick={() => deleteUser(u)} aria-label="Delete user" />
+                      <Button size="sm" icon="ti-trash" onClick={() => setConfirmDeleteUser(u)} aria-label={`Delete ${u.name}`} />
                     )}
                   </div>
                 </td>
@@ -199,7 +189,19 @@ const openEdit = (u) => {
           {!loading && filtered.length === 0 && (
             <tr><td colSpan={6} className="text-center text-text-secondary py-6">No users found.</td></tr>
           )}
-        </Table>
+        </Table></div>
+        <div className="grid gap-3 p-3 xl:hidden">
+          {filtered.map(u => {
+            const rb = roleBadge[u.role] || roleBadge.staff;
+            const isSelf = currentUser?.id === u._id || currentUser?.username === u.username;
+            return <article key={u._id} className="rounded-xl border border-border p-4">
+              <div className="flex items-start gap-3"><Avatar initials={u.initials} color={u.color} size={40} /><div className="min-w-0 flex-1"><h3 className="truncate font-semibold text-text-primary">{u.name}{isSelf ? ' (you)' : ''}</h3><p className="break-all text-sm text-text-secondary">{u.email}</p></div><Badge variant={u.status === 'active' ? 'ok' : 'default'}><i className={`ti ${u.status === 'active' ? 'ti-circle-check' : 'ti-pause'}`} aria-hidden="true" />{u.status === 'active' ? 'Active' : 'Not active'}</Badge></div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><Badge variant={rb.variant}>{rb.label}</Badge><span className="text-sm text-text-secondary">Last active {timeAgo(u.lastActiveAt)}</span></div>
+              <div className="mt-3 flex gap-2"><Button variant="default" icon="ti-edit" onClick={() => openEdit(u)}>Manage account</Button>{!isSelf && <Button variant="danger" icon="ti-trash" onClick={() => setConfirmDeleteUser(u)}>Delete</Button>}</div>
+            </article>;
+          })}
+          {!loading && filtered.length === 0 && <EmptyState icon="ti-users" title="No users found" description="Try another name or email." />}
+        </div>
       </Card>
 
       {/* Manage user modal */}
@@ -233,10 +235,10 @@ const openEdit = (u) => {
                 <div className={`${ps.toggleRowTitle} mb-2`}>Account status</div>
                 <div className="flex gap-2 items-center flex-wrap">
                   <Badge variant={modalUser.status === 'active' ? 'ok' : 'default'}>
-                    {modalUser.status === 'active' ? 'Active' : 'Inactive'}
+                    <i className={`ti ${modalUser.status === 'active' ? 'ti-circle-check' : 'ti-pause'}`} aria-hidden="true" />{modalUser.status === 'active' ? 'Active' : 'Not active'}
                   </Badge>
                   <Button size="sm" onClick={toggleStatus}>
-                    {modalUser.status === 'active' ? 'Deactivate account' : 'Activate account'}
+                    {modalUser.status === 'active' ? 'Pause account' : 'Reactivate account'}
                   </Button>
                 </div>
               </div>
@@ -314,13 +316,13 @@ const openEdit = (u) => {
               {/* Activity */}
               <div className={sectionBlock}>
                 <div className={`${ps.toggleRowTitle} mb-1`}>Activity</div>
-                <div className="text-sm text-text-secondary">Last active: {formatDate(modalUser.lastActiveAt)}</div>
+                <div className="text-sm text-text-secondary">Last active: {timeAgo(modalUser.lastActiveAt)}</div>
                 <div className="text-sm text-text-secondary">Account ID: {modalUser._id}</div>
               </div>
             </div>
             <div className={ps.modalFooter}>
               {currentUser?.id !== modalUser._id && currentUser?.username !== modalUser.username && (
-                <Button variant="danger" icon="ti-trash" onClick={() => deleteUser(modalUser)}>Delete account</Button>
+                <Button variant="danger" icon="ti-trash" onClick={() => setConfirmDeleteUser(modalUser)}>Delete account</Button>
               )}
               <Button variant="default" onClick={() => setModalUser(null)}>Close</Button>
             </div>
@@ -372,6 +374,7 @@ const openEdit = (u) => {
           </div>
         </div>
       )}
+      <ConfirmDialog open={Boolean(confirmDeleteUser)} title={`Delete ${confirmDeleteUser?.name || 'this account'}?`} message="This permanently removes the account and cannot be undone." confirmLabel="Delete account" onConfirm={deleteUser} onCancel={() => setConfirmDeleteUser(null)} />
     </div>
   );
 };

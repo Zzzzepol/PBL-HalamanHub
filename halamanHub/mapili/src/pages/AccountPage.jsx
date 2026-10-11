@@ -42,8 +42,8 @@ const AccountPage = () => {
       const updated = await customerAuthApi.update({ phone: form.phone }, token);
       updateUser(updated.user);
       setProfileMsg({ type: 'success', text: 'Profile updated successfully.' });
-    } catch (err) {
-      setProfileMsg({ type: 'error', text: err.message || 'Failed to update profile.' });
+    } catch {
+      setProfileMsg({ type: 'error', text: 'We could not update your profile. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -65,8 +65,8 @@ const AccountPage = () => {
       await customerAuthApi.changePassword({ currentPassword: pwdForm.current, newPassword: pwdForm.newPwd }, token);
       setPwdMsg({ type: 'success', text: 'Password changed successfully.' });
       setPwdForm({ current: '', newPwd: '', confirm: '' });
-    } catch (err) {
-      setPwdMsg({ type: 'error', text: err.message || 'Failed to change password.' });
+    } catch {
+      setPwdMsg({ type: 'error', text: 'We could not change your password. Check your current password and try again.' });
     } finally {
       setSavingPwd(false);
     }
@@ -92,7 +92,7 @@ const AccountPage = () => {
         </div>
 
         {/* Profile card */}
-        <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 mb-5">
+        <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6 mb-5">
           <div className="flex items-center gap-4 mb-6">
             <div className="w-16 h-16 bg-brand-700 rounded-full flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
               {user?.name?.charAt(0).toUpperCase()}
@@ -110,16 +110,16 @@ const AccountPage = () => {
           <form onSubmit={handleProfileSave} className="flex flex-col gap-4">
             <div className="grid sm:grid-cols-2 gap-4">
               <FormField label="First name" id="firstName">
-                <Input id="firstName" value={form.firstName} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+                <Input id="firstName" value={form.firstName} disabled className="bg-gray-50 text-gray-600 cursor-not-allowed" />
               </FormField>
               <FormField label="Last name" id="lastName">
-                <Input id="lastName" value={form.lastName} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
+                <Input id="lastName" value={form.lastName} disabled className="bg-gray-50 text-gray-600 cursor-not-allowed" />
               </FormField>
             </div>
-            <p className="text-xs text-gray-400 -mt-2">Name cannot be changed.</p>
+            <p className="text-xs text-gray-600 -mt-2">Name cannot be changed.</p>
             <FormField label="Email address" id="email">
-              <Input id="email" type="email" value={form.email} disabled className="bg-gray-50 text-gray-400 cursor-not-allowed" />
-              <p className="text-xs text-gray-400 mt-1">Email cannot be changed.</p>
+              <Input id="email" type="email" value={form.email} disabled className="bg-gray-50 text-gray-600 cursor-not-allowed" />
+              <p className="text-xs text-gray-600 mt-1">Email cannot be changed.</p>
             </FormField>
            <FormField label="Phone number" id="phone">
               <Input
@@ -130,7 +130,7 @@ const AccountPage = () => {
                 placeholder="09171234567"
                 maxLength={11}
               />
-              <p className="text-xs text-gray-400 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
+              <p className="text-xs text-gray-600 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
             </FormField>
             <Button variant="primary" type="submit" disabled={saving} className="self-start">
               {saving ? 'Saving…' : 'Save changes'}
@@ -144,7 +144,7 @@ const AccountPage = () => {
         {/* Password card — hidden for Google accounts, which never set a
             local password in the first place */}
         {user?.authProvider !== 'google' && (
-          <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 mb-5">
+          <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6 mb-5">
             <h2 className="font-semibold text-gray-800 mb-1">Change password</h2>
             <p className="text-gray-500 text-sm mb-5">Use a strong password that you don't use elsewhere.</p>
 
@@ -170,7 +170,7 @@ const AccountPage = () => {
         )}
 
         {/* Sign out */}
-        <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6">
+        <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6">
           <h2 className="font-semibold text-gray-800 mb-1">Sign out</h2>
           <p className="text-gray-500 text-sm mb-4">Sign out from your Mapili account on this device.</p>
           <Button variant="danger" icon="ti-logout" onClick={handleLogout}>Sign out</Button>

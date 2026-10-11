@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { Button, EmptyState } from '../components/ui/UI';
+import { Button, EmptyState, StepIndicator, ConfirmDialog } from '../components/ui/UI';
 import { shopOrdersApi } from '../api/client';
 
 const CartPage = () => {
@@ -11,6 +11,7 @@ const CartPage = () => {
   const navigate = useNavigate();
 const [insufficient, setInsufficient] = useState({}); 
   const [qtyDrafts, setQtyDrafts] = useState({}); 
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const checkStock = async () => {
     if (items.length === 0) { setInsufficient({}); return; }
@@ -61,6 +62,7 @@ const [insufficient, setInsufficient] = useState({});
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-5xl mx-auto">
         <h1 className="font-display text-3xl font-bold text-gray-800 mb-8">Your cart</h1>
+        <div className="mb-6 max-w-xl"><StepIndicator steps={['Cart', 'Details', 'Payment', 'Done']} current={0} /></div>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Items */}
@@ -71,8 +73,8 @@ const [insufficient, setInsufficient] = useState({});
                 {items.length} item{items.length !== 1 ? 's' : ''} in cart
               </h2>
               <button
-                onClick={clearCart}
-                className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1.5 transition-colors"
+                onClick={() => setConfirmClear(true)}
+                className="min-h-11 px-2 text-sm text-red-700 hover:text-red-800 flex items-center gap-1.5 transition-colors"
               >
                 <i className="ti ti-trash" /> Clear cart
               </button>
@@ -81,7 +83,7 @@ const [insufficient, setInsufficient] = useState({});
             {items.map(item => {
               const issue = insufficient[item._id];
               return (
-                <div key={item._id} className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 flex gap-4">
+                <div key={item._id} className="bg-white rounded-2xl border border-gray-200 shadow-soft p-4 flex gap-4">
                   {/* Image */}
                   <div className="w-20 h-20 bg-brand-50 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden">
                     {item.imageUrl ? (
@@ -99,7 +101,7 @@ const [insufficient, setInsufficient] = useState({});
                     <div className="flex items-center gap-2 mt-2">
                       <button
                         onClick={() => updateQty(item._id, item.qty - 1)}
-                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-sm"
+                        className="min-h-11 min-w-11 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-base"
                         aria-label="Decrease"
                       >
                         <i className="ti ti-minus text-xs" />
@@ -121,12 +123,12 @@ const [insufficient, setInsufficient] = useState({});
                           if (Number.isNaN(n) || n < 1) updateQty(item._id, 1);
                           setQtyDrafts(prev => { const next = { ...prev }; delete next[item._id]; return next; });
                         }}
-                        className="w-12 text-center font-medium text-sm border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                        className="min-h-11 w-14 text-center font-medium text-base border border-gray-200 rounded-lg py-1 focus:outline-none focus:ring-2 focus:ring-brand-300"
                         aria-label={`Quantity for ${item.name}`}
                       />
                       <button
                         onClick={() => updateQty(item._id, item.qty + 1)}
-                        className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-sm"
+                        className="min-h-11 min-w-11 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-50 text-base"
                         aria-label="Increase"
                       >
                         <i className="ti ti-plus text-xs" />
@@ -143,7 +145,7 @@ const [insufficient, setInsufficient] = useState({});
                   <div className="flex flex-col items-end justify-between">
                     <button
                       onClick={() => removeItem(item._id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors"
+                      className="min-h-11 min-w-11 text-gray-500 hover:text-red-700 transition-colors"
                       aria-label={`Remove ${item.name}`}
                     >
                       <i className="ti ti-trash text-base" />
@@ -156,7 +158,7 @@ const [insufficient, setInsufficient] = useState({});
           </div>
           {/* Summary */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-6 sticky top-24">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-soft p-6 sticky top-24">
               <h2 className="font-semibold text-gray-800 text-lg mb-5">Order summary</h2>
               <div className="flex flex-col gap-3 mb-5">
                 {items.map(item => (
@@ -166,11 +168,11 @@ const [insufficient, setInsufficient] = useState({});
                   </div>
                 ))}
               </div>
-              <div className="border-t border-gray-100 pt-4 flex justify-between font-bold text-gray-800 text-lg mb-6">
+              <div className="border-t border-gray-200 pt-4 flex justify-between font-bold text-gray-800 text-lg mb-6">
                 <span>Subtotal</span>
                 <span>₱{total.toFixed(2)}</span>
               </div>
-              <p className="text-xs text-gray-400 mb-5 text-center">Delivery may vary based on Tranfortify or Lalamove</p>
+              <p className="text-sm text-gray-600 mb-5 text-center">Delivery fee depends on your location and delivery partner.</p>
               {hasBlockingIssue && (
                 <div className="mb-3 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 text-center">
                   Update the quantities marked above before checking out.
@@ -193,6 +195,7 @@ const [insufficient, setInsufficient] = useState({});
           </div>
         </div>
       </div>
+      <ConfirmDialog open={confirmClear} title="Clear your cart?" message="This will remove every item from your cart." confirmLabel="Clear cart" onConfirm={() => { clearCart(); setConfirmClear(false); }} onCancel={() => setConfirmClear(false)} />
     </div>
   );
 };

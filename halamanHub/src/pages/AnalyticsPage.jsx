@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, CardBody, Button } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, Button, ErrorState } from '../components/ui/UI';
 import {
   PHTrendChart, ECTrendChart, NPKTrendChart, IrrigationHistoryChart, TempHumidityChart,
 } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
-import { sensorsApi, irrigationApi, ApiError } from '../api/client';
+import { sensorsApi, irrigationApi } from '../api/client';
 import * as s from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
@@ -39,14 +39,11 @@ const { data: history, error: historyError, refetch: refetchHistory } =
   // refetches; irrigation:log is a rare discrete event so it stays instant.
   useLiveRefetch(['sensor:reading', 'sensor:status'], refetchHistory);
   useLiveRefetch('irrigation:log', refetchLogs, 0);
-  const points = history || [];
+  const points = useMemo(() => history || [], [history]);
 
-  const pointLabel = (iso) =>
-    hours <= 24
-      ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
-
-  const labels = useMemo(() => points.map(p => pointLabel(p.recordedAt)), [points, hours]);
+  const labels = useMemo(() => points.map(point => hours <= 24
+    ? new Date(point.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : new Date(point.recordedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })), [points, hours]);
 
   const irrigationData = useMemo(() => {
     const dayBuckets = buildDayBuckets(hours);
@@ -80,10 +77,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
   return (
     <div>
       {hasError && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load analytics data. {hasError instanceof ApiError ? hasError.message : 'Check that the backend and MongoDB are running.'}{' '}
-          <button className="underline" onClick={() => { refetchHistory(); refetchLogs(); }}>Retry</button>
-        </div>
+        <div className="mb-4"><ErrorState title="History is not loading" description="Check your connection, then try again." onRetry={() => { refetchHistory(); refetchLogs(); }} /></div>
       )}
 
       {/* Header actions */}
@@ -91,7 +85,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
         <div className={s.btnRow}>
           {ranges.map(r => (
             <Button key={r} size="sm" variant={range === r ? 'primary' : 'default'} onClick={() => setRange(r)}>
-              {r}
+              {{ Daily: 'Today', Weekly: '7 days', Monthly: '30 days' }[r]}
             </Button>
           ))}
         </div>
@@ -100,11 +94,11 @@ const { data: history, error: historyError, refetch: refetchHistory } =
       {/* pH / EC */}
       <div className={s.grid.twoCol}>
         <Card>
-          <CardHeader title="pH trend" subtitle="Live system" />
+          <CardHeader title="Soil acidity (pH)" subtitle="See how soil acidity changes over time." />
           <CardBody><PHTrendChart labels={labels} values={points.map(p => p.ph)} /></CardBody>
         </Card>
         <Card>
-          <CardHeader title="EC trend" subtitle="Live system, uS/cm" />
+          <CardHeader title="Soil salt level (EC)" subtitle="Measured in µS/cm." />
           <CardBody><ECTrendChart labels={labels} values={points.map(p => p.ec)} /></CardBody>
         </Card>
       </div>
@@ -112,7 +106,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
       {/* NPK + Irrigation history */}
       <div className={s.grid.twoCol}>
         <Card>
-          <CardHeader title="NPK trends" subtitle="Live system" />
+          <CardHeader title="Plant food trends (N, P, K)" subtitle="Three important plant food levels in the soil." />
           <CardBody>
             <NPKTrendChart
               labels={labels}
@@ -123,7 +117,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Irrigation on-time" subtitle="Minutes per day, from real logs" />
+          <CardHeader title="Watering time" subtitle="Minutes per day for the water pump and backup water line." />
           <CardBody>
             <IrrigationHistoryChart labels={irrigationData.labels} pump={irrigationData.pump} solenoid={irrigationData.solenoid} />
           </CardBody>
@@ -132,7 +126,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
 
       {/* Temp & humidity */}
       <Card className={s.lastCard}>
-        <CardHeader title="Temperature & humidity" subtitle="Live system (DHT22, ambient air)" />
+          <CardHeader title="Temperature & humidity" subtitle="Air temperature and humidity readings." />
         <CardBody>
           <TempHumidityChart
             labels={labels}

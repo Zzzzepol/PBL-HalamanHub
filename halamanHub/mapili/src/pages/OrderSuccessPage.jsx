@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { shopOrdersApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Button, Spinner, Badge, orderStatusBadge } from '../components/ui/UI';
+import { Button, Spinner, Badge, orderStatusBadge, StepIndicator } from '../components/ui/UI';
 
 const OrderSuccessPage = () => {
   const { id } = useParams();
@@ -50,10 +50,11 @@ const OrderSuccessPage = () => {
         </p>
 
         {order && (
-          <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 text-left mb-8">
+          <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6 text-left mb-8">
+            <div className="mb-6"><StepIndicator steps={['Cart', 'Details', 'Payment', 'Done']} current={3} /></div>
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="text-xs text-gray-400 mb-0.5">Order number</div>
+                <div className="text-xs text-gray-600 mb-0.5">Order number</div>
                 <div className="font-bold text-gray-800 text-lg">{order.orderNumber}</div>
               </div>
               <Badge variant={orderStatusBadge[order.status]?.variant || 'default'}>
@@ -62,7 +63,7 @@ const OrderSuccessPage = () => {
               </Badge>
             </div>
 
-            <div className="border-t border-gray-100 pt-4 flex flex-col gap-2 text-sm">
+            <div className="border-t border-gray-200 pt-4 flex flex-col gap-2 text-sm">
               <div className="flex justify-between text-gray-600">
                 <span>Items</span><span>{order.product}</span>
               </div>

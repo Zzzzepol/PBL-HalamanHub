@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardHeader, CardBody, Button, Toggle, FormField, Input, Select } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, Button, Toggle, FormField, Input, Select, ErrorState } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { settingsApi, ApiError } from '../api/client';
+import { settingsApi } from '../api/client';
 import * as ps from './pageStyles';
 
 const SettingsPage = () => {
@@ -42,8 +42,8 @@ const SettingsPage = () => {
     setSavingNotifs(true);
     try {
       await settingsApi.update({ notifications: updated }, token);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to save notification preference.');
+    } catch {
+      alert('We could not save this alert setting. Please try again.');
       setNotifs(notifs); // revert on failure
     } finally {
       setSavingNotifs(false);
@@ -59,8 +59,8 @@ const SettingsPage = () => {
       setFarmSaved(true);
       refetch();
       setTimeout(() => setFarmSaved(false), 2000);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to save farm configuration.');
+    } catch {
+      alert('We could not save these farm details. Please try again.');
     } finally {
       setSavingFarm(false);
     }
@@ -69,10 +69,7 @@ const SettingsPage = () => {
   return (
     <div>
       {error && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load settings. {error instanceof ApiError ? error.message : 'Check that the backend and MongoDB are running.'}{' '}
-          <button className="underline" onClick={refetch}>Retry</button>
-        </div>
+        <div className="mb-4"><ErrorState title="Settings are not loading" description="Check your connection, then try again." onRetry={refetch} /></div>
       )}
 
       <div className={ps.grid.twoCol}>
@@ -90,7 +87,7 @@ const SettingsPage = () => {
                 </FormField>
               </div>
               <div className="mt-3 mb-4">
-                <FormField label="Timezone" id="timezone">
+              <FormField label="Time zone" id="timezone">
                   <Select id="timezone" value={timezone} onChange={e => setTimezone(e.target.value)} disabled={loading}>
                     <option value="Asia/Manila">Asia/Manila (GMT+8)</option>
                     <option value="UTC">UTC (GMT+0)</option>
@@ -114,42 +111,42 @@ const SettingsPage = () => {
           <CardHeader title="Notification preferences" subtitle="Choose which alerts you want to receive" />
           <CardBody>
             <div className={ps.toggleRow}>
-              <Toggle id="notif-moisture" checked={notifs.lowMoisture} onChange={() => toggleNotif('lowMoisture')} />
+              <Toggle id="notif-moisture" checked={notifs.lowMoisture} onChange={() => toggleNotif('lowMoisture')} disabled={savingNotifs} />
               <div className={ps.toggleRowText}>
-                <span className={ps.toggleRowTitle}>Low soil moisture alerts</span>
-                <span className={ps.toggleRowDesc}>Alert when soil moisture drops below the Auto-mode threshold</span>
+                <span className={ps.toggleRowTitle}>Dry soil alerts</span>
+                <span className={ps.toggleRowDesc}>Alert when soil wetness drops below the Auto setting.</span>
               </div>
             </div>
             <div className={ps.toggleRow}>
-              <Toggle id="notif-tank" checked={notifs.waterTank} onChange={() => toggleNotif('waterTank')} />
+              <Toggle id="notif-tank" checked={notifs.waterTank} onChange={() => toggleNotif('waterTank')} disabled={savingNotifs} />
               <div className={ps.toggleRowText}>
                 <span className={ps.toggleRowTitle}>Water tank alerts</span>
-                <span className={ps.toggleRowDesc}>Alert when tank level falls below the configured threshold</span>
+                <span className={ps.toggleRowDesc}>Alert when the water tank is running low.</span>
               </div>
             </div>
             <div className={ps.toggleRow}>
-              <Toggle id="notif-sensor" checked={notifs.sensorFailure} onChange={() => toggleNotif('sensorFailure')} />
+              <Toggle id="notif-sensor" checked={notifs.sensorFailure} onChange={() => toggleNotif('sensorFailure')} disabled={savingNotifs} />
               <div className={ps.toggleRowText}>
-                <span className={ps.toggleRowTitle}>Sensor failure alerts</span>
-                <span className={ps.toggleRowDesc}>Alert when any sensor goes offline</span>
+                <span className={ps.toggleRowTitle}>Sensor signal alerts</span>
+                <span className={ps.toggleRowDesc}>Alert when a sensor has no signal.</span>
               </div>
             </div>
             <div className={ps.toggleRow}>
-              <Toggle id="notif-irrigation" checked={notifs.irrigation} onChange={() => toggleNotif('irrigation')} />
+              <Toggle id="notif-irrigation" checked={notifs.irrigation} onChange={() => toggleNotif('irrigation')} disabled={savingNotifs} />
               <div className={ps.toggleRowText}>
-                <span className={ps.toggleRowTitle}>Irrigation notifications</span>
-                <span className={ps.toggleRowDesc}>Notify when the pump or solenoid turns on</span>
+                <span className={ps.toggleRowTitle}>Watering alerts</span>
+                <span className={ps.toggleRowDesc}>Notify when the water pump or backup water line turns on.</span>
               </div>
             </div>
            <div className={ps.toggleRow}>
-              <Toggle id="notif-orders" checked={notifs.orders} onChange={() => toggleNotif('orders')} />
+              <Toggle id="notif-orders" checked={notifs.orders} onChange={() => toggleNotif('orders')} disabled={savingNotifs} />
               <div className={ps.toggleRowText}>
                 <span className={ps.toggleRowTitle}>Order notifications</span>
                 <span className={ps.toggleRowDesc}>New orders and payment status updates</span>
               </div>
             </div>
             <div className={ps.toggleRow}>
-              <Toggle id="notif-lowstock" checked={notifs.lowStock} onChange={() => toggleNotif('lowStock')} />
+              <Toggle id="notif-lowstock" checked={notifs.lowStock} onChange={() => toggleNotif('lowStock')} disabled={savingNotifs} />
               <div className={ps.toggleRowText}>
                 <span className={ps.toggleRowTitle}>Low stock alerts</span>
                 <span className={ps.toggleRowDesc}>Alert when a product's stock is running low or hits zero</span>
@@ -162,17 +159,15 @@ const SettingsPage = () => {
 
       {/* Where the real hardware controls actually live now */}
       <Card className={ps.lastCard}>
-        <CardHeader title="Sensor & irrigation thresholds" subtitle="These now live on the pages that actually control your hardware" />
+          <CardHeader title="Watering and tank settings" subtitle="Each setting is with the page where you use it." />
         <CardBody>
           <div className="text-sm text-text-secondary mb-3">
-            Soil moisture thresholds and Auto/Manual mode moved to <strong>Irrigation Control</strong> — that's the
-            page your ESP32 actually polls. Tank calibration (empty/full distance, low-water threshold) moved to{' '}
-            <strong>Rainwater Harvesting</strong>. This page previously had a separate "System thresholds" panel that
-            saved to a different, disconnected place — it's been removed since it never actually affected your hardware.
+            Soil wetness levels and Auto/Manual mode are on <strong>Watering</strong>. Tank level setup is on{' '}
+            <strong>Rain tank</strong>.
           </div>
           <div className="flex gap-2.5">
-            <Link to="/irrigation"><Button variant="primary" icon="ti-droplet">Go to Irrigation Control</Button></Link>
-            <Link to="/rainwater"><Button variant="default" icon="ti-cloud-rain">Go to Rainwater Harvesting</Button></Link>
+            <Link to="/irrigation"><Button variant="primary" icon="ti-droplet">Open watering</Button></Link>
+            <Link to="/rainwater"><Button variant="default" icon="ti-cloud-rain">Open rain tank</Button></Link>
           </div>
         </CardBody>
       </Card>

@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Card, CardHeader, CardBody, StatCard, Badge, Button, RangeInput } from '../components/ui/UI';
+import { Card, CardHeader, CardBody, StatCard, Badge, Button, RangeInput, StatusBadge, ErrorState } from '../components/ui/UI';
 import { WaterLevelTrendChart } from '../components/charts/Charts';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { sensorsApi, dashboardApi, irrigationApi, ApiError } from '../api/client';
+import { sensorsApi, dashboardApi, irrigationApi } from '../api/client';
 import * as ps from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
 import { getWaterQualityRecommendation } from '../utils/waterQuality';
-import WeatherForecast from '../components/layout/WeatherForecast';
+import { timeAgo } from '../utils/timeAgo';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -16,14 +16,6 @@ const recommendationTone = {
   medium: { card: 'border-amber-200 bg-amber-50/60', badge: 'bg-amber-100 text-amber-800' },
   low:    { card: 'border-blue-200 bg-blue-50/60',   badge: 'bg-blue-100 text-blue-800' },
   ok:     { card: 'border-green-200 bg-green-50/60', badge: 'bg-green-100 text-green-800' },
-};
-
-const formatTime = (iso) => {
-  if (!iso) return '—';
-  const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  return `${Math.floor(diffSec / 3600)}h ago`;
 };
 
 const RainwaterPage = () => {
@@ -87,8 +79,8 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
       setSettings(updated);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to save tank calibration.');
+    } catch {
+      alert('We could not save the tank settings. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -102,42 +94,35 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
   return (
     <div>
       {hasError && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load tank data. {hasError instanceof ApiError ? hasError.message : 'Check that the backend and MongoDB are running.'}{' '}
-          <button className="underline" onClick={() => { refetchSummary(); refetchHistory(); refetchSettings(); }}>Retry</button>
-        </div>
+        <div className="mb-4"><ErrorState title="Rain tank information is not loading" description="Check your connection, then try again." onRetry={() => { refetchSummary(); refetchHistory(); refetchSettings(); }} /></div>
       )}
 
-      <Card className="mb-3.5">
-        <CardHeader title="Local weather & rain outlook" subtitle="Live conditions and a location-based seven-day forecast to help plan rainwater collection and irrigation" />
-        <CardBody>
-          <WeatherForecast />
-        </CardBody>
-      </Card>
+      <div className={`mb-4 rounded-xl border p-4 ${waterRec.severity === 'high' ? 'border-red-200 bg-red-50' : waterRec.severity === 'medium' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-live="polite">
+        <h2 className="font-semibold text-text-primary">{summary?.waterTank?.tds == null ? 'Waiting for a water reading.' : waterRec.severity === 'high' ? 'This water needs attention before use.' : waterRec.severity === 'medium' ? 'Check this water before using it on sensitive plants.' : 'This water is ready for plants.'}</h2>
+        <p className="mt-1 text-sm text-text-secondary">{summary?.waterTank?.tds == null ? 'The latest tank and water status will appear here.' : waterRec.message}</p>
+      </div>
 
       {/* Stats */}
       <div className={ps.grid.stats4}>
-        <StatCard icon="ti-gauge" iconVariant="blue" value={summary?.waterTank.percent != null ? `${summary.waterTank.percent}%` : '—'} label="Fill level" />
-        <StatCard icon="ti-chart-line" iconVariant="teal" value={availablePct != null ? `${availablePct}%` : '—'} label={`Time above threshold (${range})`} />
-        <StatCard icon="ti-clock" iconVariant="amber" value={formatTime(summary?.irrigation.lastUpdated)} label="Last reading" />
+        <StatCard icon="ti-gauge" iconVariant="blue" value={summary?.waterTank.percent != null ? `${summary.waterTank.percent}%` : '—'} label="Tank level" />
+        <StatCard icon="ti-chart-line" iconVariant="teal" value={availablePct != null ? `${availablePct}%` : '—'} label={`Water available (${range})`} />
+        <StatCard icon="ti-clock" iconVariant="amber" value={timeAgo(summary?.irrigation?.lastUpdated)} label="Last updated" />
       </div>
 
       {/* Rainwater quality — TDS, pH, 3-state float-switch tank level */}
       <div className={ps.grid.twoCol}>
         <Card>
-          <CardHeader title="Water quality (TDS)" subtitle="Total dissolved solids" />
+          <CardHeader title="Water purity (TDS)" subtitle="A simple measure of what is dissolved in the water." />
           <CardBody>
             <div className="text-[28px] font-medium text-text-primary leading-tight">
               {summary?.waterTank.tds != null ? `${summary.waterTank.tds.toFixed(0)}` : '—'}
               <span className="text-sm text-text-secondary ml-1 font-normal">ppm</span>
             </div>
             <div className="flex items-center gap-2 mt-2.5">
-              <Badge variant={summary?.waterTank.waterQuality?.tone || 'default'}>
-                {summary?.waterTank.waterQuality?.label || 'No data'}
-              </Badge>
+              <StatusBadge status={summary?.waterTank.waterQuality?.tone === 'ok' ? 'good' : summary?.waterTank.waterQuality?.tone === 'warning' ? 'check' : summary?.waterTank.waterQuality?.tone === 'error' ? 'action' : 'none'} />
               {summary?.waterTank.tds != null && summary?.waterTank.tdsStable === false && (
-                <Badge variant="warning" title="Sensor readings are fluctuating too much to trust right now — showing the last known-good value instead of a fresh one.">
-                  Unstable — showing last known value
+                <Badge variant="warning" title="This reading is changing quickly, so the last steady reading is shown.">
+                  <i className="ti ti-alert-triangle" aria-hidden="true" />Reading is changing
                 </Badge>
               )}
             </div>
@@ -145,11 +130,9 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         </Card>
 
         <Card>
-          <CardHeader title="Tank level (3-state)" subtitle="Low / Medium / Full, from the ultrasonic sensor" />
+          <CardHeader title="Tank level" subtitle="The level is Low, Medium, or Full." />
           <CardBody>
-            <Badge variant={summary?.waterTank.tankStatus3Info?.tone || 'default'} className="mb-3">
-              {summary?.waterTank.tankStatus3Info?.label || 'No data'}
-            </Badge>
+            <div className="mb-3 flex flex-wrap items-center gap-2"><StatusBadge status={summary?.waterTank.tankStatus3Info?.tone === 'ok' ? 'good' : summary?.waterTank.tankStatus3Info?.tone === 'warning' ? 'check' : summary?.waterTank.tankStatus3Info?.tone === 'error' ? 'action' : 'none'} /><span className="text-sm text-text-secondary">Tank level: {summary?.waterTank.tankStatus3Info?.label || 'No data'}</span></div>
             <div className="flex gap-1.5">
               {[1, 2, 3].map((step) => (
                 <div
@@ -171,15 +154,13 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
 
       {/* Recommendation — proper PPM for gardening use, based on the TDS reading above */}
       <Card className="mb-3.5">
-        <CardHeader title="Gardening-use recommendation" subtitle="Is this water safe to irrigate with, based on TDS (ppm)?" />
+        <CardHeader title="Can I use this water for plants?" subtitle="Based on water purity (TDS)." />
         <CardBody>
           <div className={`border rounded-md p-3.5 ${waterRecTone.card}`}>
             <div className="flex items-center justify-between gap-2 mb-1">
               <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${waterRecTone.badge}`}>
-                  {waterRec.severity === 'ok' ? 'Good' : waterRec.severity}
-                </span>
-                <span className="text-sm font-medium text-text-primary">{waterRec.category}</span>
+                <StatusBadge status={waterRec.severity === 'ok' ? 'good' : waterRec.severity === 'medium' ? 'check' : waterRec.severity === 'high' ? 'action' : 'none'} />
+                <span className="text-sm font-medium text-text-primary">Water purity (TDS)</span>
               </div>
               {waterRec.reading && <span className="text-sm font-semibold text-text-primary flex-shrink-0">{waterRec.reading}</span>}
             </div>
@@ -205,12 +186,12 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         <Card>
           <CardHeader
             title="Tank fill level trend"
-            subtitle="Calculated from the ultrasonic distance sensor"
+            subtitle="Shows how full the tank is based on its sensor readings."
             actions={
               <div className={ps.btnRow}>
-                {['24h', '7d', '30d'].map(r => (
+              {['24h', '7d', '30d'].map((r, index) => (
                   <Button key={r} size="sm" variant={range === r ? 'primary' : 'default'} onClick={() => setRange(r)}>
-                    {r}
+                  {['Today', '7 days', '30 days'][index]}
                   </Button>
                 ))}
               </div>
@@ -222,9 +203,10 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         </Card>
 
         {/* Calibration */}
-        <Card>
-          <CardHeader title="Sensor calibration" subtitle="Adjust if the sensor is remounted or the tank changes" />
-          <CardBody>
+        <details className="overflow-hidden rounded-xl border border-border bg-bg-primary">
+          <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-text-primary">Advanced tank settings</summary>
+          <div className="border-t border-border p-4">
+            <p className="mb-4 text-sm text-text-secondary">Adjust these only if the sensor is moved or the tank changes.</p>
             <RangeInput
               label="Distance reading when tank is EMPTY"
               min={0} max={300} unit="cm"
@@ -244,25 +226,24 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
               onChange={setLowThreshold}
             />
             <Button variant="primary" className="w-full justify-center mt-2" onClick={saveCalibration} disabled={saving}>
-              {saving ? 'Saving…' : 'Save calibration'}
+              {saving ? 'Saving…' : 'Save tank settings'}
             </Button>
             {saved && (
-              <div className="mt-2 text-sm text-green-800 flex items-center gap-1.5">
-                <i className="ti ti-check" aria-hidden="true" /> Calibration saved — the ESP32 will pick this up on its next poll
+              <div className="mt-2 text-sm text-green-800 flex items-center gap-1.5" role="status">
+                <i className="ti ti-check" aria-hidden="true" /> Saved. New tank readings will use these settings.
               </div>
             )}
             <div className="text-sm text-text-secondary mt-3">
-              Measure "empty" as the distance from the mounted sensor down to the tank bottom, and "full" as the distance down to the water surface at maximum capacity.
+              Measure from the sensor to the tank bottom when it is empty. Then measure to the water surface when the tank is full.
             </div>
-          </CardBody>
-        </Card>
+          </div>
+        </details>
       </div>
 
       <div className="text-sm text-text-secondary mt-2 flex items-start gap-1.5">
         <i className="ti ti-info-circle flex-shrink-0 mt-0.5" aria-hidden="true" />
         <span>
-          Fill level is calculated from ultrasonic distance, using the calibration above. The forecast above is external
-          weather data; without an onsite rain gauge or flow meter, this system cannot verify rainfall or calculate litres collected/used.
+          The tank level is an estimate based on the sensor.
         </span>
       </div>
     </div>

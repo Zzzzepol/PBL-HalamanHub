@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Card, CardHeader, Badge, EmptyState } from '../components/ui/UI';
+import { Card, CardHeader, Badge, EmptyState, ErrorState } from '../components/ui/UI';
 import { useApiData } from '../hooks/useApiData';
 import { ordersApi } from '../api/client';
 
@@ -12,12 +12,12 @@ const dateKey = (iso) => new Date(iso).toISOString().split('T')[0];
 const todayKey = dateKey(new Date().toISOString());
 
 const STATUS_BADGE = {
-  pending:    { label: 'Pending',    variant: 'warning' },
-  confirmed:  { label: 'Confirmed',  variant: 'blue' },
-  processing: { label: 'Processing', variant: 'purple' },
-  ready:      { label: 'Ready for pickup', variant: 'amber' },
-  completed:  { label: 'Completed',  variant: 'ok' },
-  cancelled:  { label: 'Cancelled',  variant: 'error' },
+  pending:    { label: 'Order received', variant: 'warning', icon: 'ti-clock' },
+  confirmed:  { label: 'Accepted',  variant: 'blue', icon: 'ti-circle-check' },
+  processing: { label: 'Preparing', variant: 'purple', icon: 'ti-loader' },
+  ready:      { label: 'Ready for pickup', variant: 'amber', icon: 'ti-package' },
+  completed:  { label: 'Completed',  variant: 'ok', icon: 'ti-check' },
+  cancelled:  { label: 'Cancelled',  variant: 'error', icon: 'ti-x' },
 };
 
 const SchedulePage = () => {
@@ -51,7 +51,7 @@ const SchedulePage = () => {
 
       {error && (
         <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load schedule. <button className="underline" onClick={refetch}>Retry</button>
+          <ErrorState title="Pickup schedule is not loading" description="Check your connection, then try again." onRetry={refetch} />
         </div>
       )}
 
@@ -95,7 +95,7 @@ const SchedulePage = () => {
                           </div>
                         )}
                       </div>
-                      <Badge variant={sb.variant}>{sb.label}</Badge>
+                      <Badge variant={sb.variant}><i className={`ti ${sb.icon}`} aria-hidden="true" />{sb.label}</Badge>
                     </div>
                   );
                 })}

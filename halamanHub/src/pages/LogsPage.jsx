@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, Table, Badge, Button, SearchBar, Select, FormField, Input } from '../components/ui/UI';
+import { Card, CardHeader, Table, Badge, Button, SearchBar, Select, FormField, Input, ErrorState, EmptyState } from '../components/ui/UI';
 import { useApiData } from '../hooks/useApiData';
 import { logsApi } from '../api/client';
 import * as ps from './pageStyles';
@@ -9,7 +9,7 @@ const categoryBadge = {
   products:   { variant: 'ok',      label: 'Products'   },
   orders:     { variant: 'warning', label: 'Orders'     },
   users:      { variant: 'purple',  label: 'Users'      },
-  irrigation: { variant: 'blue',    label: 'Irrigation' },
+  irrigation: { variant: 'blue',    label: 'Watering' },
   settings:   { variant: 'default', label: 'Settings'   },
   sensors:    { variant: 'default', label: 'Sensors'    },
 };
@@ -34,7 +34,7 @@ const LogsPage = () => {
   const [toDate, setToDate]       = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const list = logs || [];
+  const list = useMemo(() => logs || [], [logs]);
 
   const filtered = useMemo(() => list.filter(l => {
     // search filter
@@ -85,9 +85,7 @@ const LogsPage = () => {
   return (
     <div>
       {error && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load logs. <button className="underline" onClick={refetch}>Retry</button>
-        </div>
+        <div className="mb-4"><ErrorState title="Activity history is not loading" description="Check your connection, then try again." onRetry={refetch} /></div>
       )}
 
       {/* Filters */}
@@ -141,10 +139,10 @@ const LogsPage = () => {
 
       <Card className={ps.lastCard}>
         <CardHeader
-          title="Activity logs"
+          title="Activity history"
           subtitle={loading ? 'Loading…' : `${Math.min(filtered.length, startIndex + paginatedLogs.length)} of ${filtered.length} entries`}
         />
-        <Table headers={['Date & time', 'User', 'Action', 'Category', 'Status']}>
+        <div className="hidden xl:block"><Table headers={['Date & time', 'User', 'Action', 'Category', 'Status']}>
           {paginatedLogs.map(l => {
             const cb = categoryBadge[l.category] || categoryBadge.auth;
             const sb = statusBadge[l.status]     || statusBadge.success;
@@ -165,7 +163,15 @@ const LogsPage = () => {
               </td>
             </tr>
           )}
-        </Table>
+        </Table></div>
+        <div className="grid gap-3 p-3 xl:hidden">
+          {paginatedLogs.map(log => {
+            const cb = categoryBadge[log.category] || categoryBadge.auth;
+            const sb = statusBadge[log.status] || statusBadge.success;
+            return <article key={log._id} className="rounded-xl border border-border p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-text-primary">{log.action}</h3><p className="text-sm text-text-secondary">{log.user}</p></div><Badge variant={sb.variant}>{sb.label}</Badge></div><div className="mt-2 flex flex-wrap items-center gap-2"><Badge variant={cb.variant}>{cb.label}</Badge><time className="text-sm text-text-secondary">{formatDate(log.createdAt)}</time></div><p className="mt-2 break-words text-sm text-text-secondary">{log.details}</p></article>;
+          })}
+          {!loading && filtered.length === 0 && <EmptyState icon="ti-clipboard-list" title="No activity found" description={hasFilters ? 'Try changing or clearing your filters.' : 'Recent changes will appear here.'} />}
+        </div>
 
         {!loading && filtered.length > PAGE_SIZE && (
           <div className="flex items-center justify-between gap-3 px-4 pb-4 pt-3 border-t border-border-subtle">

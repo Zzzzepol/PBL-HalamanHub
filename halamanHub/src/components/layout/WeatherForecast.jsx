@@ -106,14 +106,14 @@ const WeatherForecast = ({ compact = false }) => {
             <div key={date} className="min-w-0 rounded-md border border-border bg-white p-2.5">
               <div className="text-xs font-semibold text-text-primary">{formatDay(date, index)}</div>
               <i className={`ti ${weatherIcon(daily.weather_code[index])} block text-2xl text-sky-700 my-2`} aria-hidden="true" />
-              <div className="text-[11px] text-text-secondary truncate">{weatherDescription(daily.weather_code[index])}</div>
+              <div className="text-xs text-text-secondary truncate">{weatherDescription(daily.weather_code[index])}</div>
               <div className="mt-1 text-sm font-semibold">{Math.round(daily.temperature_2m_max[index])}° <span className="font-normal text-text-secondary">{Math.round(daily.temperature_2m_min[index])}°</span></div>
               <div className="mt-2 border-t border-border pt-2">
-                <div className="text-[11px] font-medium text-sky-900">Rain chance</div>
+                <div className="text-xs font-medium text-sky-900">Rain chance</div>
                 <div className="text-sm font-semibold text-sky-800">{daily.precipitation_probability_max[index] ?? 0}%</div>
-                <div className="text-[11px] text-text-secondary">{(daily.precipitation_sum[index] ?? 0).toFixed(1)} mm expected</div>
+                <div className="text-xs text-text-secondary">{(daily.precipitation_sum[index] ?? 0).toFixed(1)} mm expected</div>
               </div>
-              <div className="mt-2 text-[11px] text-text-secondary">UV {Math.round(daily.uv_index_max[index] ?? 0)} · Wind {Math.round(daily.wind_speed_10m_max[index])} km/h</div>
+              <div className="mt-2 text-xs text-text-secondary">UV {Math.round(daily.uv_index_max[index] ?? 0)} · Wind {Math.round(daily.wind_speed_10m_max[index])} km/h</div>
             </div>
           ))}
         </div>
@@ -128,7 +128,7 @@ const WeatherForecast = ({ compact = false }) => {
                 <div className="text-xs text-text-secondary">{new Date(time).toLocaleTimeString([], { hour: 'numeric' })}</div>
                 <i className={`ti ${weatherIcon(hourly.weather_code[index])} block text-xl text-sky-700 my-1`} aria-hidden="true" />
                 <div className="text-sm font-semibold">{Math.round(hourly.temperature_2m[index])}°</div>
-                <div className="text-[11px] text-sky-800"><i className="ti ti-droplet" aria-hidden="true" /> {hourly.precipitation_probability[index] ?? 0}%</div>
+                <div className="text-xs text-sky-800"><i className="ti ti-droplet" aria-hidden="true" /> {hourly.precipitation_probability[index] ?? 0}%</div>
               </div>
             ))}
           </div>
@@ -144,7 +144,7 @@ const WeatherForecast = ({ compact = false }) => {
           <span>Wind gusts {Math.round(current.wind_gusts_10m)} km/h</span>
         </div>
       )}
-      <div className="text-[11px] text-text-secondary">Forecast by Open-Meteo · Updated {new Date(weather.current.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+      <div className="text-xs text-text-secondary">Forecast by Open-Meteo · Updated {new Date(weather.current.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
     </div>
   );
 };

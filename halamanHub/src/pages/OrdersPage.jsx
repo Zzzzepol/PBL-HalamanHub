@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, CardHeader, Table, Badge, StatCard, SearchBar, Select, Button, FormField, Input } from '../components/ui/UI';
+import { Card, CardHeader, Table, Badge, StatCard, SearchBar, Select, Button, FormField, Input, ConfirmDialog, ErrorState, EmptyState } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
-import { ordersApi, ApiError } from '../api/client';
+import { ordersApi } from '../api/client';
 import * as ps from './pageStyles';
 
 // Status flow + labels
@@ -11,10 +11,10 @@ import * as ps from './pageStyles';
 const getStatusFlow = (order) => {
   const isPickup = order?.fulfillmentType === 'pickup';
   return {
-    pending:    { label: 'Pending',    variant: 'warning', next: 'confirmed',  nextLabel: 'Confirm order',   icon: 'ti-clock' },
-    confirmed:  { label: 'Confirmed',  variant: 'blue',    next: 'processing', nextLabel: 'Start processing', icon: 'ti-circle-check' },
+    pending:    { label: 'Order received', variant: 'warning', next: 'confirmed',  nextLabel: 'Accept order',   icon: 'ti-clock' },
+    confirmed:  { label: 'Accepted',  variant: 'blue',    next: 'processing', nextLabel: 'Start preparing', icon: 'ti-circle-check' },
     processing: {
-      label: 'Processing', variant: 'purple', next: 'ready',
+      label: 'Preparing', variant: 'purple', next: 'ready',
       nextLabel: isPickup ? 'Mark ready for pickup' : 'Send out for delivery',
       icon: 'ti-loader',
     },
@@ -28,13 +28,13 @@ const getStatusFlow = (order) => {
 
 // Generic labels for the status filter dropdown (not tied to one order)
 const STATUS_LABELS = {
-  pending: 'Pending', confirmed: 'Confirmed', processing: 'Processing',
+  pending: 'Order received', confirmed: 'Accepted', processing: 'Preparing',
   ready: 'Ready', completed: 'Completed', cancelled: 'Cancelled',
 };
 
 const PAYMENT_BADGE = {
-  unpaid: { variant: 'error', label: 'Unpaid' },
-  paid:   { variant: 'ok',    label: 'Paid' },
+  unpaid: { variant: 'warning', label: 'Waiting for payment', icon: 'ti-clock' },
+  paid:   { variant: 'ok',    label: 'Paid', icon: 'ti-circle-check' },
 };
 
 const PAGE_SIZE = 6;
@@ -58,6 +58,7 @@ const OrdersPage = () => {
   const [saving, setSaving]           = useState(false);
   const [actionNote, setActionNote]   = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   const list = useMemo(() => orders || [], [orders]);
 
@@ -88,25 +89,41 @@ const OrdersPage = () => {
       setOrders(list.map(o => o._id === updated._id ? updated : o));
       if (detailOrder?._id === updated._id) setDetailOrder(updated);
       setActionNote('');
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to update status.');
+    } catch {
+      alert('We could not update this order. Please try again.');
     } finally {
       setActionLoading(false);
     }
   };
 
   // Cancel order
-  const cancelOrder = async (order) => {
-    if (!window.confirm(`Cancel order ${order.orderNumber}?`)) return;
+  const cancelOrder = (order) => setConfirmAction({ type: 'cancel', order });
+
+  const deleteOrder = (order) => setConfirmAction({ type: 'delete', order });
+
+  const runConfirmedAction = async () => {
+    if (!confirmAction) return;
+    const { type, order } = confirmAction;
+    setConfirmAction(null);
+    if (type === 'cancel') {
     setActionLoading(true);
     try {
       const updated = await ordersApi.updateStatus(order._id, 'cancelled', 'Cancelled by admin', token);
       setOrders(list.map(o => o._id === updated._id ? updated : o));
       if (detailOrder?._id === updated._id) setDetailOrder(updated);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to cancel order.');
+      } catch {
+      alert('We could not cancel this order. Please try again.');
     } finally {
       setActionLoading(false);
+    }
+    } else {
+      try {
+        await ordersApi.delete(order._id, token);
+        setOrders(list.filter(o => o._id !== order._id));
+        setDetailOrder(null);
+      } catch {
+        alert('We could not delete this order. Please try again.');
+      }
     }
   };
 
@@ -117,20 +134,8 @@ const OrdersPage = () => {
       const updated = await ordersApi.updatePayment(order._id, next, token);
       setOrders(list.map(o => o._id === updated._id ? updated : o));
       if (detailOrder?._id === updated._id) setDetailOrder(updated);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to update payment.');
-    }
-  };
-
-  // Delete cancelled order
-  const deleteOrder = async (order) => {
-    if (!window.confirm(`Permanently delete order ${order.orderNumber}?`)) return;
-    try {
-      await ordersApi.delete(order._id, token);
-      setOrders(list.filter(o => o._id !== order._id));
-      setDetailOrder(null);
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to delete order.');
+    } catch {
+      alert('We could not update the payment status. Please try again.');
     }
   };
 
@@ -144,8 +149,8 @@ const OrdersPage = () => {
       setOrders([created, ...list]);
       setAddModalOpen(false);
       setForm(emptyForm);
-    } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : 'Failed to create order.');
+    } catch {
+      setSaveError('We could not create this order. Check the details and try again.');
     } finally {
       setSaving(false);
     }
@@ -166,28 +171,23 @@ const OrdersPage = () => {
       </div>
 
       {error && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load orders. <button className="underline" onClick={refetch}>Retry</button>
-        </div>
+        <div className="mb-4"><ErrorState title="Orders are not loading" description="Check your connection, then try again." onRetry={refetch} /></div>
       )}
 
       {/* Filters */}
       <div className={ps.filterBar}>
-        <div className={ps.filterSearch}>
-          <SearchBar value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search by order ID, customer, or product…" />
-        </div>
         <Select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
-          {statusFilters.map(s => (
-            <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABELS[s] || s}</option>
-          ))}
+          {statusFilters.map(s => <option key={s} value={s}>{s === 'All' ? 'All statuses' : STATUS_LABELS[s] || s}</option>)}
         </Select>
-    
+        <div className={ps.filterSearch}>
+          <SearchBar value={search} onChange={v => { setSearch(v); setPage(1); }} placeholder="Search by order, customer, or product…" />
+        </div>
       </div>
 
       {/* Table */}
       <Card className={ps.lastCard}>
         <CardHeader title="All orders" subtitle={loading ? 'Loading…' : `${filtered.length} order${filtered.length !== 1 ? 's' : ''}`} />
-<Table headers={['Order ID', 'Customer', 'Product', 'Amount', 'Fulfillment', 'Status', 'Payment', 'Date', 'Actions']}>
+<div className="hidden xl:block"><Table headers={['Order ID', 'Customer', 'Product', 'Amount', 'Fulfillment', 'Status', 'Payment', 'Date', 'Actions']}>
           {paged.map(o => {
             const st = getStatusFlow(o)[o.status];
             const pm = PAYMENT_BADGE[o.payment];
@@ -210,8 +210,8 @@ const OrdersPage = () => {
                     </div>
                   )}
                 </td>
-                <td><Badge variant={st?.variant}>{st?.label}</Badge></td>
-                <td><Badge variant={pm?.variant}>{pm?.label}</Badge></td>
+                <td><Badge variant={st?.variant}><i className={`ti ${st?.icon || 'ti-help-circle'}`} aria-hidden="true" />{st?.label}</Badge></td>
+                <td><Badge variant={pm?.variant}><i className={`ti ${pm?.icon || 'ti-help-circle'}`} aria-hidden="true" />{pm?.label}</Badge></td>
                 <td>{formatDate(o.orderDate)}</td>
                 <td>
                   <div className={ps.actionBtns}>
@@ -222,7 +222,7 @@ const OrdersPage = () => {
                       </Button>
                     )}
                     {!['completed', 'cancelled'].includes(o.status) && (
-                      <Button size="sm" variant="danger" icon="ti-x" onClick={() => cancelOrder(o)} disabled={actionLoading} />
+                      <Button size="sm" variant="danger" icon="ti-x" onClick={() => cancelOrder(o)} disabled={actionLoading} aria-label={`Cancel order ${o.orderNumber}`} />
                     )}
                   </div>
                 </td>
@@ -232,7 +232,21 @@ const OrdersPage = () => {
           {!loading && paged.length === 0 && (
             <tr><td colSpan={9} className="text-center text-text-secondary py-6">No orders match your filters.</td></tr>
           )}
-        </Table>
+        </Table></div>
+        <div className="grid gap-3 p-3 xl:hidden">
+          {paged.map(order => {
+            const status = getStatusFlow(order)[order.status];
+            const payment = PAYMENT_BADGE[order.payment];
+            return <article key={order._id} className="rounded-xl border border-border bg-white p-4">
+              <div className="flex items-start justify-between gap-3"><div><p className="text-sm text-text-secondary">{order.orderNumber}</p><h3 className="font-semibold text-text-primary">{order.customer}</h3></div><Badge variant={status?.variant}><i className={`ti ${status?.icon || 'ti-help-circle'}`} aria-hidden="true" />{status?.label}</Badge></div>
+              <p className="mt-2 text-sm text-text-secondary">{order.product}</p>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="text-lg font-semibold text-text-primary">₱{order.amount}</span><span className="text-sm text-text-secondary">{order.fulfillmentType === 'pickup' ? order.pickupDate ? `Pickup · ${formatDate(order.pickupDate)}` : 'Nursery pickup' : 'Home delivery'}</span></div>
+              <div className="mt-2 flex flex-wrap gap-2"><Badge variant={payment?.variant}><i className={`ti ${payment?.icon || 'ti-help-circle'}`} aria-hidden="true" />{payment?.label}</Badge><span className="text-sm text-text-secondary">{formatDate(order.orderDate)}</span></div>
+              <div className="mt-3 flex flex-wrap gap-2"><Button variant="default" icon="ti-eye" onClick={() => setDetailOrder(order)}>Order details</Button>{status?.next && <Button variant="primary" icon="ti-arrow-right" onClick={() => advanceStatus(order, status.next)} disabled={actionLoading}>{status.nextLabel}</Button>}{!['completed', 'cancelled'].includes(order.status) && <Button variant="danger" icon="ti-x" onClick={() => cancelOrder(order)} disabled={actionLoading}>Cancel order</Button>}</div>
+            </article>;
+          })}
+          {!loading && paged.length === 0 && <EmptyState icon="ti-shopping-cart" title="No matching orders" description="Try another status or search." />}
+        </div>
 
         {/* Pagination */}
         <div className={ps.pagination}>
@@ -261,8 +275,8 @@ const OrdersPage = () => {
               <div>
                 <span className={ps.modalTitle}>{detailOrder.orderNumber}</span>
                 <div className="mt-1 flex items-center gap-2">
-                  <Badge variant={getStatusFlow(detailOrder)[detailOrder.status]?.variant}>{getStatusFlow(detailOrder)[detailOrder.status]?.label}</Badge>
-                  <Badge variant={PAYMENT_BADGE[detailOrder.payment]?.variant}>{PAYMENT_BADGE[detailOrder.payment]?.label}</Badge>
+                  <Badge variant={getStatusFlow(detailOrder)[detailOrder.status]?.variant}><i className={`ti ${getStatusFlow(detailOrder)[detailOrder.status]?.icon || 'ti-help-circle'}`} aria-hidden="true" />{getStatusFlow(detailOrder)[detailOrder.status]?.label}</Badge>
+                  <Badge variant={PAYMENT_BADGE[detailOrder.payment]?.variant}><i className={`ti ${PAYMENT_BADGE[detailOrder.payment]?.icon || 'ti-help-circle'}`} aria-hidden="true" />{PAYMENT_BADGE[detailOrder.payment]?.label}</Badge>
                 </div>
               </div>
               <button className={ps.modalClose} onClick={() => setDetailOrder(null)}><i className="ti ti-x" /></button>
@@ -298,7 +312,7 @@ const OrdersPage = () => {
 
               {/* Status actions */}
               {!['completed', 'cancelled'].includes(detailOrder.status) && (
-                <div className="mb-4 p-3 border-[0.5px] border-border rounded-md">
+                <div className="mb-4 p-3 border border-border rounded-md">
                   <div className="text-sm font-medium mb-2">Order actions</div>
                   <FormField label="Note (optional)" id="action-note">
                     <Input id="action-note" value={actionNote} onChange={e => setActionNote(e.target.value)} placeholder="Add a note for this status change…" />
@@ -410,6 +424,7 @@ const OrdersPage = () => {
           </div>
         </div>
       )}
+      <ConfirmDialog open={Boolean(confirmAction)} title={confirmAction?.type === 'delete' ? `Delete order ${confirmAction?.order?.orderNumber}?` : `Cancel order ${confirmAction?.order?.orderNumber}?`} message={confirmAction?.type === 'delete' ? 'This permanently removes the order from your records. This cannot be undone.' : 'This will mark the order as cancelled. The order will stay in your history.'} confirmLabel={confirmAction?.type === 'delete' ? 'Delete order' : 'Cancel order'} onConfirm={runConfirmedAction} onCancel={() => setConfirmAction(null)} />
     </div>
   );
 };

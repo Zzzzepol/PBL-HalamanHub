@@ -53,7 +53,7 @@ const AboutPage = () => (
             { icon: 'ti-truck-delivery',  title: 'Fast fulfillment',   desc: 'Order today, get it tomorrow. Same-day delivery available within our service area.' },
             { icon: 'ti-star',            title: 'Quality guaranteed', desc: "Every order is inspected before packing. We only send out what we'd eat ourselves." },
           ].map((v, i) => (
-            <div key={i} className="bg-white rounded-2xl p-6 shadow-soft border border-gray-100">
+            <div key={i} className="bg-white rounded-2xl p-6 shadow-soft border border-gray-200">
               <div className="w-12 h-12 bg-brand-50 rounded-xl flex items-center justify-center mb-4">
                 <i className={`ti ${v.icon} text-2xl text-brand-600`} aria-hidden="true" />
               </div>

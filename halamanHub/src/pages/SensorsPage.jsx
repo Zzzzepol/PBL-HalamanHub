@@ -1,95 +1,134 @@
-import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, Table, Badge, StatCard, SearchBar } from '../components/ui/UI';
+import React, { useMemo, useState } from 'react';
+import { Badge, Card, CardHeader, EmptyState, ErrorState, LoadingSkeleton, SearchBar, StatusBadge, Table } from '../components/ui/UI';
+import { sensorsApi } from '../api/client';
 import { useApiData } from '../hooks/useApiData';
-import { sensorsApi, ApiError } from '../api/client';
-import * as ps from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
+import { timeAgo } from '../utils/timeAgo';
 
-const statusBadge = {
-  ok: { variant: 'ok', label: 'Online' },
-  warning: { variant: 'warning', label: 'Warning' },
-  offline: { variant: 'error', label: 'Offline' },
+const sensorTypeLabel = (type = '') => {
+  const labels = {
+    'Soil moisture': 'Soil wetness',
+    'NPK': 'Plant food levels (N, P, K)',
+    'pH': 'Soil acidity (pH)',
+    'EC': 'Soil salt level (EC)',
+    'TDS': 'Water purity (TDS)',
+    'Water level': 'Water level',
+    'Temperature': 'Temperature',
+    'Humidity': 'Humidity',
+  };
+  return labels[type] || type || 'Sensor';
 };
 
-const formatTime = (iso) => {
-  const diffSec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
-};
+const connectionFor = sensor => sensor.status === 'offline'
+  ? { label: 'No signal', status: 'none', rank: 0 }
+  : { label: 'Connected', status: 'good', rank: 1 };
 
 const SensorsPage = () => {
-const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000, 'admin:sensors:list');
-
-  // real-time updates — throttled via useLiveRefetch.
-  useLiveRefetch(['sensor:reading', 'sensor:status'], refetch);
-
+  const { data: sensors, loading, error, refetch } = useApiData(sensorsApi.getAll, [], 30000, 'admin:sensors:list');
   const [search, setSearch] = useState('');
 
-  const list = useMemo(() => sensors || [], [sensors]);
+  useLiveRefetch(['sensor:reading', 'sensor:status'], refetch);
 
+  const list = useMemo(() => sensors || [], [sensors]);
   const filtered = useMemo(() => {
-    return list.filter(s => {
-      const matchesSearch = `${s.sensorId} ${s.type} ${s.zone} ${s.device}`.toLowerCase().includes(search.toLowerCase());
-      return matchesSearch;
-    });
+    const query = search.trim().toLowerCase();
+    return list
+      .filter(sensor => !query || `${sensor.sensorId} ${sensor.type} ${sensor.zone} ${sensor.device}`.toLowerCase().includes(query))
+      .sort((a, b) => {
+        const connectionOrder = connectionFor(a).rank - connectionFor(b).rank;
+        if (connectionOrder !== 0) return connectionOrder;
+        return new Date(a.lastReadingAt || 0) - new Date(b.lastReadingAt || 0);
+      });
   }, [list, search]);
 
-  const counts = useMemo(() => ({
-    online: list.filter(s => s.status === 'ok').length,
-    offline: list.filter(s => s.status === 'offline').length,
-    total: list.length,
-  }), [list]);
+  const connectedCount = list.filter(sensor => sensor.status !== 'offline').length;
+  const noSignalCount = list.length - connectedCount;
 
   return (
-    <div>
-      {/* Summary stats */}
-      <div className={ps.grid.stats4}>
-        <StatCard icon="ti-circle-check" iconVariant="green" value={counts.online} label="Online" />
-        <StatCard icon="ti-wifi-off" iconVariant="red" value={counts.offline} label="Offline" />
-        <StatCard icon="ti-device-floppy" iconVariant="blue" value={counts.total} label="Total sensors" />
-      </div>
+    <div className="space-y-4">
+      <header>
+        <h2 className="text-lg font-semibold text-text-primary">Sensor details and connections</h2>
+        <p className="mt-1 text-sm text-text-secondary">See which devices are connected and when they last checked in.</p>
+      </header>
 
-      {error && (
-        <div className="mb-3.5 text-sm text-red-800 bg-red-50 rounded-md px-3 py-2.5">
-          Failed to load sensors. {error instanceof ApiError ? error.message : 'Check that the backend and MongoDB are running.'}{' '}
-          <button className="underline" onClick={refetch}>Retry</button>
+      {error && <ErrorState title="Sensor connections are not loading" description="Check your connection, then try again." onRetry={refetch} />}
+
+      {(!error || sensors !== null) && <>
+        <section className="grid grid-cols-2 gap-3" aria-label="Connection summary">
+          <Card>
+            <CardHeader title="Connected" />
+            <div className="px-4 pb-4 pt-1">
+              {loading ? <LoadingSkeleton className="h-8 w-16" /> : <p className="text-2xl font-semibold text-text-primary">{connectedCount}</p>}
+            </div>
+          </Card>
+          <Card>
+            <CardHeader title="No signal" />
+            <div className="px-4 pb-4 pt-1">
+              {loading ? <LoadingSkeleton className="h-8 w-16" /> : <p className="text-2xl font-semibold text-text-primary">{noSignalCount}</p>}
+            </div>
+          </Card>
+        </section>
+
+        <div className="max-w-xl">
+          <SearchBar value={search} onChange={setSearch} placeholder="Search sensors or areas…" />
         </div>
-      )}
 
-      {/* Filters */}
-      <div className={ps.filterBar}>
-        <div className={ps.filterSearch}>
-          <SearchBar value={search} onChange={setSearch} placeholder="Search by ID, type, zone, device…" />
-        </div>
-      </div>
+        <Card>
+          <CardHeader title="Sensor connections" subtitle={loading ? 'Loading connections…' : `${filtered.length} of ${list.length} sensors`} />
 
-      {/* Table */}
-      <Card className={ps.lastCard}>
-        <CardHeader title="All sensors" subtitle={loading ? 'Loading…' : `${filtered.length} of ${list.length} sensors`} />
-        <Table headers={['Sensor ID', 'Type', 'Zone', 'Current value', 'Status', 'Last update', 'Device']}>
-          {filtered.map(s => {
-            const badge = statusBadge[s.status] || statusBadge.ok;
-            return (
-              <tr key={s._id}>
-                <td>{s.sensorId}</td>
-                <td>{s.type}</td>
-                <td>{s.zone}</td>
-                <td>{s.value}</td>
-                <td><Badge variant={badge.variant}>{badge.label}</Badge></td>
-                <td>{formatTime(s.lastReadingAt)}</td>
-                <td>{s.device}</td>
-              </tr>
-            );
-          })}
-          {!loading && filtered.length === 0 && (
-            <tr><td colSpan={7} className="text-center text-text-secondary py-6">
-              No sensors match your filters.
-            </td></tr>
+          {loading ? (
+            <div className="grid gap-3 p-4 sm:grid-cols-2">
+              {[0, 1, 2, 3].map(item => <LoadingSkeleton key={item} className="h-32" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="ti-plug-connected"
+              title={list.length === 0 ? 'No sensors found' : 'No matching sensors'}
+              description={list.length === 0 ? 'Connected sensor details will appear here.' : 'Try another sensor name or area.'}
+            />
+          ) : (
+            <>
+              <div className="hidden lg:block">
+                <Table headers={['Sensor', 'Type', 'Area', 'Connection', 'Last seen', 'Device']}>
+                  {filtered.map(sensor => {
+                    const connection = connectionFor(sensor);
+                    return (
+                      <tr key={sensor._id}>
+                        <td className="font-medium">{sensor.sensorId}</td>
+                        <td>{sensorTypeLabel(sensor.type)}</td>
+                        <td>{sensor.zone || '—'}</td>
+                        <td><StatusBadge status={connection.status} label={connection.label} /></td>
+                        <td>{timeAgo(sensor.lastReadingAt)}</td>
+                        <td><Badge variant="default">{sensor.device || '—'}</Badge></td>
+                      </tr>
+                    );
+                  })}
+                </Table>
+              </div>
+              <div className="grid gap-3 p-3 lg:hidden">
+                {filtered.map(sensor => {
+                  const connection = connectionFor(sensor);
+                  return (
+                    <article key={sensor._id} className="rounded-xl border border-border bg-bg-primary p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-text-primary">{sensorTypeLabel(sensor.type)}</h3>
+                          <p className="mt-1 text-sm text-text-secondary">{sensor.sensorId}{sensor.zone ? ` · ${sensor.zone}` : ''}</p>
+                        </div>
+                        <StatusBadge status={connection.status} label={connection.label} />
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-sm text-text-secondary">
+                        <span>Last seen: {timeAgo(sensor.lastReadingAt)}</span>
+                        <span>Device: {sensor.device || '—'}</span>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </>
           )}
-        </Table>
-      </Card>
+        </Card>
+      </>}
     </div>
   );
 };

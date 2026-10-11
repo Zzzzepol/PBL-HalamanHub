@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap');
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/playfair-display/600.css';
+@import '@fontsource/playfair-display/700.css';
+@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
 
 @tailwind base;
 @tailwind components;
@@ -16,6 +22,9 @@ html { scroll-behavior: smooth; }
 
 body {
   @apply font-sans text-gray-800 bg-white antialiased;
+}
+@media (max-width: 767px) {
+  body { font-size: 16px; }
 }
 
 /* Custom scrollbar */
@@ -52,22 +61,31 @@ body {
 }
 
 /* Badge */
-.badge-stock-in    { @apply bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded-full; }
-.badge-stock-low   { @apply bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5 rounded-full; }
-.badge-stock-out   { @apply bg-red-100 text-red-800 text-xs font-medium px-2 py-0.5 rounded-full; }
+.badge-stock-in    { @apply inline-flex min-h-6 items-center gap-1.5 bg-green-100 text-green-800 text-xs font-medium px-2 py-0.5 rounded-full; }
+.badge-stock-low   { @apply inline-flex min-h-6 items-center gap-1.5 bg-amber-100 text-amber-800 text-xs font-medium px-2 py-0.5 rounded-full; }
+.badge-stock-out   { @apply inline-flex min-h-6 items-center gap-1.5 bg-red-100 text-red-800 text-xs font-medium px-2 py-0.5 rounded-full; }
 
 /* Input base */
 .input-base {
-  @apply w-full px-4 py-2.5 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none transition-colors focus:border-brand-600 focus:ring-2 focus:ring-brand-100;
+  @apply w-full min-h-11 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-800 text-base outline-none transition-colors focus:border-brand-700 focus:ring-2 focus:ring-brand-100;
 }
 
 /* Button base */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 bg-brand-700 hover:bg-brand-800 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 bg-brand-700 hover:bg-brand-800 text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
 }
 .btn-outline {
-  @apply inline-flex items-center justify-center gap-2 px-6 py-3 border-2 border-brand-700 text-brand-700 hover:bg-brand-50 font-medium rounded-xl transition-colors;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 px-6 py-3 border-2 border-brand-700 text-brand-700 hover:bg-brand-50 font-medium rounded-xl transition-colors;
 }
 .btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

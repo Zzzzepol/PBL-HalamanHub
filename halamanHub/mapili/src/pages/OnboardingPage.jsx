@@ -40,8 +40,8 @@ const nameParts = (user?.name || '').trim().split(/\s+/);
     try {
       await completeProfile({ firstName, lastName, phone });
       navigate('/', { replace: true });
-    } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+    } catch {
+      setError('We could not save your details. Please check them and try again.');
     } finally {
       setLoading(false);
     }
@@ -50,7 +50,7 @@ const nameParts = (user?.name || '').trim().split(/\s+/);
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-50 to-white flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-md">
-        <div className="bg-white rounded-3xl shadow-lift border border-gray-100 p-8 sm:p-10">
+        <div className="bg-white rounded-3xl shadow-lift border border-gray-200 p-8 sm:p-10">
           <h1 className="font-display text-2xl font-bold text-gray-800 mb-1 text-center">Almost there</h1>
           <p className="text-gray-500 text-sm mb-6 text-center">
             Just one more step — we need a phone number for delivery updates.
@@ -79,7 +79,7 @@ const nameParts = (user?.name || '').trim().split(/\s+/);
                 autoComplete="tel"
                 required
               />
-              <p className="text-xs text-gray-400 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
+              <p className="text-xs text-gray-600 mt-1">Format: 11 digits starting with 09, e.g. 09171234567.</p>
             </FormField>
 
             <Button variant="primary" type="submit" size="lg" disabled={loading} className="w-full mt-2">

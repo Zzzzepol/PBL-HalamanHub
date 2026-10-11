@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { shopOrdersApi, ApiError } from '../api/client';
+import { shopOrdersApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { Button, Spinner, Badge, orderStatusBadge } from '../components/ui/UI';
+import { Button, Spinner, Badge, orderStatusBadge, ConfirmDialog, StepIndicator } from '../components/ui/UI';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
 
@@ -18,6 +18,7 @@ const OrderPendingPage = () => {
   const [reordering, setReordering] = useState(false);
   const [reorderError, setReorderError] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const expireCheckedRef = useRef(false);
   const orderRef = useRef(null); // always holds the latest order, for use in cleanup/unload handlers
 
@@ -95,7 +96,6 @@ const OrderPendingPage = () => {
   }, [id, token]);
 
   const handleCancel = async () => {
-    if (!window.confirm('Cancel this order? This cannot be undone.')) return;
     setCancelling(true);
     try {
       const updated = await shopOrdersApi.abandon(id, token);
@@ -125,8 +125,8 @@ const OrderPendingPage = () => {
         }, item.qty);
       });
       navigate('/checkout');
-    } catch (err) {
-      setReorderError(err instanceof ApiError ? err.message : 'Could not reorder. Please try again.');
+    } catch {
+      setReorderError('We could not reorder these items. Check what is in stock and try again.');
       setReordering(false);
     }
   };
@@ -179,7 +179,7 @@ const OrderPendingPage = () => {
               Your order <strong>{order?.orderNumber}</strong> has been created.
               Complete your payment in the PayMongo tab that was opened.
             </p>
-            <div className="flex items-center justify-center gap-2 text-sm text-amber-600 mb-8">
+              <div className="flex items-center justify-center gap-2 text-sm text-amber-800 mb-8">
               <Spinner size="sm" />
               Checking payment status automatically…
             </div>
@@ -187,11 +187,12 @@ const OrderPendingPage = () => {
         )}
 
         {order && (
-          <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 text-left mb-8">
+          <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6 text-left mb-8">
+            <div className="mb-6"><StepIndicator steps={['Cart', 'Details', 'Payment', 'Done']} current={isPaid ? 3 : 2} /></div>
             <div className="flex justify-between items-center mb-3">
               <span className="font-bold text-gray-800">{order.orderNumber}</span>
               <Badge variant={orderStatusBadge[order.status]?.variant}>
-                {orderStatusBadge[order.status]?.label}
+                <i className={`ti ${orderStatusBadge[order.status]?.icon || 'ti-help-circle'}`} aria-hidden="true" />{orderStatusBadge[order.status]?.label}
               </Badge>
             </div>
             <div className="text-sm text-gray-500 space-y-1">
@@ -205,7 +206,7 @@ const OrderPendingPage = () => {
               </div>
               <div className="flex justify-between">
                 <span>Payment</span>
-                <span className={`font-medium ${isPaid ? 'text-green-600' : isFailed ? 'text-red-600' : 'text-amber-600'}`}>
+                <span className={`font-medium ${isPaid ? 'text-green-700' : isFailed ? 'text-red-600' : 'text-amber-800'}`}>
                   {isPaid ? '✅ Paid' : isFailed ? '❌ Failed' : '⏳ Pending'}
                 </span>
               </div>
@@ -227,7 +228,7 @@ const OrderPendingPage = () => {
               <Link to="/account/orders">
                 <Button variant="outline" icon="ti-package">View my orders</Button>
               </Link>
-              <Button variant="danger" icon="ti-x" onClick={handleCancel} disabled={cancelling}>
+          <Button variant="danger" icon="ti-x" onClick={() => setConfirmCancel(true)} disabled={cancelling}>
                 {cancelling ? 'Cancelling…' : 'Cancel order'}
               </Button>
             </>
@@ -237,6 +238,7 @@ const OrderPendingPage = () => {
           </Link>
         </div>
       </div>
+      <ConfirmDialog open={confirmCancel} title="Cancel this order?" message="Your order will be cancelled and cannot be restored. You will not be charged if payment has not gone through." confirmLabel="Cancel order" onConfirm={() => { setConfirmCancel(false); handleCancel(); }} onCancel={() => setConfirmCancel(false)} />
     </div>
   );
 };

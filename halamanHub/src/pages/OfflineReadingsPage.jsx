@@ -1,168 +1,41 @@
-// HalamanHub — Offline Readings Page
-// Shown ONLY to the offline-readonly account. This route lives OUTSIDE
-// MainLayout (see App.jsx) — no Sidebar, no TopBar, no MongoDB-backed API
-// calls, by design. It pulls the last known reading from
-// GET /api/sensor-data/live on load, then updates live via the
-// 'sensor:reading' socket event — neither of which touches MongoDB, so this
-// works even when the database is down.
-
-import React, { useEffect, useMemo, useState } from 'react';
+// Read-only device readings stay outside MainLayout and do not call the database API.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BigStat, Button, StatusBadge } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { socket } from '../socket';
 import { getSoilRecommendations } from '../utils/soilRecommendations';
 import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
+import { timeAgo } from '../utils/timeAgo';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
-
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, ok: 3 };
-
-const recTone = {
-  high:   { border: 'border-red-200',   bg: 'bg-red-50/60',    badge: 'bg-red-100 text-red-800' },
-  medium: { border: 'border-amber-200', bg: 'bg-amber-50/60',  badge: 'bg-amber-100 text-amber-800' },
-  low:    { border: 'border-blue-200',  bg: 'bg-blue-50/60',   badge: 'bg-blue-100 text-blue-800' },
-  ok:     { border: 'border-green-200', bg: 'bg-green-50/60',  badge: 'bg-green-100 text-green-800' },
-};
-
-const SectionHeading = ({ icon, title, subtitle }) => (
-  <div className="flex items-center gap-2.5 mb-3">
-    <div className="w-7 h-7 rounded-sm flex items-center justify-center bg-green-100 text-green-700 text-sm flex-shrink-0">
-      <i className={`ti ${icon}`} aria-hidden="true" />
-    </div>
-    <div>
-      <h2 className="text-base font-medium text-text-primary leading-tight">{title}</h2>
-      {subtitle && <p className="text-xs text-text-secondary leading-tight">{subtitle}</p>}
-    </div>
-  </div>
-);
-
-const MetricCard = ({ icon, label, value, unit, emphasis }) => (
-  <div className={`rounded-md p-4 border-[0.5px] border-border ${emphasis ? 'bg-green-50/70' : 'bg-bg-secondary'}`}>
-    <div className="flex items-center gap-2 mb-2">
-      <div className="w-7 h-7 rounded-sm flex items-center justify-center text-sm bg-green-100 text-green-700 flex-shrink-0">
-        <i className={`ti ${icon}`} aria-hidden="true" />
-      </div>
-      <div className="text-xs text-text-secondary leading-tight">{label}</div>
-    </div>
-    <div className="text-2xl font-medium leading-[1.1] text-text-primary">
-      {value ?? '—'}
-      {unit && value != null ? <span className="text-sm text-text-secondary ml-1 font-normal">{unit}</span> : null}
-    </div>
-  </div>
-);
-
-// Water tank status is the one metric where a plain number isn't enough —
-// an operator scanning the page quickly needs to see "is this fine or do I
-// need to act" at a glance, so it gets a dedicated visual treatment instead
-// of sharing a grid cell with everything else.
-const WaterTankCard = ({ levelPercent, tankStatus3Info, pumpActive, solenoidActive }) => {
-  const hasReading = levelPercent != null;
-  const pct = hasReading ? Math.max(0, Math.min(100, levelPercent)) : 0;
-
-  const toneToColor = {
-    ok:      { bar: 'bg-green-600', text: 'text-green-700' },
-    warning: { bar: 'bg-amber-500', text: 'text-amber-700' },
-    error:   { bar: 'bg-red-500',   text: 'text-red-700' },
-    default: { bar: 'bg-gray-300',  text: 'text-text-secondary' },
-  };
-  const colors = toneToColor[tankStatus3Info?.tone] || toneToColor.default;
-  const status = tankStatus3Info?.label || 'No data';
-
-  const activeSource = pumpActive ? 'Pump running' : solenoidActive ? 'Solenoid open' : 'Idle';
-
-  return (
-    <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-sm flex items-center justify-center text-sm bg-blue-50 text-blue-700 flex-shrink-0">
-            <i className="ti ti-glass-full" aria-hidden="true" />
-          </div>
- <div className="text-xs text-text-secondary leading-tight">Water tank level</div>
-        </div>
-        <span className={`text-xs font-medium ${colors.text}`}>{status}</span>
-      </div>
-
-      <div className="flex items-end gap-2 mb-2.5">
-        <div className="text-2xl font-medium leading-[1.1] text-text-primary">
-          {hasReading ? pct : '—'}
-          {hasReading && <span className="text-sm text-text-secondary ml-0.5 font-normal">%</span>}
-        </div>
-      </div>
-
-      <div className="w-full h-2 rounded-full bg-bg-tertiary overflow-hidden mb-2.5">
-        <div
-          className={`h-full rounded-full transition-[width] duration-500 ${colors.bar}`}
-          style={{ width: `${hasReading ? pct : 0}%` }}
-        />
-      </div>
-
-      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pumpActive || solenoidActive ? 'bg-green-600 animate-pulse-dot' : 'bg-gray-400'}`} />
-        {activeSource}
-      </div>
-    </div>
-  );
-};
-
-const RecommendationCard = ({ rec }) => {
-  const tone = recTone[rec.severity] || recTone.low;
-  return (
-    <div className={`border rounded-md p-3.5 ${tone.border} ${tone.bg}`}>
-      <div className="flex items-center justify-between gap-2 mb-1">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded ${tone.badge}`}>
-            {rec.severity === 'ok' ? 'Good' : rec.severity}
-          </span>
-          <span className="text-sm font-medium text-text-primary">{rec.category}</span>
-        </div>
-        {rec.reading && <span className="text-sm font-semibold text-text-primary flex-shrink-0">{rec.reading}</span>}
-      </div>
-      <p className="text-sm text-text-secondary leading-snug">{rec.message}</p>
-      {rec.fix && (
-        <p className="text-sm mt-2 leading-snug">
-          <span className="font-medium text-text-primary">Fix: </span>
-          <span className="text-text-secondary">{rec.fix}</span>
-        </p>
-      )}
-      {rec.diyTip && (
-        <div className="text-sm mt-1.5 leading-snug bg-green-50/70 border border-green-100 rounded px-2.5 py-1.5">
-          <span className="font-medium text-green-800">DIY option: </span>
-          <span className="text-green-900/80">{rec.diyTip}</span>
-        </div>
-      )}
-    </div>
-  );
-};
+const statusFromSeverity = severity => ({ high: 'action', medium: 'check', low: 'check', ok: 'good' }[severity] || 'none');
+const friendlyCategory = (category = '') => category
+  .replace(/Soil Salinity \(EC\)|Soil EC/gi, 'Soil salt level (EC)')
+  .replace(/Soil pH/gi, 'Soil acidity (pH)')
+  .replace(/Nitrogen \(N\)|Phosphorus \(P\)|Potassium \(K\)/gi, match => `Plant food (${match.slice(-2, -1)})`)
+  .replace(/Water Quality \(TDS\)/gi, 'Water purity (TDS)');
 
 const OfflineReadingsPage = () => {
   const { logout, user } = useAuth();
   const [reading, setReading] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  // Initial load — last known reading, straight from memory (no DB).
-  useEffect(() => {
+  const loadReading = useCallback(() => {
+    setLoading(true); setError(false);
     const token = localStorage.getItem('halamanhub_token');
-    fetch(`${API_BASE}/sensor-data/live`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('No reading received yet.');
-        return res.json();
-      })
-      .then((data) => {
-        setReading(data);
-        setLastUpdated(data.recordedAt);
-      })
-      .catch((err) => setError(err.message));
+    fetch(`${API_BASE}/sensor-data/live`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(response => { if (!response.ok) throw new Error('no-reading'); return response.json(); })
+      .then(data => { setReading(data); setLastUpdated(data.recordedAt); })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Live updates as they stream in over USB serial / WiFi.
+  useEffect(() => { loadReading(); }, [loadReading]);
   useEffect(() => {
-    const handleReading = (data) => {
-      setReading(data);
-      setLastUpdated(data.recordedAt || new Date().toISOString());
-      setError(null);
-    };
+    const handleReading = data => { setReading(data); setLastUpdated(data.recordedAt || new Date().toISOString()); setError(false); };
     socket.on('sensor:reading', handleReading);
     return () => socket.off('sensor:reading', handleReading);
   }, []);
@@ -172,197 +45,65 @@ const OfflineReadingsPage = () => {
   const watering = reading?.watering || {};
   const water = reading?.water || {};
   const waterQuality = getWaterQualityCategory(water.tds ?? null);
-  const tankStatus3Info = getTankStatusInfo(water.tankStatus ?? null);
-
+  const tankStatus = getTankStatusInfo(water.tankStatus ?? null);
   const recommendations = useMemo(() => {
     if (!reading) return [];
-    const recs = getSoilRecommendations({
-      ph: soil.ph,
-      ec: soil.ec,
-      nitrogen: soil.nitrogen,
-      phosphorus: soil.phosphorus,
-      potassium: soil.potassium,
-      temperature: air.temperature,
-      humidity: air.humidity,
-    });
-
-    if (water.tds != null) {
-      recs.push(getWaterQualityRecommendation(water.tds));
-    }
-    // Most actionable first — an operator scanning this list should see
-    // what needs attention before what's already fine.
-    return [...recs].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+    const items = getSoilRecommendations({ ph: soil.ph, ec: soil.ec, nitrogen: soil.nitrogen, phosphorus: soil.phosphorus, potassium: soil.potassium, temperature: air.temperature, humidity: air.humidity });
+    if (water.tds != null) items.push(getWaterQualityRecommendation(water.tds));
+    return items.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+    // The recommendation functions are pure and always read from this latest snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reading]);
 
-  const actionableCount = recommendations.filter(r => r.severity === 'high' || r.severity === 'medium').length;
+  const needsAction = recommendations.filter(item => item.severity === 'high').length;
+  const needsCheck = recommendations.filter(item => item.severity === 'medium').length;
+  const hasReadings = Boolean(reading && (soil.moisture != null || watering.levelPercent != null || air.temperature != null));
+  const overallStatus = !hasReadings ? 'none' : needsAction ? 'action' : needsCheck ? 'check' : 'good';
+  const wateringNow = Boolean(watering.pumpActive || watering.solenoidActive);
 
   return (
     <div className="min-h-screen bg-bg-tertiary">
-      {/* Header — deliberately its own bar (not the main TopBar) so it's
-          visually obvious this is a restricted, single-purpose session. */}
-      <div className="bg-bg-primary border-b-[0.5px] border-border">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <img src="/logo.jpg" alt="Mapili Plant Nursery logo" className="w-9 h-9 rounded-md object-cover flex-shrink-0" />
-            <div className="min-w-0 leading-tight">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-medium text-text-primary truncate">Live Sensor Readings</h1>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wide bg-amber-50 text-amber-800 flex-shrink-0">
-                  <i className="ti ti-plug-connected-x text-[11px]" aria-hidden="true" />
-                  Offline mode
-                </span>
-              </div>
-              <p className="text-xs text-text-secondary truncate">
-                {user?.name || 'Offline Viewer'} · read-only · ESP32 direct
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={logout}
-            className="text-sm text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-md border-[0.5px] border-border flex-shrink-0"
-          >
-            Log out
-          </button>
+      <header className="border-b border-border bg-bg-primary">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3"><img src="/logo.jpg" alt="Mapili Plant Nursery" className="h-10 w-10 flex-shrink-0 rounded-lg object-cover" /><div className="min-w-0"><h1 className="truncate text-lg font-semibold text-text-primary">Plant and water readings</h1><p className="text-sm text-text-secondary">Read-only view · {user?.name || 'Offline viewer'}</p></div></div>
+          <Button variant="default" onClick={logout}>Log out</Button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-7">
-        {/* Connection status */}
-        <div className="flex items-center gap-2 text-sm">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${reading ? 'bg-green-500 animate-pulse-dot' : 'bg-gray-300'}`} />
-          <span className="text-text-secondary">
-            {reading
-              ? `Last updated ${new Date(lastUpdated).toLocaleTimeString()}`
-              : error || 'Waiting for the first reading…'}
-          </span>
-        </div>
-
-        {/* Soil nutrients — the primary reason this dashboard exists */}
-        <section>
-          <SectionHeading icon="ti-leaf" title="Soil Nutrients" subtitle="N-P-K, salinity & pH from the ESP32 probe" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <MetricCard icon="ti-atom-2" label="Nitrogen (N)" value={soil.nitrogen} unit="mg/kg" emphasis />
-            <MetricCard icon="ti-atom-2" label="Phosphorus (P)" value={soil.phosphorus} unit="mg/kg" emphasis />
-            <MetricCard icon="ti-atom-2" label="Potassium (K)" value={soil.potassium} unit="mg/kg" emphasis />
-            <MetricCard icon="ti-bolt" label="EC (salinity)" value={soil.ec} unit="uS/cm" />
-            <MetricCard icon="ti-flask" label="pH" value={soil.ph} unit="" />
-            <MetricCard icon="ti-droplet" label="Soil moisture" value={soil.moisture} unit="%" />
-          </div>
+      <main className="mx-auto max-w-5xl space-y-5 px-4 py-5 pb-8 sm:px-6">
+        <p className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><i className="ti ti-info-circle mt-0.5" aria-hidden="true" />No internet. Showing live readings from the device.</p>
+        <section className={`rounded-2xl border p-4 ${overallStatus === 'action' ? 'border-red-200 bg-red-50' : overallStatus === 'check' ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`} aria-live="polite">
+          <div className="flex items-start gap-3"><i className={`ti ${overallStatus === 'action' ? 'ti-alert-circle text-red-700' : overallStatus === 'check' ? 'ti-alert-triangle text-amber-800' : overallStatus === 'none' ? 'ti-hourglass text-gray-700' : 'ti-circle-check text-green-800'} mt-0.5 text-xl`} aria-hidden="true" /><div><h2 className="font-semibold text-text-primary">{!hasReadings ? 'Waiting for a reading.' : needsAction ? `${needsAction} thing${needsAction === 1 ? '' : 's'} need your attention.` : needsCheck ? 'A few readings are worth checking soon.' : 'Your plants look healthy.'}</h2><p className="mt-1 text-sm text-text-secondary">{needsAction || needsCheck ? 'See the next steps below.' : 'This screen updates when the device sends a new reading.'}</p></div></div>
         </section>
 
-        {/* Environment — secondary context, smaller visual weight */}
-        <section>
-          <SectionHeading icon="ti-cloud" title="Environment" subtitle="Air & soil conditions around the sensor" />
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <MetricCard icon="ti-thermometer" label="Soil temperature" value={soil.temperature} unit="°C" />
-            <MetricCard icon="ti-temperature" label="Air temperature" value={air.temperature} unit="°C" />
-            <MetricCard icon="ti-cloud" label="Air humidity" value={air.humidity} unit="%" />
+        {error && !reading && <div className="flex flex-col items-start gap-3 rounded-xl border border-amber-200 bg-white p-4 sm:flex-row sm:items-center"><p className="flex-1 text-sm text-text-secondary">No reading has arrived yet. Check the device connection, then try again.</p><Button onClick={loadReading} icon="ti-refresh">Try again</Button></div>}
+        {loading && !reading && <div className="rounded-xl border border-border bg-white p-4 text-sm text-text-secondary" role="status">Loading the latest reading…</div>}
+
+        <section aria-label="Key readings">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <BigStat icon="ti-droplet" label="Soil wetness" value={soil.moisture ?? '—'} unit={soil.moisture != null ? '%' : ''} status={soil.moisture == null ? 'none' : 'good'} />
+            <BigStat icon="ti-glass-full" label="Water tank" value={watering.levelPercent != null ? watering.levelPercent : tankStatus.label} unit={watering.levelPercent != null ? '%' : ''} status={watering.levelPercent == null ? 'none' : statusFromSeverity(tankStatus.tone === 'ok' ? 'ok' : tankStatus.tone === 'warning' ? 'medium' : tankStatus.tone === 'error' ? 'high' : 'low')} />
+            <BigStat icon="ti-droplet" label="Watering now" value={wateringNow ? 'On' : 'Off'} status={reading ? 'good' : 'none'} />
+            <BigStat icon="ti-temperature" label="Temperature & humidity" value={`${air.temperature ?? '—'}${air.temperature != null ? '°C' : ''} · ${air.humidity ?? '—'}${air.humidity != null ? '%' : ''}`} status={air.temperature == null && air.humidity == null ? 'none' : 'good'} />
           </div>
+          <p className="mt-2 text-sm text-text-secondary">Last updated {timeAgo(lastUpdated)}</p>
         </section>
 
-        {/* Water — irrigation tank (ultrasonic) + rainwater quality (TDS/pH/float switches) */}
         <section>
-          <SectionHeading icon="ti-glass-full" title="Water Level Monitor" subtitle="Tank status & active irrigation source" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <WaterTankCard
-              levelPercent={watering.levelPercent}
-              tankStatus3Info={tankStatus3Info}
-              pumpActive={watering.pumpActive}
-              solenoidActive={watering.solenoidActive}
-            />
-            <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary flex flex-col justify-center">
-              <div className="text-xs text-text-secondary mb-1">Water availability</div>
-              <div className="text-sm text-text-primary leading-snug">
-                {watering.levelPercent != null
-                  ? tankStatus3Info.tone === 'error'
-                    ? 'Tank is critically low. Irrigation may pause automatically until refilled.'
-                    : tankStatus3Info.tone === 'warning'
-                    ? 'Tank is running low — plan a refill soon.'
-                    : 'Tank level is healthy — no action needed.'
-                  : 'No water level reading yet.'}
-              </div>
-            </div>
-          </div>
+          <h2 className="mb-3 text-lg font-semibold text-text-primary">What to do</h2>
+          {recommendations.length ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{recommendations.slice(0, 4).map((item, index) => <article key={`${item.category}-${index}`} className="rounded-xl border border-border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><h3 className="font-semibold text-text-primary">{friendlyCategory(item.category)}</h3><StatusBadge status={statusFromSeverity(item.severity)} /></div>{item.reading && <p className="mt-1 text-sm font-medium text-text-primary">{item.reading.replace('uS/cm', 'µS/cm')}</p>}<p className="mt-2 text-sm leading-relaxed text-text-secondary">{item.message}</p>{item.fix && <p className="mt-2 text-sm text-text-primary"><strong>Try this:</strong> {item.fix}</p>}</article>)}</div> : <p className="rounded-xl border border-border bg-white p-4 text-sm text-text-secondary">New advice will appear when readings arrive.</p>}
         </section>
 
-        {/* Rainwater Harvesting — TDS, pH, 3-state float-switch tank level */}
-        <section>
-          <SectionHeading icon="ti-droplet" title="Rainwater Quality" subtitle="TDS & float-switch tank level" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">
-              <div className="text-xs text-text-secondary mb-2">Water quality (TDS)</div>
-              <div className="text-2xl font-medium text-text-primary leading-tight">
-                {water.tds != null ? Math.round(water.tds) : '—'}
-                {water.tds != null && <span className="text-sm text-text-secondary ml-1 font-normal">ppm</span>}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                  waterQuality.tone === 'ok' ? 'bg-green-50 text-green-800' :
-                  waterQuality.tone === 'warning' ? 'bg-amber-50 text-amber-800' :
-                  waterQuality.tone === 'error' ? 'bg-red-50 text-red-800' : 'bg-bg-tertiary text-text-secondary'
-                }`}>
-                  {waterQuality.label}
-                </span>
-                {water.tds != null && water.tdsStable === false && (
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-800"
-                    title="Sensor readings are fluctuating too much to trust right now — showing the last known-good value instead of a fresh one."
-                  >
-                    Unstable — last known value
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-md p-4 border-[0.5px] border-border bg-bg-secondary">
-              <div className="text-xs text-text-secondary mb-2">Tank level (3-state)</div>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium mb-3 ${
-                tankStatus3Info.tone === 'ok' ? 'bg-green-50 text-green-800' :
-                tankStatus3Info.tone === 'warning' ? 'bg-amber-50 text-amber-800' :
-                tankStatus3Info.tone === 'error' ? 'bg-red-50 text-red-800' : 'bg-bg-tertiary text-text-secondary'
-              }`}>
-                {tankStatus3Info.label}
-              </span>
-              <div className="flex gap-1.5">
-                {[1, 2, 3].map((step) => (
-                  <div
-                    key={step}
-                    className={`h-2.5 flex-1 rounded-full ${
-                      tankStatus3Info.step >= step
-                        ? step === 3 ? 'bg-green-600' : step === 2 ? 'bg-amber-500' : 'bg-red-500'
-                        : 'bg-bg-tertiary'
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="flex justify-between text-xs text-text-secondary mt-1.5">
-                <span>Low</span><span>Medium</span><span>Full</span>
-              </div>
-            </div>
+        <details className="rounded-xl border border-border bg-white">
+          <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-text-primary">Show more details</summary>
+          <div className="space-y-5 border-t border-border p-4">
+            <section><h2 className="mb-3 font-semibold text-text-primary">Plant food levels (N, P, K)</h2><div className="grid grid-cols-1 gap-3 sm:grid-cols-3">{[['Nitrogen (N)', soil.nitrogen], ['Phosphorus (P)', soil.phosphorus], ['Potassium (K)', soil.potassium]].map(([label, value]) => <div key={label} className="rounded-xl border border-border bg-bg-secondary p-4"><p className="text-sm text-text-secondary">{label}</p><p className="mt-1 text-lg font-semibold text-text-primary">{value ?? '—'}{value != null ? ' mg/kg' : ''}</p></div>)}</div></section>
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Soil salt level (EC)</h2><p className="mt-1 text-lg font-semibold">{soil.ec ?? '—'}{soil.ec != null ? ' µS/cm' : ''}</p></div><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Soil acidity (pH)</h2><p className="mt-1 text-lg font-semibold">{soil.ph ?? '—'}</p></div></section>
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2"><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Water purity (TDS)</h2><p className="mt-1 text-lg font-semibold">{water.tds != null ? `${Math.round(water.tds)} ppm` : '—'}</p><StatusBadge className="mt-2" status={water.tds == null ? 'none' : waterQuality.tone === 'ok' ? 'good' : waterQuality.tone === 'warning' ? 'check' : 'action'} /></div><div className="rounded-xl border border-border p-4"><h2 className="font-medium text-text-primary">Tank level</h2><div className="mt-2 flex flex-wrap items-center gap-2"><StatusBadge status={tankStatus.tone === 'ok' ? 'good' : tankStatus.tone === 'warning' ? 'check' : tankStatus.tone === 'error' ? 'action' : 'none'} /><span className="text-sm text-text-secondary">Level: {tankStatus.label}</span></div><div className="mt-3 flex gap-1.5" aria-label={`Tank level: ${tankStatus.label}`}>{[1, 2, 3].map(step => <span key={step} className={`h-2 flex-1 rounded-full ${tankStatus.step >= step ? step === 3 ? 'bg-green-700' : step === 2 ? 'bg-amber-600' : 'bg-red-700' : 'bg-gray-200'}`} />)}</div></div></section>
+            <section><h2 className="mb-3 font-semibold text-text-primary">Air conditions</h2><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Soil temperature</p><p className="mt-1 font-semibold">{soil.temperature ?? '—'}{soil.temperature != null ? '°C' : ''}</p></div><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Air temperature</p><p className="mt-1 font-semibold">{air.temperature ?? '—'}{air.temperature != null ? '°C' : ''}</p></div><div className="rounded-xl border border-border p-4"><p className="text-sm text-text-secondary">Air humidity</p><p className="mt-1 font-semibold">{air.humidity ?? '—'}{air.humidity != null ? '%' : ''}</p></div></div></section>
           </div>
-        </section>
-
-        {/* Recommendations — the most actionable content, so it gets a
-            header badge showing how many items need attention. */}
-        {recommendations.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <SectionHeading icon="ti-bulb" title="Soil, Water & Environment Recommendations" subtitle="Fertilizer & gardening-use (ppm) guidance based on current readings" />
-              {actionableCount > 0 && (
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-red-50 text-red-800 flex-shrink-0">
-                  {actionableCount} need{actionableCount === 1 ? 's' : ''} attention
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {recommendations.map((rec, idx) => (
-                <RecommendationCard key={idx} rec={rec} />
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
+        </details>
+      </main>
     </div>
   );
 };

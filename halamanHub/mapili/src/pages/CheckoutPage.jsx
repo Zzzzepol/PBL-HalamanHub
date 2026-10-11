@@ -112,8 +112,8 @@ const CheckoutPage = () => {
     if (fulfillment === 'delivery' && showCustomAddress && form.address && form.city && token && saveAddressPermanently) {
       try {
         await addressesApi.add({ label: 'Delivery', address: form.address, city: form.city }, token);
-      } catch (err) {
-        setError(err.message || 'Unable to save the address permanently.');
+      } catch {
+        setError('We could not save this address. Please try again.');
         return;
       }
     }
@@ -184,7 +184,7 @@ const CheckoutPage = () => {
       navigate(`/order-success/${order._id}`);
     }
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      setError(err.status === 409 ? 'Some items are no longer available. Update your cart and try again.' : 'We could not start your payment. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -196,14 +196,14 @@ const CheckoutPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-gray-50 px-4 pt-8 pb-28 md:py-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="font-display text-3xl font-bold text-gray-800 mb-2">Checkout</h1>
         <p className="text-gray-500 mb-8">Almost there — just a few more details</p>
 
         {/* Step indicator */}
         <div className="mb-10">
-          <StepIndicator steps={['Delivery details', 'Payment', 'Confirm']} current={step} />
+          <StepIndicator steps={['Cart', 'Details', 'Payment', 'Done']} current={step + 1} />
         </div>
 
         {error && <Alert type="error" message={error} onClose={() => setError('')} className="mb-6" />}
@@ -214,7 +214,7 @@ const CheckoutPage = () => {
 
             {/* Step 0 — Details */}
             {step === 0 && (
-              <form onSubmit={handleDetailsSubmit} className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 flex flex-col gap-5">
+              <form onSubmit={handleDetailsSubmit} className="bg-white rounded-2xl shadow-soft border border-gray-200 p-6 flex flex-col gap-5">
                 <h2 className="font-semibold text-gray-800 text-lg">Contact &amp; delivery details</h2>
 
                 {/* Fulfillment type */}
@@ -232,7 +232,7 @@ const CheckoutPage = () => {
                         className={`p-4 rounded-xl border-2 text-left transition-all
                           ${fulfillment === opt.value ? 'border-brand-600 bg-brand-50' : 'border-gray-200 hover:border-brand-300'}`}
                       >
-                        <i className={`ti ${opt.icon} text-xl ${fulfillment === opt.value ? 'text-brand-700' : 'text-gray-400'} block mb-1`} />
+                        <i className={`ti ${opt.icon} text-xl ${fulfillment === opt.value ? 'text-brand-700' : 'text-gray-600'} block mb-1`} />
                         <div className={`text-sm font-semibold ${fulfillment === opt.value ? 'text-brand-800' : 'text-gray-700'}`}>{opt.label}</div>
                         <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
                       </button>
@@ -261,7 +261,7 @@ const CheckoutPage = () => {
                     disabled
                     className="bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-600 mt-1">
                     Using the contact details from your account. <Link to="/account" className="text-brand-700 hover:text-brand-800 font-medium">Edit in Account settings</Link>
                   </p>
                 </FormField>
@@ -360,7 +360,7 @@ const CheckoutPage = () => {
                         onChange={e => f('pickupDate', e.target.value)}
                         required
                       />
-                      <p className="text-xs text-gray-400 mt-1.5">
+                      <p className="text-xs text-gray-600 mt-1.5">
                         Pickup dates start 3 days from today, so our team has time to prepare your order.
                       </p>
                     </FormField>
@@ -386,9 +386,9 @@ const CheckoutPage = () => {
 
             {/* Step 1 — Payment */}
             {step === 1 && (
-              <form onSubmit={handlePaymentSubmit} className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6 flex flex-col gap-5">
+              <form id="checkout-payment-form" onSubmit={handlePaymentSubmit} className="bg-white rounded-2xl shadow-soft border border-gray-200 p-5 sm:p-6 flex flex-col gap-5">
                 <div className="flex items-center gap-3 mb-1">
-                  <button type="button" onClick={() => setStep(0)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                  <button type="button" onClick={() => setStep(0)} className="text-gray-600 hover:text-gray-600 transition-colors">
                     <i className="ti ti-arrow-left text-lg" />
                   </button>
                   <h2 className="font-semibold text-gray-800 text-lg">Choose payment method</h2>
@@ -424,12 +424,12 @@ const CheckoutPage = () => {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2 text-xs text-gray-400">
+                <div className="flex items-start gap-2 text-xs text-gray-600">
                   <i className="ti ti-shield-check text-green-500 flex-shrink-0 mt-0.5" />
                   Your payment is secured and encrypted by PayMongo.
                 </div>
 
-                <Button variant="primary" type="submit" size="lg" icon="ti-lock" disabled={loading} className="w-full">
+                <Button variant="primary" type="submit" size="lg" icon="ti-lock" disabled={loading} className="hidden w-full md:flex">
                   {loading ? 'Redirecting to payment…' : `Pay ₱${grandTotal.toFixed(2)} securely`}
                 </Button>
               </form>
@@ -438,7 +438,7 @@ const CheckoutPage = () => {
 
           {/* Order summary sidebar */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-5 sticky top-24">
+            <div className="bg-white rounded-2xl shadow-soft border border-gray-200 p-5 sticky top-24">
               <h3 className="font-semibold text-gray-800 mb-4">Your items</h3>
               <div className="flex flex-col gap-3">
                 {items.map(item => (
@@ -452,12 +452,12 @@ const CheckoutPage = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-gray-700 truncate">{item.name}</div>
-                      <div className="text-xs text-gray-400">×{item.qty} — ₱{(item.price * item.qty).toFixed(2)}</div>
+                      <div className="text-xs text-gray-600">×{item.qty} — ₱{(item.price * item.qty).toFixed(2)}</div>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-gray-100 mt-4 pt-4 flex flex-col gap-1.5 text-sm">
+              <div className="border-t border-gray-200 mt-4 pt-4 flex flex-col gap-1.5 text-sm">
                 <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>₱{total.toFixed(2)}</span></div>
                 <div className="flex justify-between font-bold text-gray-800 text-base mt-1">
                   <span>Total</span><span>₱{grandTotal.toFixed(2)}</span>
@@ -467,6 +467,7 @@ const CheckoutPage = () => {
           </div>
         </div>
       </div>
+      {step === 1 && <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur md:hidden"><div className="mx-auto flex max-w-4xl items-center gap-3"><div className="min-w-0 flex-1"><div className="text-xs text-gray-600">Total</div><div className="font-semibold text-gray-900">₱{grandTotal.toFixed(2)}</div></div><Button variant="primary" type="submit" form="checkout-payment-form" icon="ti-lock" disabled={loading} className="flex-1">{loading ? 'Opening payment…' : 'Pay securely'}</Button></div></div>}
     </div>
   );
 };

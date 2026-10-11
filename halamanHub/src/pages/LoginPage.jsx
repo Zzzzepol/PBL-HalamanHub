@@ -45,9 +45,9 @@ const LoginPage = () => {
       navigate(getRedirectPath(loggedInUser, location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        setError(err.status === 401 ? 'That username or password did not match. Try again.' : 'We could not sign you in right now. Please try again.');
       } else {
-        setError('Unable to reach the server. Make sure the backend is running on port 4000.');
+        setError('We cannot connect right now. Check your connection and try again.');
       }
     } finally {
       setLoading(false);
@@ -102,7 +102,7 @@ const LoginPage = () => {
               />
               <button
                 type="button"
-                className="absolute right-1 top-1/2 -translate-y-1/2 bg-transparent border-none text-text-secondary cursor-pointer w-[30px] h-[30px] flex items-center justify-center text-base rounded-sm hover:bg-bg-secondary hover:text-text-primary"
+                className="absolute right-1 top-1/2 -translate-y-1/2 min-h-11 min-w-11 bg-transparent border-none text-text-secondary cursor-pointer flex items-center justify-center text-base rounded-lg hover:bg-bg-secondary hover:text-text-primary"
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
