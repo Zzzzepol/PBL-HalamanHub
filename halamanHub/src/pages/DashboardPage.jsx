@@ -17,6 +17,40 @@ const friendlyCategory = (category = '') => category
   .replace(/Soil pH|pH level/gi, 'Soil acidity (pH)')
   .replace(/Nitrogen \(N\)|Phosphorus \(P\)|Potassium \(K\)/gi, match => `Plant food (${match.slice(-2, -1)})`)
   .replace(/Water Quality \(TDS\)/gi, 'Water purity (TDS)');
+const MAIN_DEFAULT_TARGETS = [
+  {
+    key: 'ph', label: 'Soil acidity (pH)', target: '6.5', range: '6.2–6.8', min: 6.2, max: 6.8, unit: '',
+    read: summary => summary?.pH?.value,
+    lowAdvice: 'Retest the soil, then check local crop guidance before adding lime.',
+    highAdvice: 'Retest the soil, then check local crop guidance before trying to lower pH.',
+  },
+  {
+    key: 'ec', label: 'Soil salt (EC)', target: '900 µS/cm', range: '750–1,050 µS/cm', min: 750, max: 1050, unit: 'µS/cm',
+    read: summary => summary?.ec?.value,
+    lowAdvice: 'Check the nutrient readings and retest before adding fertilizer.',
+    highAdvice: 'Pause extra fertilizer salts. Retest before flushing the soil.',
+  },
+  {
+    key: 'nitrogen', label: 'Nitrogen (N)', target: '50 mg/kg', range: '40–60 mg/kg', min: 40, max: 60, unit: 'mg/kg',
+    read: summary => summary?.npk?.nitrogen,
+    lowAdvice: 'Check crop guidance and the fertilizer label before changing the amount.',
+    highAdvice: 'Pause extra nitrogen fertilizer and retest before adding more.',
+  },
+  {
+    key: 'phosphorus', label: 'Phosphorus (P)', target: '30 mg/kg', range: '20–40 mg/kg', min: 20, max: 40, unit: 'mg/kg',
+    read: summary => summary?.npk?.phosphorus,
+    lowAdvice: 'Check crop guidance and the fertilizer label before changing the amount.',
+    highAdvice: 'Pause extra phosphorus fertilizer and retest before adding more.',
+  },
+  {
+    key: 'potassium', label: 'Potassium (K)', target: '140 mg/kg', range: '120–160 mg/kg', min: 120, max: 160, unit: 'mg/kg',
+    read: summary => summary?.npk?.potassium,
+    lowAdvice: 'Check crop guidance and the fertilizer label before changing the amount.',
+    highAdvice: 'Pause extra potassium fertilizer and retest before adding more.',
+  },
+];
+const formatTargetReading = value => Number.isInteger(value) ? String(value) : String(Number(value.toFixed(1)));
+const isDefaultTargetRecommendation = category => /soil\s*pH|pH\s*level|soil\s*(salinity|EC)|EC\s*level|nitrogen|phosphorus|potassium/i.test(category || '');
 const hasPlantReading = plant => (plant.recommendations || []).some(item => item.category !== 'General' && item.reading != null);
 const plantStatus = plant => {
   if (!hasPlantReading(plant)) return 'none';
@@ -42,13 +76,24 @@ const DashboardPage = () => {
   }, [history]);
 
   const recommendations = [...(summary?.recommendations || [])].sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
+  const defaultTargetChecks = MAIN_DEFAULT_TARGETS.map(target => {
+    const rawValue = target.read(summary);
+    const sensorStatus = target.key === 'ph' ? summary?.pH?.status : target.key === 'ec' ? summary?.ec?.status : summary?.npk?.status;
+    const value = rawValue == null || rawValue === '' || sensorStatus === 'offline' || sensorStatus === 'warning' ? null : Number(rawValue);
+    const status = value == null || !Number.isFinite(value) ? 'none' : value < target.min || value > target.max ? 'check' : 'good';
+    const advice = status !== 'check' ? '' : value < target.min ? target.lowAdvice : target.highAdvice;
+    return { ...target, value: Number.isFinite(value) ? value : null, status, advice };
+  });
+  const defaultReadingsToCheck = defaultTargetChecks.filter(item => item.status === 'check').length;
+  const temperatureHumidityRecommendations = recommendations.filter(item => /^(temperature|humidity)$/i.test(item.category || ''));
   const plantRecommendations = summary?.plantRecommendations || [];
   const monitoringStation = summary?.monitoringStation || { name: 'Main System', location: '', monitoredPlants: [] };
   const hasMonitoredPlants = monitoringStation.monitoredPlants?.length > 0;
   const plantsNeedingAction = plantRecommendations.filter(plant => plantStatus(plant) === 'action').length;
   const plantsToCheck = plantRecommendations.filter(plant => plantStatus(plant) === 'check').length;
-  const needsAction = recommendations.filter(item => item.severity === 'high');
-  const needsCheck = recommendations.filter(item => item.severity === 'medium');
+  const otherSoilRecommendations = recommendations.filter(item => !isDefaultTargetRecommendation(item.category));
+  const needsAction = otherSoilRecommendations.filter(item => item.severity === 'high');
+  const needsCheck = otherSoilRecommendations.filter(item => item.severity === 'medium' || item.severity === 'low');
   const noSignal = [summary?.soilMoisture?.status, summary?.npk?.status, summary?.pH?.status, summary?.ec?.status, summary?.waterTank?.status, summary?.temperature?.status, summary?.humidity?.status]
     .some(status => status === 'offline' || status === 'warning');
   const tankStatus = statusFromTone(summary?.waterTank?.tankStatus3Info?.tone || summary?.waterTank?.status);
@@ -56,25 +101,27 @@ const DashboardPage = () => {
   const wateringActive = Boolean(irrigation?.pumpActive || irrigation?.solenoidActive);
   const hasReadings = summary?.soilMoisture?.value != null || summary?.npk?.nitrogen != null || summary?.pH?.value != null || summary?.ec?.value != null;
   const hasAction = needsAction.length > 0 || plantsNeedingAction > 0;
-  const hasCheck = needsCheck.length > 0 || plantsToCheck > 0;
+  const hasCheck = needsCheck.length > 0 || defaultReadingsToCheck > 0 || plantsToCheck > 0;
   const bannerStatus = !hasReadings ? 'none' : hasAction ? 'action' : hasCheck ? 'check' : 'good';
   const bannerMessage = !hasReadings ? 'Waiting for soil readings.'
     : plantsNeedingAction > 0 ? `${plantsNeedingAction} plant${plantsNeedingAction === 1 ? '' : 's'} need attention.`
       : needsAction.length > 0 ? 'Some soil readings need attention.'
+        : defaultReadingsToCheck > 0 ? 'Some general soil readings are outside their default ranges.'
         : plantsToCheck > 0 ? `${plantsToCheck} plant${plantsToCheck === 1 ? '' : 's'} to check soon.`
           : needsCheck.length > 0 ? 'Some soil readings are worth checking soon.'
             : !hasMonitoredPlants ? 'Choose which plants this soil probe represents.' : 'Soil readings look good.';
   const soilMetrics = [
     { label: 'Soil wetness', value: summary?.soilMoisture?.value, unit: '%', icon: 'ti-droplet', sensorStatus: summary?.soilMoisture?.status, match: /soil moisture|soil wetness/i },
-    { label: 'Nitrogen (N)', value: summary?.npk?.nitrogen, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, match: /nitrogen/i },
-    { label: 'Phosphorus (P)', value: summary?.npk?.phosphorus, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, match: /phosphorus/i },
-    { label: 'Potassium (K)', value: summary?.npk?.potassium, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, match: /potassium/i },
-    { label: 'Soil acidity (pH)', value: summary?.pH?.value, unit: '', icon: 'ti-flask', sensorStatus: summary?.pH?.status, match: /soil ph|ph level/i },
-    { label: 'Soil salt (EC)', value: summary?.ec?.value, unit: 'µS/cm', icon: 'ti-test-pipe', sensorStatus: summary?.ec?.status, match: /soil salinity|soil ec|ec level/i },
+    { label: 'Nitrogen (N)', value: summary?.npk?.nitrogen, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, targetKey: 'nitrogen', match: /nitrogen/i },
+    { label: 'Phosphorus (P)', value: summary?.npk?.phosphorus, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, targetKey: 'phosphorus', match: /phosphorus/i },
+    { label: 'Potassium (K)', value: summary?.npk?.potassium, unit: 'mg/kg', icon: 'ti-seeding', sensorStatus: summary?.npk?.status, targetKey: 'potassium', match: /potassium/i },
+    { label: 'Soil acidity (pH)', value: summary?.pH?.value, unit: '', icon: 'ti-flask', sensorStatus: summary?.pH?.status, targetKey: 'ph', match: /soil ph|ph level/i },
+    { label: 'Soil salt (EC)', value: summary?.ec?.value, unit: 'µS/cm', icon: 'ti-test-pipe', sensorStatus: summary?.ec?.status, targetKey: 'ec', match: /soil salinity|soil ec|ec level/i },
   ].map(metric => {
-    const finding = summary?.recommendations?.find(item => metric.match.test(item.category));
-    const status = metric.value == null || metric.sensorStatus === 'offline' ? 'none' : finding ? statusFromSeverity(finding.severity) : statusFromTone(metric.sensorStatus);
-    const label = metric.value == null ? 'No data' : metric.sensorStatus === 'offline' ? 'No signal' : finding ? statusLabel(status) : 'Reading available';
+    const targetCheck = metric.targetKey ? defaultTargetChecks.find(item => item.key === metric.targetKey) : null;
+    const finding = targetCheck ? null : summary?.recommendations?.find(item => metric.match.test(item.category));
+    const status = targetCheck ? targetCheck.status : metric.value == null || metric.sensorStatus === 'offline' ? 'none' : finding ? statusFromSeverity(finding.severity) : statusFromTone(metric.sensorStatus);
+    const label = metric.value == null ? 'No data' : metric.sensorStatus === 'offline' ? 'No signal' : targetCheck ? status === 'good' ? 'Within default range' : 'Check default range' : finding ? statusLabel(status) : 'Reading available';
     return { ...metric, finding, status, statusText: label };
   });
   const orderedPlants = [...plantRecommendations].sort((a, b) => ({ action: 0, check: 1, none: 2, good: 3 }[plantStatus(a)] - ({ action: 0, check: 1, none: 2, good: 3 }[plantStatus(b)])));
@@ -115,7 +162,7 @@ const DashboardPage = () => {
       <section id="soil-monitoring" aria-labelledby="soil-monitoring-title" className="scroll-mt-24">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 id="soil-monitoring-title" className="text-lg font-semibold text-text-primary">Soil monitoring</h2>
+            <h2 id="soil-monitoring-title" className="text-lg font-semibold text-text-primary">Monitoring Plants</h2>
             <p className="text-sm text-text-secondary">One shared probe at {monitoringStation.location || 'your main growing area'} provides these readings.</p>
           </div>
           <span className="text-sm text-text-secondary">Updated {timeAgo(irrigation?.lastUpdated)}</span>
@@ -136,6 +183,25 @@ const DashboardPage = () => {
             </article>
           ))}
         </div>
+        {temperatureHumidityRecommendations.length > 0 && (
+          <div className="mt-4">
+            <h3 className="mb-3 font-semibold text-text-primary">Temperature and humidity advice</h3>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {temperatureHumidityRecommendations.map((item, index) => (
+                <article key={`${item.category}-${index}`} className={`rounded-xl border p-4 ${item.severity === 'high' ? 'border-red-200 bg-red-50/70' : item.severity === 'medium' ? 'border-amber-200 bg-amber-50/60' : 'border-border bg-white'}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h4 className="font-semibold text-text-primary">{friendlyCategory(item.category)}</h4>
+                    <StatusBadge status={item.severity === 'high' ? 'action' : item.severity === 'medium' || item.severity === 'low' ? 'check' : item.severity === 'ok' ? 'good' : 'none'} />
+                  </div>
+                  {item.reading && <p className="mt-1 text-sm font-medium text-text-primary">{item.reading}</p>}
+                  <p className="mt-2 text-sm leading-relaxed text-text-secondary">{item.message}</p>
+                  {item.fix && <p className="mt-2 text-sm leading-relaxed text-text-primary"><strong>Try this:</strong> {item.fix}</p>}
+                  {item.diyTip && <details className="mt-2 text-sm text-text-secondary"><summary className="min-h-11 cursor-pointer py-2 font-medium text-green-800">See a simple option</summary><p className="pb-1">{item.diyTip}</p></details>}
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="your-plants-title" className="overflow-hidden rounded-2xl border border-green-200 bg-white shadow-sm">
@@ -226,28 +292,47 @@ const DashboardPage = () => {
         )}
       </section>
 
-      <section id="what-to-do" className="scroll-mt-24">
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div><h2 className="text-lg font-semibold text-text-primary">What to do</h2><p className="text-sm text-text-secondary">The most important things come first.</p></div>
-          {recommendations.length > 0 && <StatusBadge status={bannerStatus} label={needsAction.length ? `${needsAction.length} need action` : needsCheck.length ? `${needsCheck.length} to check` : 'All looks good'} />}
-        </div>
-        {recommendations.length ? (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {recommendations.slice(0, 4).map((item, index) => (
-              <article key={`${item.category}-${index}`} className={`rounded-xl border p-4 ${item.severity === 'high' ? 'border-red-200 bg-red-50/70' : item.severity === 'medium' ? 'border-amber-200 bg-amber-50/60' : 'border-border bg-white'}`}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="font-semibold text-text-primary">{friendlyCategory(item.category)}</h3>
-                <StatusBadge status={item.severity === 'high' ? 'action' : item.severity === 'medium' || item.severity === 'low' ? 'check' : item.severity === 'ok' ? 'good' : 'none'} />
-                </div>
-                {item.reading && <p className="mt-1 text-sm font-medium text-text-primary">{item.reading.replace('uS/cm', 'µS/cm')}</p>}
-                <p className="mt-2 text-sm leading-relaxed text-text-secondary">{item.message}</p>
-                {item.fix && <p className="mt-2 text-sm leading-relaxed text-text-primary"><strong>Try this:</strong> {item.fix}</p>}
-                {item.diyTip && <details className="mt-2 text-sm text-text-secondary"><summary className="min-h-11 cursor-pointer py-2 font-medium text-green-800">See a simple option</summary><p className="pb-1">{item.diyTip}</p></details>}
-              </article>
+      <details className="group rounded-xl border border-border bg-white shadow-sm">
+        <summary className="min-h-14 cursor-pointer px-4 py-3 text-base font-semibold text-text-primary marker:text-green-800">
+          <span className="ml-1">Main Default Values</span>
+          <span className="ml-2 text-sm font-normal text-text-secondary">General targets used for the shared soil readings</span>
+        </summary>
+        <div className="border-t border-border px-4 py-3">
+          <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(110px,0.8fr)_minmax(150px,1fr)] gap-3 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary sm:grid">
+            <span>Value</span><span>Default target</span><span>Within target</span>
+          </div>
+          <div className="divide-y divide-border">
+            {defaultTargetChecks.map(item => (
+              <div key={item.key} className="grid grid-cols-1 gap-1 py-3 text-sm sm:grid-cols-[minmax(0,1.4fr)_minmax(110px,0.8fr)_minmax(150px,1fr)] sm:items-center sm:gap-3">
+                <span className="font-medium text-text-primary">{item.label}</span>
+                <span className="text-text-secondary"><span className="sm:hidden">Default target: </span>{item.target}</span>
+                <span className="text-text-secondary"><span className="sm:hidden">Within target: </span>{item.range}</span>
+              </div>
             ))}
           </div>
-        ) : <p className="rounded-xl border border-border bg-white p-5 text-sm text-text-secondary">No recommendations yet. New advice will appear when readings arrive.</p>}
-      </section>
+          <p className="mt-2 text-xs leading-relaxed text-text-secondary">These are general ranges, not plant-specific targets. Check crop needs and soil-test results before making major changes.</p>
+          <section aria-labelledby="default-checks-title" className="mt-5 border-t border-border pt-4">
+            <div className="mb-3">
+              <h3 id="default-checks-title" className="font-semibold text-text-primary">General soil checks</h3>
+              <p className="mt-1 text-sm text-text-secondary">Each shared reading is compared with the default range above. These checks are not tied to a specific plant profile.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {defaultTargetChecks.map(item => (
+                <article key={item.key} className={`rounded-xl border p-3 ${item.status === 'check' ? 'border-amber-200 bg-amber-50/50' : 'border-border bg-white'}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h4 className="font-semibold text-text-primary">{item.label}</h4>
+                    <StatusBadge status={item.status} />
+                  </div>
+                  <p className="mt-2 text-sm text-text-secondary">Current reading: <strong className="font-semibold text-text-primary">{item.value == null ? 'No data' : `${formatTargetReading(item.value)}${item.unit ? ` ${item.unit}` : ''}`}</strong></p>
+                  <p className="mt-1 text-sm text-text-secondary">Default range: {item.range}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-text-primary">{item.status === 'none' ? 'Waiting for a fresh sensor reading.' : item.status === 'good' ? 'This reading is within the general default range.' : item.advice}</p>
+                </article>
+              ))}
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-text-secondary">Use this as a general guide. Soil needs vary by crop, growing stage, and test method; confirm major changes with a suitable soil test or local crop advice.</p>
+          </section>
+        </div>
+      </details>
 
       <section aria-labelledby="other-readings-title">
         <div className="mb-3"><h2 id="other-readings-title" className="text-lg font-semibold text-text-primary">Water and air</h2><p className="text-sm text-text-secondary">Other readings for your nursery.</p></div>
