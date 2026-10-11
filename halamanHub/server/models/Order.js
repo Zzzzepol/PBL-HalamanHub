@@ -1,6 +1,7 @@
 
 
 const mongoose = require('mongoose');
+const { shopConnection } = require('../config/connections');
 
 const statusHistorySchema = new mongoose.Schema({
   status:    { type: String, required: true },
@@ -37,4 +38,4 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('Order', orderSchema);
+module.exports = shopConnection.model('Order', orderSchema);

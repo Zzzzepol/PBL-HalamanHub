@@ -1,5 +1,6 @@
 
 const mongoose = require('mongoose');
+const { adminConnection } = require('../config/connections');
 
 const settingsSchema = new mongoose.Schema(
   {
@@ -45,4 +46,4 @@ settingsSchema.statics.getSingleton = async function () {
   return settings;
 };
 
-module.exports = mongoose.model('Settings', settingsSchema);
+module.exports = adminConnection.model('Settings', settingsSchema);

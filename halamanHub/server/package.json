@@ -9,7 +9,10 @@
     "serial-bridge": "node scripts/serialBridge.js",
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "seed:local-admin": "node scripts/seedLocalAdmin.js",
+    "migrate:iot": "node scripts/migrateIotData.js",
+    "backup:iot": "node scripts/backupLocalIot.js"
   },
   "dependencies": {
     "@serialport/parser-readline": "^13.0.0",

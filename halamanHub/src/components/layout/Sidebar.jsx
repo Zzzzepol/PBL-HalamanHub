@@ -6,6 +6,7 @@ const navItems = [
   { path: '/', label: 'Home', icon: 'ti-home' },
   { section: 'My Plants' },
   { path: '/sensors', label: 'Sensors', icon: 'ti-radar' },
+  { path: '/plant-profiles', label: 'Plant profiles', icon: 'ti-plant-2' },
   { path: '/irrigation', label: 'Watering', icon: 'ti-droplet' },
   { path: '/rainwater', label: 'Rain tank', icon: 'ti-cloud-rain' },
   { path: '/analytics', label: 'History and trends', icon: 'ti-chart-line' },

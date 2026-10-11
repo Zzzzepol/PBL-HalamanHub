@@ -2,6 +2,7 @@
 // Separate from admin/staff User model
 const mongoose = require('mongoose');
 const bcrypt   = require('bcryptjs');
+const { shopConnection } = require('../config/connections');
 
 const addressSchema = new mongoose.Schema(
   {
@@ -91,4 +92,4 @@ customerSchema.set('toJSON', {
   },
 });
 
-module.exports = mongoose.model('Customer', customerSchema);
+module.exports = shopConnection.model('Customer', customerSchema);

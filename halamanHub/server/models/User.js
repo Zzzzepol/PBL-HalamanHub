@@ -1,5 +1,6 @@
 
 const mongoose = require('mongoose');
+const { adminConnection } = require('../config/connections');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema(
@@ -35,4 +36,4 @@ userSchema.set('toJSON', {
   },
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = adminConnection.model('User', userSchema);

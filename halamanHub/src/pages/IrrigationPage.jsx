@@ -12,7 +12,7 @@ const IrrigationPage = () => {
   const { token } = useAuth();
   const { data: settings, error: settingsError, loading: settingsLoading, refetch: refetchSettings, setData: setSettings } = useApiData(irrigationApi.getSettings, [], 30000);
   const { data: logs, error: logsError, refetch: refetchLogs } = useApiData(t => irrigationApi.getLogs(t, 50), [], 30000);
-  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000);
+  const { data: summary, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000, 'admin:dashboard-summary');
   useLiveRefetch(['sensor:reading', 'sensor:status'], refetchSummary);
   useLiveRefetch('irrigation:log', () => { refetchLogs(); refetchSummary(); }, 0);
 
@@ -25,6 +25,7 @@ const IrrigationPage = () => {
   const [changing, setChanging] = useState(false);
   const [pendingToggle, setPendingToggle] = useState(null);
   const [pendingMode, setPendingMode] = useState(null);
+  const [pendingLockoutReset, setPendingLockoutReset] = useState(false);
   const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
@@ -52,6 +53,20 @@ const IrrigationPage = () => {
     setPendingToggle(null);
   };
 
+  const requestLockoutReset = async () => {
+    setChanging(true);
+    setSaveError('');
+    try {
+      await irrigationApi.resetLockout(token);
+      await refetchSummary();
+    } catch {
+      setSaveError('We could not request a safety reset. Please try again.');
+    } finally {
+      setChanging(false);
+      setPendingLockoutReset(false);
+    }
+  };
+
   const saveAdvanced = async () => {
     setSaving(true); setSaved(false); setSaveError('');
     try {
@@ -62,7 +77,9 @@ const IrrigationPage = () => {
   };
 
   const irrigation = summary?.irrigation;
-  const active = Boolean(irrigation?.pumpActive || irrigation?.solenoidActive);
+  const active = Boolean(irrigation?.deviceOnline && (irrigation?.pumpActive || irrigation?.solenoidActive));
+  const manualActive = Boolean(settings?.manualPump || settings?.manualSolenoid);
+  const stateLabel = !irrigation?.deviceOnline ? 'Waiting for the ESP32' : ({ IDLE: 'Watching the soil', WATERING: 'Watering', SOAKING: 'Letting water soak in', SAFETY_LOCKOUT: 'Paused for safety' })[irrigation?.state] || 'Waiting for the ESP32';
 
   return (
     <div className="space-y-5">
@@ -71,10 +88,16 @@ const IrrigationPage = () => {
 
       <section className="rounded-2xl border border-green-200 bg-green-50 p-4 sm:p-5" aria-live="polite">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3"><i className={`ti ${active ? 'ti-droplet-filled text-green-800' : 'ti-droplet-off text-text-secondary'} mt-0.5 text-2xl`} aria-hidden="true" /><div><h2 className="text-lg font-semibold text-text-primary">{active ? 'Watering is on.' : 'Watering is off.'}</h2><p className="text-sm text-text-secondary">{settings?.mode === 'manual' ? 'You are using Manual mode.' : settings?.mode === 'auto' ? 'Auto mode follows the soil wetness reading.' : 'The system status will appear when it connects.'}</p></div></div>
+          <div className="flex items-start gap-3"><i className={`ti ${active ? 'ti-droplet-filled text-green-800' : 'ti-droplet-off text-text-secondary'} mt-0.5 text-2xl`} aria-hidden="true" /><div><h2 className="text-lg font-semibold text-text-primary">{active ? 'Watering is on.' : !irrigation?.deviceOnline ? 'Waiting for a fresh device reading.' : irrigation?.lockout ? 'Watering is paused for safety.' : 'Watering is off.'}</h2><p className="text-sm text-text-secondary">{settings?.mode === 'manual' ? 'You are using Manual mode.' : settings?.mode === 'auto' ? 'Auto mode follows fresh soil and tank readings.' : 'The system status will appear when it connects.'}</p></div></div>
           {irrigation?.mode && <Badge variant={irrigation.mode === 'manual' ? 'warning' : 'ok'}>{irrigation.mode === 'manual' ? 'Manual mode' : 'Auto mode'}</Badge>}
         </div>
+        <div className="mt-3 flex flex-col gap-1 border-t border-green-200 pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <span className={irrigation?.deviceOnline ? 'text-green-900' : 'text-amber-900'}>{irrigation?.deviceOnline ? `ESP32 connected · last reading ${formatDateTime(irrigation.lastUpdated)}` : 'No recent reading from the ESP32. Water controls may not have reached the device.'}</span>
+          <span className={irrigation?.settingsApplied ? 'text-green-900' : 'text-amber-900'}>{irrigation?.settingsApplied ? `Settings applied · version ${irrigation.appliedSettingsVersion}` : 'Waiting for the ESP32 to confirm the latest settings.'}</span>
+        </div>
       </section>
+
+      {irrigation?.lockout && <section className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 sm:flex-row sm:items-center sm:justify-between" role="alert"><div><h2 className="font-semibold text-red-900">Watering is paused for safety.</h2><p className="mt-1 text-sm text-red-900">Check the soil sensor and tank reading first. Reset only after the readings are fresh.</p>{irrigation.lockoutResetVersion !== irrigation.appliedLockoutResetVersion && <p className="mt-1 text-sm text-red-900">Reset request sent; waiting for a fresh reading and device reply.</p>}</div><Button variant="danger" onClick={() => setPendingLockoutReset(true)} disabled={changing || !irrigation.soilReadingFresh || !irrigation.tankReadingFresh || irrigation.lockoutResetVersion !== irrigation.appliedLockoutResetVersion}>Reset safety pause</Button></section>}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
@@ -86,13 +109,14 @@ const IrrigationPage = () => {
             </div>}
             <div className="space-y-3 border-t border-border pt-4">
               <h3 className="font-semibold text-text-primary">Current state</h3>
-              <div className="flex items-center justify-between gap-3 rounded-lg bg-bg-secondary px-3 py-2.5"><span>Water pump</span><span className="flex items-center gap-2 font-medium"><PulseDot active={Boolean(irrigation?.pumpActive)} />{irrigation?.pumpActive ? 'On' : irrigation ? 'Off' : 'No data'}</span></div>
-              <div className="flex items-center justify-between gap-3 rounded-lg bg-bg-secondary px-3 py-2.5"><span>Backup water line</span><span className="flex items-center gap-2 font-medium"><PulseDot active={Boolean(irrigation?.solenoidActive)} />{irrigation?.solenoidActive ? 'Open' : irrigation ? 'Closed' : 'No data'}</span></div>
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-bg-secondary px-3 py-2.5"><span>Water pump</span><span className="flex items-center gap-2 font-medium"><PulseDot active={Boolean(irrigation?.deviceOnline && irrigation?.pumpActive)} />{!irrigation?.deviceOnline ? 'No signal' : irrigation?.pumpActive ? 'On' : 'Off'}</span></div>
+              <div className="flex items-center justify-between gap-3 rounded-lg bg-bg-secondary px-3 py-2.5"><span>Backup water line</span><span className="flex items-center gap-2 font-medium"><PulseDot active={Boolean(irrigation?.deviceOnline && irrigation?.solenoidActive)} />{!irrigation?.deviceOnline ? 'No signal' : irrigation?.solenoidActive ? 'Open' : 'Closed'}</span></div>
             </div>
             <div className={`space-y-3 ${settings?.mode !== 'manual' ? 'opacity-60' : ''}`}>
               <h3 className="font-semibold text-text-primary">Manual controls</h3>
-              <Toggle id="manual-pump" checked={Boolean(settings?.manualPump)} onChange={() => setPendingToggle('pump')} label="Water pump" disabled={settingsLoading || changing || settings?.mode !== 'manual'} />
-              <Toggle id="manual-backup" checked={Boolean(settings?.manualSolenoid)} onChange={() => setPendingToggle('backup')} label="Backup water line" disabled={settingsLoading || changing || settings?.mode !== 'manual'} />
+              <Toggle id="manual-pump" checked={Boolean(settings?.manualPump)} onChange={() => setPendingToggle('pump')} label="Water pump" disabled={settingsLoading || changing || settings?.mode !== 'manual' || (!settings?.manualPump && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
+              <Toggle id="manual-backup" checked={Boolean(settings?.manualSolenoid)} onChange={() => setPendingToggle('backup')} label="Backup water line" disabled={settingsLoading || changing || settings?.mode !== 'manual' || (!settings?.manualSolenoid && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
+              {manualActive && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Manual controls turn off after five minutes. They also stop if the ESP32 loses its local connection.</p>{settings?.manualControlExpiresAt && <p className="mt-1">This command ends at {formatDateTime(settings.manualControlExpiresAt)}.</p>}<Button className="mt-2" size="sm" variant="outline" onClick={() => applySettingsPatch({ manualPump: Boolean(settings.manualPump), manualSolenoid: Boolean(settings.manualSolenoid) })} disabled={changing || !irrigation?.deviceOnline}>Extend for five minutes</Button></div>}
               {settings?.mode !== 'manual' && <p className="text-sm text-text-secondary">Choose Manual mode to use these controls.</p>}
             </div>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><i className="ti ti-shield-check mr-1" aria-hidden="true" />The low-water safety switch still works in Manual mode. It stops the pump when the tank is empty.</p>
@@ -107,7 +131,7 @@ const IrrigationPage = () => {
               <div className="rounded-xl border border-border bg-bg-secondary p-4"><div className="text-sm text-text-secondary">Soil wetness</div><div className="mt-1 text-2xl font-semibold">{summary?.soilMoisture?.value ?? '—'}{summary?.soilMoisture?.value != null ? '%' : ''}</div></div>
               <div className="rounded-xl border border-border bg-bg-secondary p-4"><div className="text-sm text-text-secondary">Water tank</div><div className="mt-1 text-2xl font-semibold">{summary?.waterTank?.percent != null ? `${summary.waterTank.percent}%` : summary?.waterTank?.tankStatus3Info?.label || '—'}</div></div>
             </div>
-            <p className="mt-auto pt-5 text-sm text-text-secondary">No timer is available from the current system status.</p>
+            <p className="mt-auto pt-5 text-sm text-text-secondary">{stateLabel}{irrigation?.deviceOnline && irrigation?.timeRemainingSec > 0 ? ` · ${irrigation.timeRemainingSec} seconds left` : ''}{irrigation?.deviceOnline && irrigation?.cycle > 0 ? ` · cycle ${irrigation.cycle}` : ''}</p>
           </CardBody>
         </Card>
       </div>
@@ -123,13 +147,14 @@ const IrrigationPage = () => {
 
       <Card>
         <CardBody>
-          <div className="mb-3 flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-text-primary">Watering history</h2><p className="text-sm text-text-secondary">See when the water pump or backup water line turned on and off.</p></div><Button variant="ghost" size="sm" icon="ti-refresh" aria-label="Refresh watering history" onClick={refetchLogs}>Refresh</Button></div>
-          {logs?.length ? <div className="divide-y divide-border">{logs.map(item => <div key={item._id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-medium text-text-primary">{item.source === 'PUMP' ? 'Water pump' : 'Backup water line'} · {item.action === 'ON' ? 'On' : 'Off'}</div><div className="text-sm text-text-secondary">{formatDateTime(item.occurredAt)}{item.moistureAtEvent != null ? ` · ${item.moistureAtEvent}% soil wetness` : ''}</div></div><div className="flex flex-wrap gap-2"><Badge variant={item.action === 'ON' ? 'ok' : 'default'}>{item.action === 'ON' ? 'On' : 'Off'}</Badge><Badge variant={item.reason === 'safety_tank_empty' ? 'warning' : 'default'}>{reasonLabel[item.reason] || 'Manual'}</Badge></div></div>)}</div> : <p className="py-5 text-sm text-text-secondary">No watering activity yet. New activity will appear here.</p>}
+          <div className="mb-3 flex items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-text-primary">Watering history</h2><p className="text-sm text-text-secondary">See when water ran and how the soil changed after an Auto cycle.</p></div><Button variant="ghost" size="sm" icon="ti-refresh" aria-label="Refresh watering history" onClick={refetchLogs}>Refresh</Button></div>
+          {logs?.length ? <div className="divide-y divide-border">{logs.map(item => <div key={item._id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-medium text-text-primary">{item.source === 'PUMP' ? 'Water pump' : 'Backup water line'} · {item.action === 'ON' ? 'On' : 'Off'}</div><div className="text-sm text-text-secondary">{formatDateTime(item.occurredAt)}{item.durationSec != null && item.action === 'OFF' ? ` · ran for ${item.durationSec} seconds` : ''}{item.monitoringLocation ? ` · ${item.monitoringLocation}` : ''}</div>{item.source === 'PUMP' && item.action === 'OFF' && (item.moistureBefore != null || item.moistureAfterRun != null) && <p className="mt-1 text-sm text-text-primary">Soil wetness: {item.moistureBefore ?? '—'}% before → {item.moistureAfterRun != null ? `${item.moistureAfterRun}% after Auto cycle` : 'waiting for the Auto cycle to finish'}</p>}{item.wateringResult && <p className="mt-1 text-sm font-medium text-green-800" role="status">{item.wateringResult === 'target_reached' ? 'The soil reached the stop level.' : item.wateringResult === 'improved' ? 'The soil became wetter after watering.' : 'The reading did not change after watering; check the probe and water flow.'}</p>}</div><div className="flex flex-wrap gap-2"><Badge variant={item.action === 'ON' ? 'ok' : 'default'}>{item.action === 'ON' ? 'On' : 'Off'}</Badge><Badge variant={item.reason === 'safety_tank_empty' ? 'warning' : 'default'}>{reasonLabel[item.reason] || 'Manual'}</Badge></div></div>)}</div> : <p className="py-5 text-sm text-text-secondary">No watering activity yet. New activity will appear here.</p>}
         </CardBody>
       </Card>
 
-      <ConfirmDialog open={Boolean(pendingToggle)} title={pendingToggle === 'pump' ? `${settings?.manualPump ? 'Turn off' : 'Turn on'} the water pump?` : `${settings?.manualSolenoid ? 'Close' : 'Open'} the backup water line?`} message={pendingToggle === 'pump' ? 'The pump may start as soon as you confirm. The low-water safety switch will still stop it if the tank is empty.' : 'The backup water line may open as soon as you confirm.'} confirmLabel="Confirm change" onConfirm={confirmToggle} onCancel={() => setPendingToggle(null)} variant="primary" />
+      <ConfirmDialog open={Boolean(pendingToggle)} title={pendingToggle === 'pump' ? `${settings?.manualPump ? 'Turn off' : 'Turn on'} the water pump?` : `${settings?.manualSolenoid ? 'Close' : 'Open'} the backup water line?`} message={pendingToggle === 'pump' ? 'The pump may start as soon as you confirm. Manual watering stops after five minutes or if the ESP32 loses its local connection.' : 'The backup water line may open as soon as you confirm. Manual watering stops after five minutes or if the ESP32 loses its local connection.'} confirmLabel="Confirm change" onConfirm={confirmToggle} onCancel={() => setPendingToggle(null)} variant="primary" />
       <ConfirmDialog open={Boolean(pendingMode)} title={`Change to ${pendingMode === 'auto' ? 'Auto' : 'Manual'} mode?`} message={pendingMode === 'auto' ? 'Auto mode may start watering as soon as the soil reading calls for it.' : 'Manual mode lets you control the water pump and backup water line yourself.'} confirmLabel="Change mode" onConfirm={() => { applySettingsPatch({ mode: pendingMode }); setPendingMode(null); }} onCancel={() => setPendingMode(null)} variant="primary" />
+      <ConfirmDialog open={pendingLockoutReset} title="Reset the watering safety pause?" message="Only reset after the soil and tank readings are fresh and you have checked the cause. The ESP32 will confirm the reset." confirmLabel="Reset safety pause" onConfirm={requestLockoutReset} onCancel={() => setPendingLockoutReset(false)} variant="danger" />
     </div>
   );
 };

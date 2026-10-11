@@ -1,6 +1,7 @@
 // HalamanHub Server — Product model
 
 const mongoose = require('mongoose');
+const { shopConnection } = require('../config/connections');
 
 const productSchema = new mongoose.Schema(
   {
@@ -10,17 +11,9 @@ const productSchema = new mongoose.Schema(
     unit: { type: String, enum: ['kg', 'bundle', 'head', 'piece'], default: 'kg' },
     stock: { type: Number, required: true, min: 0, default: 0 },
     imageUrl: { type: String, default: '' },
+    // Admin-only link for products created from local plant profiles.
+    sourcePlantProfileId: { type: String, unique: true, sparse: true, select: false },
     lowStockAlerted: { type: Boolean, default: false }, // internal flag — prevents alert spam
-    soilTargets: {
-      useDefault: { type: Boolean, default: true },
-      npk: {
-        nitrogen: { type: Number, default: null },
-        phosphorus: { type: Number, default: null },
-        potassium: { type: Number, default: null },
-      },
-      ec: { type: Number, default: null },
-      ph: { type: Number, default: null },
-    },
   },
   { timestamps: true }
 );
@@ -33,4 +26,4 @@ productSchema.virtual('status').get(function () {
 
 productSchema.set('toJSON', { virtuals: true, transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('Product', productSchema);
+module.exports = shopConnection.model('Product', productSchema);

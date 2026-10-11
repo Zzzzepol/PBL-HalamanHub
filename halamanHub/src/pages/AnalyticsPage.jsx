@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { Card, CardHeader, CardBody, Button, ErrorState } from '../components/ui/UI';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Card, CardHeader, CardBody, Button, ErrorState, Select } from '../components/ui/UI';
 import {
   PHTrendChart, ECTrendChart, NPKTrendChart, IrrigationHistoryChart, TempHumidityChart,
 } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
-import { sensorsApi, irrigationApi } from '../api/client';
+import { sensorsApi, irrigationApi, dashboardApi } from '../api/client';
 import * as s from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
@@ -28,10 +28,20 @@ const buildDayBuckets = (hours) => {
 
 const AnalyticsPage = () => {
   const [range, setRange] = useState('Weekly');
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const hours = RANGE_HOURS[range];
+  const { data: dashboard } = useApiData(dashboardApi.getSummary, [], 30000, 'admin:dashboard-summary');
+  const { data: locations } = useApiData(sensorsApi.getLocations, [], 60000);
+  const currentLocation = dashboard?.monitoringStation?.location || '';
+  const availableLocations = useMemo(() => [...new Set([...(locations || []), currentLocation].filter(Boolean))].sort((a, b) => a.localeCompare(b)), [locations, currentLocation]);
+  const effectiveLocation = selectedLocation === null ? currentLocation : selectedLocation;
+
+  useEffect(() => {
+    if (dashboard && selectedLocation === null) setSelectedLocation(currentLocation);
+  }, [dashboard, currentLocation, selectedLocation]);
 
 const { data: history, error: historyError, refetch: refetchHistory } =
-    useApiData((token) => sensorsApi.getHistory(token, hours), [hours], 60000);
+    useApiData((token) => sensorsApi.getHistory(token, hours, effectiveLocation), [hours, effectiveLocation], 60000);
   const { data: logs, error: logsError, refetch: refetchLogs } =
     useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours], 60000);
 
@@ -82,6 +92,10 @@ const { data: history, error: historyError, refetch: refetchHistory } =
 
       {/* Header actions */}
       <div className={s.filterBar}>
+        <Select aria-label="Monitoring area" value={effectiveLocation} onChange={event => setSelectedLocation(event.target.value)}>
+          <option value="">All monitoring areas</option>
+          {availableLocations.map(location => <option key={location} value={location}>{location}</option>)}
+        </Select>
         <div className={s.btnRow}>
           {ranges.map(r => (
             <Button key={r} size="sm" variant={range === r ? 'primary' : 'default'} onClick={() => setRange(r)}>
@@ -90,6 +104,8 @@ const { data: history, error: historyError, refetch: refetchHistory } =
           ))}
         </div>
       </div>
+
+      {effectiveLocation && <p className="mb-3 text-sm text-text-secondary">Showing readings recorded at <strong className="font-medium text-text-primary">{effectiveLocation}</strong>. Each point is an average of samples in that time period.</p>}
 
       {/* pH / EC */}
       <div className={s.grid.twoCol}>

@@ -1,5 +1,6 @@
 
 const mongoose = require('mongoose');
+const { shopConnection } = require('../config/connections');
 
 const itemSchema = new mongoose.Schema({
   productId: { type: String, default: '' },
@@ -56,4 +57,4 @@ const shopOrderSchema = new mongoose.Schema(
 
 shopOrderSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('ShopOrder', shopOrderSchema);
+module.exports = shopConnection.model('ShopOrder', shopOrderSchema);

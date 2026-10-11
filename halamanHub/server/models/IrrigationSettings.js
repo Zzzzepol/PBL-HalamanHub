@@ -4,6 +4,7 @@
 // on every cycle to decide how to run the pump/solenoid.
 
 const mongoose = require('mongoose');
+const { localConnection } = require('../config/connections');
 
 const irrigationSettingsSchema = new mongoose.Schema(
   {
@@ -18,6 +19,13 @@ const irrigationSettingsSchema = new mongoose.Schema(
 
     manualPump:     { type: Boolean, default: false },
     manualSolenoid: { type: Boolean, default: false },
+    manualControlExpiresAt: { type: Date, default: null },
+
+    // Device handshake and one-shot safety reset commands for the local ESP32.
+    settingsVersion: { type: Number, default: 1, min: 1 },
+    lockoutResetVersion: { type: Number, default: 0, min: 0 },
+    deviceBootId: { type: String, default: '' },
+    deviceLastSeenAt: { type: Date, default: null },
 
     // Ultrasonic tank sensor calibration — distance (cm) from the mounted
     // sensor down to the water surface. Admin-adjustable so recalibrating
@@ -39,4 +47,4 @@ const irrigationSettingsSchema = new mongoose.Schema(
 
 irrigationSettingsSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = mongoose.model('IrrigationSettings', irrigationSettingsSchema);
+module.exports = localConnection.model('IrrigationSettings', irrigationSettingsSchema);

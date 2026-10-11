@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 // Module-level cache. This object lives outside any component, so it is
@@ -26,20 +26,43 @@ export function useApiData(fetcher, deps = [], intervalMs = null, cacheKey = nul
   // mount — render the cached data immediately and refresh quietly instead.
   const [loading, setLoading] = useState(!hasCached);
   const [error, setError] = useState(null);
+  const requestRef = useRef(null);
 
   const refetch = useCallback(async ({ background = false } = {}) => {
     if (!token) return;
+    const requestDeps = [...deps];
+    const activeRequest = requestRef.current;
+    // Reuse the active request when polling and live sensor events arrive
+    // together. This keeps a slow local response from spawning more queries.
+    if (
+      activeRequest?.token === token
+      && activeRequest.deps.length === requestDeps.length
+      && activeRequest.deps.every((value, index) => Object.is(value, requestDeps[index]))
+    ) return activeRequest.promise;
     if (!background) setLoading(true);
     setError(null);
-    try {
-      const result = await fetcher(token);
-      setData(result);
-      if (cacheKey !== null) cache.set(cacheKey, result);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
+
+    const requestState = { token, deps: requestDeps, promise: null };
+    const request = Promise.resolve().then(async () => {
+      try {
+        const result = await fetcher(token);
+        // Ignore a response from an old login if a newer request replaced it.
+        if (requestRef.current === requestState) {
+          setData(result);
+          if (cacheKey !== null) cache.set(cacheKey, result);
+        }
+      } catch (err) {
+        if (requestRef.current === requestState) setError(err);
+      } finally {
+        if (requestRef.current === requestState) {
+          setLoading(false);
+          requestRef.current = null;
+        }
+      }
+    });
+    requestState.promise = request;
+    requestRef.current = requestState;
+    return request;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, cacheKey, ...deps]);
 
