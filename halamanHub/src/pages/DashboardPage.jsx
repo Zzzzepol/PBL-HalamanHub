@@ -314,7 +314,7 @@ const DashboardPage = () => {
           <section aria-labelledby="default-checks-title" className="mt-5 border-t border-border pt-4">
             <div className="mb-3">
               <h3 id="default-checks-title" className="font-semibold text-text-primary">General soil checks</h3>
-              <p className="mt-1 text-sm text-text-secondary">Each shared reading is compared with the default range above. These checks are not tied to a specific plant profile.</p>
+              <p className="mt-1 text-sm text-text-secondary">Each shared reading is compared with the default range above (Based on DA-BSWM FertMap Department Of Agriculture Philippines). These checks are not tied to a specific plant profile.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {defaultTargetChecks.map(item => (
