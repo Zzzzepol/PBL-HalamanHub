@@ -23,6 +23,10 @@ if (connections.shopConnection !== connections.localConnection) {
   logConnectionEvents(connections.shopConnection, 'Cloud shop database');
 }
 
+// Online (Atlas) only: force the database name like the old
+// mongoose.connect(MONGODB_URI, { dbName: 'halamanhub' }).
+const ONLINE_DB_NAME = process.env.SHOP_DB_NAME || 'halamanhub';
+
 async function openConnection(connection, uri) {
   if (!uri) throw new Error('No MongoDB URI is configured for this database.');
   if (connection.readyState === 1) return connection;
@@ -33,7 +37,10 @@ async function openConnection(connection, uri) {
     });
     return connection;
   }
-  await connection.openUri(uri, connectionOptions);
+  const options = connection === connections.shopConnection
+    ? { ...connectionOptions, dbName: ONLINE_DB_NAME }
+    : connectionOptions;
+  await connection.openUri(uri, options);
   return connection;
 }
 
