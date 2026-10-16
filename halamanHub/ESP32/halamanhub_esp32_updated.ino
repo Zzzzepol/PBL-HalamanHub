@@ -1,10 +1,9 @@
 #include <HardwareSerial.h>
 #include <DHT.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <string.h>
+#include <stdlib.h>
 #include <math.h>
 #include <stdint.h>
 #include <esp_system.h>
@@ -12,30 +11,23 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
-// Copy halamanhub_config.example.h to halamanhub_config.h and enter your
-// local Wi-Fi and laptop address there. No internet access is needed here.
+// Copy halamanhub_config.example.h to halamanhub_config.h and set the device ID.
 #if __has_include("halamanhub_config.h")
 #include "halamanhub_config.h"
 #else
-#define HALAMANHUB_WIFI_SSID "YOUR_LOCAL_WIFI_NAME"
-#define HALAMANHUB_WIFI_PASS "YOUR_LOCAL_WIFI_PASSWORD"
-#define HALAMANHUB_LAPTOP_IP "192.168.1.10"
 #define HALAMANHUB_DEVICE_ID "ESP32-01"
-#define HALAMANHUB_DEVICE_TOKEN ""
 #endif
 
-const char* WIFI_SSID = HALAMANHUB_WIFI_SSID;
-const char* WIFI_PASS = HALAMANHUB_WIFI_PASS;
 const char* DEVICE_ID = HALAMANHUB_DEVICE_ID;
-String SERVER_URL;
-String CONTROL_URL;
 Preferences controlPreferences;
 
 const unsigned long SENSOR_STALE_AFTER_MS = 12000UL;
-const unsigned long CONTROL_POLL_INTERVAL_MS = 5000UL;
 const unsigned long MANUAL_CONTROL_LOSS_MS = 15000UL;
+const unsigned long USB_TELEMETRY_RETRY_MS = 2000UL;
 const size_t TELEMETRY_PAYLOAD_SIZE = 850;
 const UBaseType_t TELEMETRY_BUFFER_CAPACITY = 60; // About two minutes at a 2-second sample rate.
+const char* USB_CONTROL_PREFIX = "HH_CONTROL:";
+const char* USB_TELEMETRY_ACK_PREFIX = "HH_TELEMETRY_ACK:";
 
 struct ControlSettingsSnapshot {
   bool autoMode;
@@ -43,6 +35,7 @@ struct ControlSettingsSnapshot {
   float wetThreshold;
   bool manualPump;
   bool manualSolenoid;
+  bool wateringEnabled;
   float tankEmptyDistanceCm;
   float tankFullDistanceCm;
   float tankLowThresholdPercent;
@@ -58,9 +51,7 @@ struct TelemetryPacket {
   char payload[TELEMETRY_PAYLOAD_SIZE];
 };
 
-QueueHandle_t g_controlSettingsQueue = nullptr;
 QueueHandle_t g_telemetryQueue = nullptr;
-ControlSettingsSnapshot g_networkSettings = {};
 char g_bootSessionId[80] = { 0 };
 uint32_t g_sampleSequence = 0;
 uint32_t g_bufferDroppedSamples = 0;
@@ -68,6 +59,10 @@ uint32_t g_bufferRestartLossCount = 0;
 bool g_outageQueueDirty = false;
 int64_t g_serverTimeOffsetMs = 0;
 bool g_serverTimeSynced = false;
+
+ControlSettingsSnapshot captureControlSettings();
+void applyControlSettings(const ControlSettingsSnapshot &settings);
+void applyPendingLockoutReset();
 
 // --- Relay Active Logic ---
 #define RELAY_ON  LOW
@@ -91,10 +86,10 @@ bool g_serverTimeSynced = false;
 #define ULTRASONIC_ECHO_PIN 32   // through a voltage divider — see wiring notes
 
 // --- TDS Sensor (water electrical conductivity / quality) ---
-#define TDS_PIN 35   // ADC1 — safe to read with WiFi active
+#define TDS_PIN 35   // ADC1 analog input
 
 // --- pH-4502C Sensor Board + E201-BNC Electrode ---
-#define PH_PIN 34    // ADC1 — safe to read with WiFi active
+#define PH_PIN 34    // ADC1 analog input
 // Two-point calibration — dip the probe in pH 4.0 and pH 7.0 buffer
 // solution, read the raw voltage each time, and replace these:
 #define PH7_VOLTAGE 2.50   // Po voltage measured in pH 7.0 buffer
@@ -102,14 +97,14 @@ bool g_serverTimeSynced = false;
 
 
 // --- Moisture Thresholds (%) — now just the initial defaults ---
-// (used only until the first successful fetchControlSettings() call)
+// (used until the first accepted USB settings command)
 #define MOISTURE_DRY  30.0
 #define MOISTURE_WET  60.0
 
 // --- Pulse Irrigation / Cycle-and-Soak State Machine ---
 // Tune these three for your soil texture — see the notes at the bottom
 // of the accompanying explanation for clay vs. sandy soil guidance.
-// Defaults only — overwritten by fetchControlSettings() from the
+// Defaults only — overwritten by settings received from the
 // admin panel's "Pulse irrigation timing" controls (Irrigation tab). Kept
 // as variables, not #define, specifically so they CAN change at runtime
 // without reflashing — handy while you're still testing thresholds.
@@ -177,6 +172,7 @@ float  g_thresholdDry   = MOISTURE_DRY;
 float  g_thresholdWet   = MOISTURE_WET;
 bool   g_manualPump     = false;
 bool   g_manualSolenoid = false;
+bool   g_wateringEnabled = true;
 
 // Ultrasonic tank calibration — fetched from the server, adjustable from admin
 float g_tankEmptyDistanceCm     = 100; // reading when tank is empty
@@ -197,32 +193,8 @@ bool            g_hasControlResponse = false;
 bool            g_manualFailsafeLatched = false;
 
 
-unsigned long g_lastWifiAttempt = 0;
-const unsigned long WIFI_RETRY_COOLDOWN_MS = 10000; // don't retry more than once per 10s
-bool g_wifiWasConnected = false; // tracks previous state so we print on CHANGE, not spam every loop
-
-// Non-blocking, but still prints the same "Connecting..." / "Connected! IP:
-// ..." lines you're used to on the Serial monitor — they just print as
-// WiFi.status() actually changes (checked every loop() iteration), instead
-// of freezing the whole loop() for up to 10 seconds to wait for them.
-void connectWiFi() {
-  bool isConnected = (WiFi.status() == WL_CONNECTED);
-
-  if (isConnected && !g_wifiWasConnected) {
-    Serial.println("Wi-Fi Connected! IP: " + WiFi.localIP().toString());
-  } else if (!isConnected && g_wifiWasConnected) {
-    Serial.println("Wi-Fi disconnected.");
-  }
-  g_wifiWasConnected = isConnected;
-
-  if (isConnected) return;
-  if (millis() - g_lastWifiAttempt < WIFI_RETRY_COOLDOWN_MS) return;
-  g_lastWifiAttempt = millis();
-
-  Serial.println("Connecting to Wi-Fi...");
-  WiFi.disconnect();
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-}
+unsigned long g_lastUsbTelemetryAttempt = 0;
+String g_usbCommandLine;
 
 void setRS485Mode(bool transmit) {
   digitalWrite(DE_PIN, transmit);
@@ -307,92 +279,107 @@ bool readResponse(byte *buf) {
 
 // -------------------------------------------------------
 
-bool fetchControlSettings(ControlSettingsSnapshot &current) {
-  if (WiFi.status() != WL_CONNECTED) return false;
-
-  HTTPClient http;
-  http.setConnectTimeout(700);
-  http.setTimeout(900);
-  http.begin(CONTROL_URL);
-  http.addHeader("x-device-boot-id", g_bootSessionId);
-  if (strlen(HALAMANHUB_DEVICE_TOKEN) > 0) {
-    http.addHeader("x-device-token", HALAMANHUB_DEVICE_TOKEN);
-  }
-  int httpCode = http.GET();
-
-  if (httpCode != 200) {
-    Serial.printf(">> Settings request failed (HTTP %d); keeping last saved settings\n", httpCode);
-    http.end();
-    return false;
-  }
-
-  String body = http.getString();
-  http.end();
-
+bool applyUsbControlJson(const char *json) {
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    Serial.println(">> Control JSON parse error; keeping last saved settings");
+  if (deserializeJson(doc, json)) {
+    Serial.println("HH_CONTROL_NACK:invalid_json");
     return false;
   }
 
-  String nextMode = doc["mode"] | (current.autoMode ? "auto" : "manual");
-  ControlSettingsSnapshot next = current;
-  next.autoMode = nextMode == "auto";
-  next.dryThreshold = doc["moistureDryThreshold"] | current.dryThreshold;
-  next.wetThreshold = doc["moistureWetThreshold"] | current.wetThreshold;
+  const char *mode = doc["mode"] | "";
+  ControlSettingsSnapshot next = captureControlSettings();
+  next.autoMode = strcmp(mode, "auto") == 0;
+  next.dryThreshold = doc["moistureDryThreshold"] | -1.0;
+  next.wetThreshold = doc["moistureWetThreshold"] | -1.0;
   next.manualPump = doc["manualPump"] | false;
   next.manualSolenoid = doc["manualSolenoid"] | false;
-  next.tankEmptyDistanceCm = doc["tankEmptyDistanceCm"] | current.tankEmptyDistanceCm;
-  next.tankFullDistanceCm = doc["tankFullDistanceCm"] | current.tankFullDistanceCm;
-  next.tankLowThresholdPercent = doc["tankLowThresholdPercent"] | current.tankLowThresholdPercent;
-  next.pumpOnTimeMs = (doc["pumpOnTimeSec"] | (current.pumpOnTimeMs / 1000UL)) * 1000UL;
-  next.soakTimeMs = (doc["soakTimeSec"] | (current.soakTimeMs / 1000UL)) * 1000UL;
-  next.settingsVersion = doc["settingsVersion"] | current.settingsVersion;
-  next.lockoutResetVersion = doc["lockoutResetVersion"] | current.lockoutResetVersion;
-  const int64_t serverTimeMs = doc["serverTimeMs"].as<int64_t>();
-  if (serverTimeMs > 0) {
-    next.serverTimeMs = serverTimeMs;
-    next.snapshotUptimeMs = millis();
-  }
+  next.wateringEnabled = doc["wateringEnabled"] | g_wateringEnabled;
+  next.tankEmptyDistanceCm = doc["tankEmptyDistanceCm"] | -1.0;
+  next.tankFullDistanceCm = doc["tankFullDistanceCm"] | -1.0;
+  next.tankLowThresholdPercent = doc["tankLowThresholdPercent"] | -1.0;
+  next.pumpOnTimeMs = (doc["pumpOnTimeSec"] | 0UL) * 1000UL;
+  next.soakTimeMs = (doc["soakTimeSec"] | 0UL) * 1000UL;
+  next.settingsVersion = doc["settingsVersion"] | 0UL;
+  next.lockoutResetVersion = doc["lockoutResetVersion"] | 0UL;
+  next.serverTimeMs = doc["serverTimeMs"].as<int64_t>();
+  next.snapshotUptimeMs = millis();
 
-  if ((nextMode != "auto" && nextMode != "manual")
-      || next.dryThreshold < 0 || next.dryThreshold > 100
-      || next.wetThreshold < 0 || next.wetThreshold > 100
-      || next.dryThreshold >= next.wetThreshold
-      || next.tankEmptyDistanceCm <= next.tankFullDistanceCm
-      || next.tankFullDistanceCm < 0
-      || next.tankLowThresholdPercent < 0 || next.tankLowThresholdPercent > 100
+  if ((strcmp(mode, "auto") != 0 && strcmp(mode, "manual") != 0)
+      || !isfinite(next.dryThreshold) || !isfinite(next.wetThreshold)
+      || next.dryThreshold < 0 || next.dryThreshold >= next.wetThreshold || next.wetThreshold > 100
+      || !isfinite(next.tankEmptyDistanceCm) || !isfinite(next.tankFullDistanceCm)
+      || next.tankEmptyDistanceCm <= next.tankFullDistanceCm || next.tankFullDistanceCm < 0
+      || !isfinite(next.tankLowThresholdPercent) || next.tankLowThresholdPercent < 0 || next.tankLowThresholdPercent > 100
       || next.pumpOnTimeMs < 5000UL || next.pumpOnTimeMs > 600000UL
-      || next.soakTimeMs < 30000UL || next.soakTimeMs > 3600000UL) {
-    Serial.println(">> Control settings are outside safe ranges; keeping last saved settings");
+      || next.soakTimeMs < 30000UL || next.soakTimeMs > 3600000UL
+      || next.settingsVersion == 0) {
+    Serial.println("HH_CONTROL_NACK:unsafe_settings");
     return false;
   }
 
-  bool changed = next.autoMode != current.autoMode
-      || next.dryThreshold != current.dryThreshold || next.wetThreshold != current.wetThreshold
-      || next.manualPump != current.manualPump || next.manualSolenoid != current.manualSolenoid
-      || next.tankEmptyDistanceCm != current.tankEmptyDistanceCm
-      || next.tankFullDistanceCm != current.tankFullDistanceCm
-      || next.tankLowThresholdPercent != current.tankLowThresholdPercent
-      || next.pumpOnTimeMs != current.pumpOnTimeMs || next.soakTimeMs != current.soakTimeMs;
-
-  if (changed) {
+  const bool persistentSettingsChanged = next.autoMode != (g_mode == "auto")
+      || next.dryThreshold != g_thresholdDry || next.wetThreshold != g_thresholdWet
+      || next.wateringEnabled != g_wateringEnabled
+      || next.tankEmptyDistanceCm != g_tankEmptyDistanceCm
+      || next.tankFullDistanceCm != g_tankFullDistanceCm
+      || next.tankLowThresholdPercent != g_tankLowThresholdPercent
+      || next.pumpOnTimeMs != g_pumpOnTimeMs || next.soakTimeMs != g_soakTimeMs;
+  if (persistentSettingsChanged) {
     controlPreferences.begin("hh-control", false);
     controlPreferences.putString("mode", next.autoMode ? "auto" : "manual");
     controlPreferences.putFloat("dry", next.dryThreshold);
     controlPreferences.putFloat("wet", next.wetThreshold);
+    controlPreferences.putBool("enabled", next.wateringEnabled);
     controlPreferences.putFloat("tankEmpty", next.tankEmptyDistanceCm);
     controlPreferences.putFloat("tankFull", next.tankFullDistanceCm);
     controlPreferences.putFloat("tankLow", next.tankLowThresholdPercent);
     controlPreferences.putULong("pumpMs", next.pumpOnTimeMs);
     controlPreferences.putULong("soakMs", next.soakTimeMs);
     controlPreferences.end();
-    Serial.println(">> Watering settings updated and saved on this ESP32");
   }
 
-  current = next;
+  applyControlSettings(next);
+  applyPendingLockoutReset();
+  Serial.printf("HH_CONTROL_ACK:%lu\n", next.settingsVersion);
   return true;
+}
+
+void handleUsbCommandLine(const String &line) {
+  if (line.startsWith(USB_CONTROL_PREFIX)) {
+    applyUsbControlJson(line.c_str() + strlen(USB_CONTROL_PREFIX));
+    return;
+  }
+  if (line.startsWith(USB_TELEMETRY_ACK_PREFIX)) {
+    const uint32_t acknowledgedSequence = strtoul(line.c_str() + strlen(USB_TELEMETRY_ACK_PREFIX), nullptr, 10);
+    if (!g_telemetryQueue || uxQueueMessagesWaiting(g_telemetryQueue) == 0) return;
+    TelemetryPacket packet;
+    if (xQueuePeek(g_telemetryQueue, &packet, 0) != pdTRUE) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, packet.payload)) return;
+    const uint32_t queuedSequence = doc["deviceSequence"] | 0UL;
+    if (acknowledgedSequence == queuedSequence) {
+      xQueueReceive(g_telemetryQueue, &packet, 0);
+      g_lastUsbTelemetryAttempt = 0;
+      if (uxQueueMessagesWaiting(g_telemetryQueue) == 0) markTelemetryQueueDrained();
+      Serial.printf("HH_TELEMETRY_SAVED:%lu\n", acknowledgedSequence);
+    }
+  }
+}
+
+void pollUsbCommands() {
+  while (Serial.available()) {
+    const char ch = (char)Serial.read();
+    if (ch == '\n') {
+      g_usbCommandLine.trim();
+      if (g_usbCommandLine.length()) handleUsbCommandLine(g_usbCommandLine);
+      g_usbCommandLine = "";
+    } else if (ch != '\r' && g_usbCommandLine.length() < 1200) {
+      g_usbCommandLine += ch;
+    } else if (g_usbCommandLine.length() >= 1200) {
+      g_usbCommandLine = "";
+      Serial.println("HH_CONTROL_NACK:line_too_long");
+    }
+  }
 }
 
 void loadStoredControlSettings() {
@@ -404,6 +391,7 @@ void loadStoredControlSettings() {
   float savedTankFull = controlPreferences.getFloat("tankFull", 10);
   unsigned long savedPumpMs = controlPreferences.getULong("pumpMs", 60000UL);
   unsigned long savedSoakMs = controlPreferences.getULong("soakMs", 300000UL);
+  const bool savedWateringEnabled = controlPreferences.getBool("enabled", true);
   g_appliedLockoutResetVersion = controlPreferences.getULong("resetVersion", 0);
   const bool savedSafetyLockout = controlPreferences.getBool("safetyLockout", false);
   if (savedSafetyLockout) {
@@ -417,6 +405,7 @@ void loadStoredControlSettings() {
       && savedPumpMs >= 5000UL && savedPumpMs <= 600000UL
       && savedSoakMs >= 30000UL && savedSoakMs <= 3600000UL) {
     g_mode = savedMode;
+    g_wateringEnabled = savedWateringEnabled;
     g_thresholdDry = savedDry;
     g_thresholdWet = savedWet;
     // Manual ON commands are deliberately never restored after a reboot.
@@ -455,6 +444,7 @@ ControlSettingsSnapshot captureControlSettings() {
   snapshot.wetThreshold = g_thresholdWet;
   snapshot.manualPump = g_manualPump;
   snapshot.manualSolenoid = g_manualSolenoid;
+  snapshot.wateringEnabled = g_wateringEnabled;
   snapshot.tankEmptyDistanceCm = g_tankEmptyDistanceCm;
   snapshot.tankFullDistanceCm = g_tankFullDistanceCm;
   snapshot.tankLowThresholdPercent = g_tankLowThresholdPercent;
@@ -468,6 +458,8 @@ ControlSettingsSnapshot captureControlSettings() {
 }
 
 void applyControlSettings(const ControlSettingsSnapshot &settings) {
+  const bool wasWateringEnabled = g_wateringEnabled;
+  g_wateringEnabled = settings.wateringEnabled;
   g_mode = settings.autoMode ? "auto" : "manual";
   g_thresholdDry = settings.dryThreshold;
   g_thresholdWet = settings.wetThreshold;
@@ -495,13 +487,18 @@ void applyControlSettings(const ControlSettingsSnapshot &settings) {
     g_manualPump = settings.manualPump;
     g_manualSolenoid = settings.manualSolenoid;
   }
-}
 
-void applyPendingControlSettings() {
-  if (!g_controlSettingsQueue) return;
-  ControlSettingsSnapshot settings;
-  if (xQueueReceive(g_controlSettingsQueue, &settings, 0) == pdTRUE) {
-    applyControlSettings(settings);
+  if (!g_wateringEnabled) {
+    g_manualPump = false;
+    g_manualSolenoid = false;
+    if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+    if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+    if (g_irrigationState != SAFETY_LOCKOUT) {
+      g_irrigationState = IDLE;
+      g_stateEnteredAt = millis();
+      g_currentCycle = 0;
+    }
+    if (wasWateringEnabled) Serial.println(">> WATERING DISABLED: pump and backup water line are OFF.");
   }
 }
 
@@ -710,6 +707,12 @@ void enterState(IrrigationState newState) {
 // mid-pump always forces the pump off and falls back to the solenoid line,
 // regardless of what the state machine or manual overrides want.
 void enforceTankSafety() {
+  if (!g_wateringEnabled) {
+    if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+    if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+    return;
+  }
+
   if (!tankReadingFresh() && (pumpOn || solenoidOn)) {
     digitalWrite(RELAY_PUMP, RELAY_OFF);
     digitalWrite(RELAY_SOLENOID, RELAY_OFF);
@@ -733,6 +736,12 @@ void enforceTankSafety() {
 // Manual mode: admin's on/off switches drive the relays directly,
 // completely bypassing the cycle-and-soak logic.
 void updateManualIrrigation() {
+  if (!g_wateringEnabled) {
+    if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+    if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+    return;
+  }
+
   if ((g_manualPump || g_manualSolenoid) && !tankReadingFresh()) {
     if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
     if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
@@ -766,6 +775,12 @@ void updateManualIrrigation() {
 // precisely off millis(), independent of how often the moisture sensor
 // itself gets re-read.
 void updateIrrigationStateMachine() {
+  if (!g_wateringEnabled) {
+    if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
+    if (solenoidOn) { digitalWrite(RELAY_SOLENOID, RELAY_OFF); solenoidOn = false; }
+    return;
+  }
+
   unsigned long elapsed = millis() - g_stateEnteredAt;
 
   if ((g_irrigationState == WATERING || g_irrigationState == SOAKING)
@@ -922,8 +937,8 @@ void parseDHTData() {
   }
 }
 
-// Build one telemetry payload for the local Wi-Fi gateway. Serial is kept for
-// diagnostics only; plant readings are sent to the laptop over HTTP.
+// Build one telemetry payload for the USB gateway. The laptop forwards it to
+// the local API and acknowledges it over the same serial connection.
 void buildTelemetryPayload(char *payload, size_t payloadSize, uint32_t sequence) {
   // JSON has no way to interpolate "null" through a %.1f slot, so build the
   // tds field as its own string first, then splice it in with %s.
@@ -947,7 +962,7 @@ void buildTelemetryPayload(char *payload, size_t payloadSize, uint32_t sequence)
       "\"air\":{\"temperature\":%.1f,\"humidity\":%.1f,\"readingValid\":%s},"
       "\"watering\":{\"tankWaterLevel\":\"%s\",\"distanceCm\":%.1f,\"levelPercent\":%.0f,\"pumpActive\":%s,\"solenoidActive\":%s,\"activeSource\":\"%s\","
         "\"irrigationState\":\"%s\",\"cycle\":%d,\"timeRemainingSec\":%ld,\"lockout\":%s,"
-        "\"soilReadingValid\":%s,\"tankReadingValid\":%s,\"manualCommandBlocked\":%s,\"appliedSettingsVersion\":%lu,\"appliedLockoutResetVersion\":%lu},"
+        "\"soilReadingValid\":%s,\"tankReadingValid\":%s,\"wateringEnabled\":%s,\"manualCommandBlocked\":%s,\"appliedSettingsVersion\":%lu,\"appliedLockoutResetVersion\":%lu},"
       "\"water\":{\"tds\":%s,\"tdsStable\":%s,\"ph\":%.2f,\"tankStatus\":\"%s\"}"
     "}",
     DEVICE_ID,
@@ -960,82 +975,23 @@ void buildTelemetryPayload(char *payload, size_t payloadSize, uint32_t sequence)
     pumpOn ? "PUMP" : (solenoidOn ? "SOLENOID" : "NONE"),
     stateName(g_irrigationState), g_currentCycle, computeTimeRemainingSec(), g_lockoutError ? "true" : "false",
     soilReadingFresh() ? "true" : "false", tankReadingFresh() ? "true" : "false",
+    g_wateringEnabled ? "true" : "false",
     g_manualFailsafeLatched ? "true" : "false",
     g_appliedSettingsVersion, g_appliedLockoutResetVersion,
     tdsJson, g_tdsStable ? "true" : "false", g_waterPh, g_tankStatus3.c_str()
   );
 }
 
-// The local Wi-Fi network carries readings to the laptop gateway. It does not
-// need internet access; the laptop's MongoDB connection stays on loopback.
-bool sendTelemetryToBackend(const char *payload) {
-  if (WiFi.status() != WL_CONNECTED) return false;
-
-  HTTPClient http;
-  http.setConnectTimeout(700);
-  http.setTimeout(900);
-  http.begin(SERVER_URL);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("x-device-boot-id", g_bootSessionId);
-  if (strlen(HALAMANHUB_DEVICE_TOKEN) > 0) {
-    http.addHeader("x-device-token", HALAMANHUB_DEVICE_TOKEN);
-  }
-
-  int httpCode = http.POST(payload);
-
-  if (httpCode >= 200 && httpCode < 300) {
-    Serial.printf(">> Reading accepted by laptop gateway (HTTP %d)\n", httpCode);
-  } else {
-    if (httpCode > 0) {
-      Serial.printf(">> Laptop gateway rejected reading (HTTP %d)\n", httpCode);
-    } else {
-      Serial.printf(">> Laptop gateway request failed: %s\n", http.errorToString(httpCode).c_str());
-    }
-  }
-
-  http.end();
-  return httpCode >= 200 && httpCode < 300;
-}
-
-// All blocking Wi-Fi and HTTP work runs on its own FreeRTOS task. The Arduino
-// loop stays available to read sensors and service the relay safety rules.
-void networkTask(void *parameter) {
-  (void)parameter;
-  ControlSettingsSnapshot currentSettings = g_networkSettings;
-  unsigned long lastControlPoll = millis() - CONTROL_POLL_INTERVAL_MS;
-  unsigned long lastTelemetryAttempt = 0;
+// The USB gateway acknowledges a sample only after the local API accepts it.
+// Until then the oldest packet remains at the queue head and is retransmitted.
+void sendQueuedTelemetryToUsb() {
+  if (!g_telemetryQueue || millis() - g_lastUsbTelemetryAttempt < USB_TELEMETRY_RETRY_MS) return;
   TelemetryPacket packet;
-
-  for (;;) {
-    connectWiFi();
-    if (WiFi.status() == WL_CONNECTED) {
-      const unsigned long now = millis();
-      if (now - lastControlPoll >= CONTROL_POLL_INTERVAL_MS) {
-        lastControlPoll = now;
-        if (fetchControlSettings(currentSettings) && g_controlSettingsQueue) {
-          xQueueOverwrite(g_controlSettingsQueue, &currentSettings);
-        }
-      }
-
-      if (g_telemetryQueue && millis() - lastTelemetryAttempt >= 250
-          && xQueuePeek(g_telemetryQueue, &packet, 0) == pdTRUE) {
-        lastTelemetryAttempt = millis();
-        // Persist the pending marker before the network request. If power is
-        // lost while the request is in flight, startup can report the gap.
-        markTelemetryQueuePending();
-        if (sendTelemetryToBackend(packet.payload)) {
-          TelemetryPacket sentPacket;
-          xQueueReceive(g_telemetryQueue, &sentPacket, 0);
-          if (uxQueueMessagesWaiting(g_telemetryQueue) == 0) markTelemetryQueueDrained();
-        } else {
-          markTelemetryQueuePending();
-        }
-      }
-    } else if (g_telemetryQueue && uxQueueMessagesWaiting(g_telemetryQueue) > 0) {
-      markTelemetryQueuePending();
-    }
-    vTaskDelay(pdMS_TO_TICKS(25));
-  }
+  if (xQueuePeek(g_telemetryQueue, &packet, 0) != pdTRUE) return;
+  g_lastUsbTelemetryAttempt = millis();
+  markTelemetryQueuePending();
+  Serial.print("TELEMETRY:");
+  Serial.println(packet.payload);
 }
 
 // -------------------------------------------------------
@@ -1043,11 +999,6 @@ void networkTask(void *parameter) {
 void setup() {
   Serial.begin(115200);
   Serial2.begin(4800, SERIAL_8N1, RX2_PIN, TX2_PIN);
-  if (strlen(HALAMANHUB_DEVICE_TOKEN) == 0
-      || strcmp(HALAMANHUB_DEVICE_TOKEN, "PASTE_A_RANDOM_64_CHARACTER_HEX_TOKEN_HERE") == 0) {
-    Serial.println("ERROR: Set a private device token in halamanhub_config.h; the local server will reject ESP32 requests.");
-  }
-
   pinMode(DE_PIN, OUTPUT);
   pinMode(RE_PIN, OUTPUT);
   setRS485Mode(LOW);
@@ -1069,32 +1020,19 @@ void setup() {
   // readTdsPpm() checks to detect "sensor not connected".
   pinMode(TDS_PIN, INPUT_PULLDOWN);
 
-  SERVER_URL = String("http://") + HALAMANHUB_LAPTOP_IP + ":4000/api/sensor-data";
-  CONTROL_URL = String("http://") + HALAMANHUB_LAPTOP_IP + ":4000/api/irrigation/control";
   snprintf(g_bootSessionId, sizeof(g_bootSessionId), "%s-%08lX%08lX", DEVICE_ID,
       (unsigned long)esp_random(), (unsigned long)millis());
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoReconnect(true);
-  WiFi.setSleep(false);
   loadStoredControlSettings();
   restoreTelemetryBufferState();
-  g_networkSettings = captureControlSettings();
-  g_lastWifiAttempt = millis() - WIFI_RETRY_COOLDOWN_MS;
   g_stateEnteredAt = millis();
-  g_controlSettingsQueue = xQueueCreate(1, sizeof(ControlSettingsSnapshot));
   g_telemetryQueue = xQueueCreate(TELEMETRY_BUFFER_CAPACITY, sizeof(TelemetryPacket));
-  if (!g_controlSettingsQueue || !g_telemetryQueue) {
-    Serial.println("ERROR: Could not create the local network queues. Relays remain safe until reboot.");
-  } else if (xTaskCreatePinnedToCore(networkTask, "hh-network", 8192, nullptr, 1, nullptr, 0) != pdPASS) {
-    Serial.println("ERROR: Could not start the local network task. Relays remain safe until reboot.");
-  }
-  Serial.println("System initialized — sensor and watering loop is separate from local Wi-Fi");
+  if (!g_telemetryQueue) Serial.println("ERROR: Could not create the USB telemetry queue. Reboot to retry.");
+  Serial.println("System initialized — USB gateway mode; Wi-Fi is not used");
 }
 
 void loop() {
-  // The network task publishes a complete settings snapshot. Apply it here so
-  // the network task never writes relay-control variables concurrently.
-  applyPendingControlSettings();
+  pollUsbCommands();
+  sendQueuedTelemetryToUsb();
   applyPendingLockoutReset();
   enforceManualCommandLease();
   enforceTankSafety();
@@ -1132,10 +1070,6 @@ void loop() {
     const uint32_t sequence = ++g_sampleSequence;
     buildTelemetryPayload(payload, sizeof(payload), sequence);
 
-    // The dashboard receives readings over Wi-Fi. This optional serial line
-    // remains available for the legacy USB bridge and bench debugging.
-    Serial.print("TELEMETRY:");
-    Serial.println(payload);
     printIrrigationTelemetry();
 
     if (g_telemetryQueue) {
@@ -1149,6 +1083,7 @@ void loop() {
         Serial.printf(">> Reading buffer full; skipped sample %lu (total skipped: %lu)\n",
             (unsigned long)sequence, (unsigned long)g_bufferDroppedSamples);
       }
+      else markTelemetryQueuePending();
     }
   }
 }

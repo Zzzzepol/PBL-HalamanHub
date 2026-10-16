@@ -45,7 +45,11 @@ const LoginPage = () => {
       navigate(getRedirectPath(loggedInUser, location), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.status === 401 ? 'That username or password did not match. Try again.' : 'We could not sign you in right now. Please try again.');
+        setError(err.status === 401
+          ? 'That username or password did not match. Try again.'
+          : err.status === 503
+            ? err.message
+            : 'We could not sign you in right now. Please try again.');
       } else {
         setError('We cannot connect right now. Check your connection and try again.');
       }

@@ -11,16 +11,48 @@ const connectionOptions = {
 let localConnectPromise = null;
 let shopRetryTimer = null;
 let shopRetryDelayMs = 5000;
+let shopConnectPromise = null;
+let shuttingDown = false;
 
-function logConnectionEvents(connection, label) {
-  connection.on('connected', () => console.log(`[MongoDB] ${label} connected.`));
-  connection.on('error', (err) => console.error(`[MongoDB] ${label} error:`, err.message));
-  connection.on('disconnected', () => console.warn(`[MongoDB] ${label} disconnected.`));
+function clearShopRetry() {
+  if (shopRetryTimer) clearTimeout(shopRetryTimer);
+  shopRetryTimer = null;
 }
 
-logConnectionEvents(connections.localConnection, 'Local plant database');
+function scheduleShopRetry() {
+  if (shuttingDown || !connections.shopUri || connections.shopConnection === connections.localConnection || shopRetryTimer) return;
+
+  const delayMs = shopRetryDelayMs;
+  shopRetryTimer = setTimeout(() => {
+    shopRetryTimer = null;
+    connectShopDatabase();
+  }, delayMs);
+  shopRetryTimer.unref?.();
+  shopRetryDelayMs = Math.min(shopRetryDelayMs * 2, 60000);
+  console.warn(`[MongoDB] Cloud reconnect scheduled in ${Math.ceil(delayMs / 1000)} seconds.`);
+}
+
+function logConnectionEvents(connection, label) {
+  connection.on('connected', () => {
+    if (connection === connections.shopConnection) {
+      clearShopRetry();
+      shopRetryDelayMs = 5000;
+    }
+    console.log(`[MongoDB] ${label} connected.`);
+  });
+  connection.on('error', (err) => {
+    console.error(`[MongoDB] ${label} error:`, err.message);
+    if (connection === connections.shopConnection && connection.readyState !== 1) scheduleShopRetry();
+  });
+  connection.on('disconnected', () => {
+    console.warn(`[MongoDB] ${label} disconnected.`);
+    if (connection === connections.shopConnection) scheduleShopRetry();
+  });
+}
+
+logConnectionEvents(connections.localConnection, 'Local ESP32 plant database');
 if (connections.shopConnection !== connections.localConnection) {
-  logConnectionEvents(connections.shopConnection, 'Cloud shop database');
+  logConnectionEvents(connections.shopConnection, 'Cloud application database');
 }
 
 // Online (Atlas) only: force the database name like the old
@@ -46,20 +78,24 @@ async function openConnection(connection, uri) {
 
 async function connectShopDatabase() {
   if (!connections.shopUri || connections.shopConnection === connections.localConnection) return;
-  try {
-    await openConnection(connections.shopConnection, connections.shopUri);
-    shopRetryDelayMs = 5000;
-  } catch (err) {
-    console.warn(`[MongoDB] Cloud shop database is unavailable; local monitoring remains available. ${err.message}`);
-    if (!shopRetryTimer) {
-      shopRetryTimer = setTimeout(() => {
-        shopRetryTimer = null;
-        connectShopDatabase();
-      }, shopRetryDelayMs);
-      shopRetryTimer.unref?.();
-      shopRetryDelayMs = Math.min(shopRetryDelayMs * 2, 60000);
-    }
-  }
+  if (connections.shopConnection.readyState === 1) return true;
+  if (shopConnectPromise) return shopConnectPromise;
+
+  shopConnectPromise = openConnection(connections.shopConnection, connections.shopUri)
+    .then(() => {
+      shopRetryDelayMs = 5000;
+      return true;
+    })
+    .catch((err) => {
+      console.warn(`[MongoDB] Cloud application database is unavailable; local ESP32 telemetry remains available. ${err.message}`);
+      scheduleShopRetry();
+      return false;
+    })
+    .finally(() => {
+      shopConnectPromise = null;
+    });
+
+  return shopConnectPromise;
 }
 
 async function connectDB() {
@@ -83,10 +119,12 @@ async function connectDB() {
 }
 
 async function closeDBs() {
-  if (shopRetryTimer) clearTimeout(shopRetryTimer);
+  shuttingDown = true;
+  clearShopRetry();
   const uniqueConnections = new Set([connections.localConnection, connections.shopConnection]);
   await Promise.all([...uniqueConnections].map((connection) => connection.close()));
 }
 
 module.exports = connectDB;
 module.exports.closeDBs = closeDBs;
+module.exports.connectShopDatabase = connectShopDatabase;

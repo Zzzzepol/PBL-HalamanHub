@@ -13,10 +13,9 @@ const shopConnection = shopUri && shopUri === localUri
   ? localConnection
   : mongoose.createConnection();
 
-// Admin accounts, alerts, and settings stay on the laptop when an explicit
-// local IoT database is configured. Legacy single-database installs continue
-// to use that same database for both groups.
-const adminConnection = process.env.IOT_MONGODB_URI ? localConnection : shopConnection;
+// Keep application accounts, settings, alerts, and logs in the cloud. The
+// laptop database is reserved for ESP32 readings and local plant profiles.
+const adminConnection = shopConnection;
 
 function isLocalConnected() {
   return localConnection.readyState === 1;

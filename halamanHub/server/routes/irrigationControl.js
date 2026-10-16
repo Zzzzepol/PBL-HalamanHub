@@ -41,6 +41,7 @@ router.get('/', requireIotDevice, async (req, res) => {
       moistureWetThreshold: settings.moistureWetThreshold,
       manualPump: settings.manualPump,
       manualSolenoid: settings.manualSolenoid,
+      wateringEnabled: settings.wateringEnabled !== false,
       tankEmptyDistanceCm: settings.tankEmptyDistanceCm,
       tankFullDistanceCm: settings.tankFullDistanceCm,
       tankLowThresholdPercent: settings.tankLowThresholdPercent,

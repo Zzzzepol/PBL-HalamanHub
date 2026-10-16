@@ -48,6 +48,7 @@ const sensorReadingSchema = new mongoose.Schema(
     irrigationCycle: { type: Number, default: 0 },
     timeRemainingSec: { type: Number, default: 0 },
     lockout: { type: Boolean, default: false },
+    wateringEnabled: { type: Boolean, default: null },
     deviceBootId: { type: String, default: '' },
     appliedSettingsVersion: { type: Number, default: 0 },
     appliedLockoutResetVersion: { type: Number, default: 0 },

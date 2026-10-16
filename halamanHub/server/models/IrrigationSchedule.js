@@ -1,6 +1,6 @@
 
 const mongoose = require('mongoose');
-const { localConnection } = require('../config/connections');
+const { shopConnection } = require('../config/connections');
 
 const irrigationScheduleSchema = new mongoose.Schema(
   {
@@ -15,4 +15,4 @@ const irrigationScheduleSchema = new mongoose.Schema(
 
 irrigationScheduleSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = localConnection.model('IrrigationSchedule', irrigationScheduleSchema);
+module.exports = shopConnection.model('IrrigationSchedule', irrigationScheduleSchema);

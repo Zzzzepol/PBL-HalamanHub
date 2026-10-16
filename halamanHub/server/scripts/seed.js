@@ -4,7 +4,7 @@
 
 require('dotenv').config();
 const connectDB = require('../config/db');
-const { closeDBs } = require('../config/db');
+const { closeDBs, connectShopDatabase } = require('../config/db');
 const { isShopConnected } = require('../config/connections');
 
 const User               = require('../models/User');
@@ -21,6 +21,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 async function seed() {
   await connectDB();
+  await connectShopDatabase();
+  if (!isShopConnected()) throw new Error('Cloud database is unavailable; account, settings, and shop data were not seeded.');
   console.log('Seeding HalamanHub database…\n');
 
   // Users
@@ -46,7 +48,7 @@ async function seed() {
     console.log(`✓ Users already exist (${userCount}) — skipping`);
   }
 
-  // Cloud shop sample data. Skip cleanly while the optional cloud database is down.
+  // Cloud shop sample data. The cloud database was checked before seeding.
   if (isShopConnected()) {
   // Products
   const productCount = await Product.countDocuments();
@@ -86,7 +88,7 @@ async function seed() {
     console.log(`✓ Orders already exist (${orderCount}) — skipping`);
   }
   } else {
-    console.log('Cloud shop database is unavailable — skipped sample products and orders.');
+    console.log('Cloud application database is unavailable — skipped sample products and orders.');
   }
 
   // Sensors

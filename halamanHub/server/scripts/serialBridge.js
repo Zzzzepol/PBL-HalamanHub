@@ -1,7 +1,8 @@
-// HalamanHub — USB Serial bridge
+// Legacy telemetry-only USB Serial bridge.
 //
-// Optional fallback for bench use. Normal operation sends telemetry directly
-// from the ESP32 to the laptop over local Wi-Fi; this USB bridge is not needed.
+// Use scripts/python_usb_gateway.py for the supported USB workflow. This
+// legacy bridge cannot send dashboard watering settings and must not run at the
+// same time as the Python gateway because both need exclusive access to the port.
 //
 // Run this ALONGSIDE your normal server, in a second terminal:
 //   cd server
@@ -66,7 +67,7 @@ async function start() {
 
   port.on('open', () => {
     console.log(`[serial-bridge] Connected to ESP32 on ${portPath}`);
-    console.log('[serial-bridge] Optional USB fallback connected. Wi-Fi gateway mode does not need this bridge.');
+    console.log('[serial-bridge] Legacy telemetry-only bridge connected. Use the Python USB gateway for watering controls.');
   });
 
   port.on('error', (err) => {

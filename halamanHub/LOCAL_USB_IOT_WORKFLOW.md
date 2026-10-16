@@ -1,29 +1,35 @@
-# HalamanHub local Wi-Fi plant system
+# HalamanHub USB-connected plant system
 
 ## Architecture
 
 ```text
 Soil, air, water sensors + relays
               │
-              ▼ local Wi-Fi / HTTP (no internet needed)
+              ▼ USB serial (no Wi-Fi needed)
             ESP32
-              │  POST /api/sensor-data every 2 seconds
-              │  GET  /api/irrigation/control for settings
+              │  TELEMETRY:<json> / HH_CONTROL:<json>
+              ▼
+     Python USB gateway on laptop
+              │  HTTP to localhost
               ▼
       HalamanHub server on laptop :4000
           │                         │
           │ loopback only           └── Internet, when available
           ▼                                  ▼
-   Local MongoDB                     Cloud shop MongoDB
-   plant readings                    products, customers,
-   history, watering                  orders, payments,
-   settings, admin, plant profiles     cloud plant profiles
+   Local MongoDB                     Cloud application MongoDB
+   ESP32 sensor readings              admin/customer accounts,
+   sensor status, local plants         settings, irrigation controls,
+                                        alerts, logs, products, orders,
+                                        payments, cloud plant profiles
 ```
 
-The ESP32 talks to the laptop server over the local Wi-Fi network. It never
-connects directly to MongoDB. MongoDB stays on the laptop at `127.0.0.1` and
-is not exposed to the Wi-Fi network. Shop products, customer accounts, online
-orders, and payment processing stay in the existing cloud database.
+The ESP32 connects to the laptop only through its USB cable. It does not join
+Wi-Fi and does not connect directly to MongoDB. The Python gateway forwards
+readings to the laptop API and relays dashboard settings back to the ESP32.
+MongoDB stays on the laptop at `127.0.0.1` for ESP32 sensor readings/status
+and local plant profiles. Admin/customer accounts, system settings, irrigation
+controls and history, alerts, activity logs, products, orders, and payments
+stay in the cloud database.
 
 The admin dashboard's **Your plants** list uses local plant profiles. Staff can
 create profiles on the laptop or copy selected shop products into the local
@@ -46,31 +52,10 @@ add the customer-facing image, price, unit, and stock before saving. This
 creates a Product in the cloud shop inventory and links it to the local profile;
 it does not overwrite the profile's soil targets.
 
-The laptop can have a separate internet connection for the online shop. When
-the cloud database or internet is unavailable, plant readings and watering
-settings continue on the local network; online orders and payments need
-internet and the cloud database.
-
-## Network choice
-
-Use one Wi-Fi network that both the laptop and ESP32 can join. It does not need
-an internet connection. Since you do not have a private local Wi-Fi network,
-the most dependable option is a small travel router or access point. Connect
-the laptop and ESP32 to it, and leave its internet/WAN port unplugged. The
-laptop can use a separate connection for internet, such as Ethernet or USB
-tethering.
-
-A phone hotspot can be used to try the setup. Local ESP32-to-laptop traffic
-stays inside that hotspot network, even if its internet is slow. A standalone
-router is more reliable for daily use and does not depend on the phone. Make
-sure Wi-Fi client/AP isolation is off; that setting prevents devices on the
-same Wi-Fi from reaching each other. Reserve a fixed local address for the
-laptop if the router supports it.
-
-The sketch only sends requests to the laptop's local IP. A phone hotspot may
-still give the ESP32 a route to the internet, but the sketch does not use it.
-To ensure the ESP32 has no internet route at all, use a router/access point
-with its WAN port disconnected.
+The ESP32-to-laptop connection does not use Wi-Fi. Sensor readings continue to
+be saved locally while the cloud is unavailable, and the ESP32 keeps running
+its last saved watering settings. Admin login, dashboard setting changes,
+irrigation control updates, cloud history, and online orders require the cloud.
 
 ## Set up the databases
 
@@ -87,26 +72,27 @@ with its WAN port disconnected.
    `SHOP_MONGODB_URI` and `MONGODB_URI` are set, `SHOP_MONGODB_URI` takes
    priority. Existing installs with only `MONGODB_URI` continue to use one
    database for both groups until `IOT_MONGODB_URI` is added.
-3. From the `server` folder, copy existing local plant/admin records and keep
-   the source records in the cloud:
+3. From the `server` folder, copy legacy ESP32 sensor data and local plant
+   profiles from the cloud database to the laptop. Accounts and application
+   settings stay in the cloud:
 
    ```sh
    npm run migrate:iot
    ```
 
-   This copies admin users, sensor readings/history, irrigation settings and
-   logs, alerts, and activity history. It does not copy or delete shop data.
+   This copies sensors, sensor readings, local plant profiles, and monitoring
+   station setup. It does not copy accounts, application settings, irrigation
+   controls, orders, or shop data, and does not delete source records.
    Existing local documents with the same IDs are kept. Run it again later to
    copy newly added source records; already copied documents are skipped.
-4. If you are starting with no existing local admin user, create one from the
-   `ADMIN_USERNAME` and `ADMIN_PASSWORD` values already stored in `.env`:
+4. Admin accounts remain in the cloud database. If there is no cloud admin,
+   create one from `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env`:
 
    ```sh
-   npm run seed:local-admin
+   npm run seed:admin
    ```
 
-   The command does not replace an existing account. You only need this if the
-   migration did not copy a user.
+   The command does not replace an existing cloud account.
 
 ## Start the local server and dashboard
 
@@ -116,15 +102,16 @@ From `server`:
 npm run dev
 ```
 
-The server waits for the laptop MongoDB, then starts even if the cloud shop
-database is unavailable. Check its database status at:
+The server waits for the laptop MongoDB, then starts even if the cloud
+application database is unavailable. Check both database statuses at:
 
 ```text
 http://localhost:4000/api/health
 ```
 
 The response should show `plant: connected`. `shop` can be `connected` or
-`unavailable`; plant monitoring does not depend on the shop status. Start the
+`unavailable`; ESP32 telemetry storage does not depend on cloud status. Admin
+login and dashboard control APIs do require the cloud. Start the
 admin dashboard on the laptop as usual. It uses the page's host name to reach
 port 4000, so it also works when opened from another device on the LAN. To open
 the development page from another device, bind its dev server to all interfaces
@@ -133,43 +120,19 @@ the development page from another device, bind its dev server to all interfaces
 If a frontend `.env` already sets `REACT_APP_API_URL` to `localhost`, remove
 that setting for LAN use or change it to the laptop's LAN address.
 
-## Find the laptop's Wi-Fi address
-
-### macOS
-
-Connect the laptop to the router/hotspot, then run:
-
-```sh
-ipconfig getifaddr en0
-```
-
-If that prints nothing, open **System Settings → Wi-Fi → Details** for the
-connected network and find its IP address. Use the address for the same
-network that the ESP32 will join.
-
-### Windows
-
-Connect the laptop to the router/hotspot, open Command Prompt, and run:
-
-```bat
-ipconfig
-```
-
-Under the connected Wi-Fi adapter, use its **IPv4 Address**. Do not use
-`127.0.0.1` or the address shown for an unrelated VPN/virtual adapter.
-
 ## Configure and upload the ESP32
 
 1. In the `ESP32` folder, copy `halamanhub_config.example.h` to
    `halamanhub_config.h`.
-2. Set the router/hotspot name and password, then set `HALAMANHUB_LAPTOP_IP`
-   to the laptop's Wi-Fi IPv4 address. Both devices must join the same network.
+2. Set `HALAMANHUB_DEVICE_ID` if you have more than one device. No Wi-Fi name,
+   password, laptop IP, or device token is needed in the ESP32 config.
 3. Open `halamanhub_esp32_updated.ino` in Arduino IDE, install the libraries
    already used by the sketch (`DHT`, `ArduinoJson`) and select the ESP32
-   board/port. Upload it over USB once. The cable can be removed after upload;
-   USB is not needed for regular readings or watering control.
-4. Set the required device access key in both `server/.env` and
-   `ESP32/halamanhub_config.h`. Generate a random value on macOS/Linux with:
+   board/port. Upload it over USB and keep the cable connected for readings and
+   watering control. Close Arduino Serial Monitor before running the gateway;
+   only one program can own the serial port at a time.
+4. Set `IOT_DEVICE_TOKEN` in `server/.env`. Generate a random value on
+   macOS/Linux with:
 
    ```sh
    openssl rand -hex 32
@@ -185,35 +148,41 @@ Under the connected Wi-Fi adapter, use its **IPv4 Address**. Do not use
    $rng.Dispose()
    ```
 
-   Copy the same 64-character result into `IOT_DEVICE_TOKEN` and
-   `HALAMANHUB_DEVICE_TOKEN`. Keep it private. Restart the server and upload
-   the sketch again after changing the token. The server rejects ESP32 requests
-   until this key is configured.
-5. Check the Arduino Serial Monitor once for `Wi-Fi Connected! IP: ...` and
-   `Reading accepted by laptop gateway (HTTP 202)`. Serial output is
-   diagnostic; the server receives readings over Wi-Fi.
+   Keep the 64-character result private. The Python gateway reads this key from
+   `server/.env` and sends it to the local API; it is not flashed onto the ESP32.
+5. Install pyserial and start the gateway from the project root:
+
+   ```sh
+   py -m pip install pyserial
+   py server/scripts/python_usb_gateway.py --port COM5
+   ```
+
+   Replace `COM5` with the ESP32 port shown in Device Manager. The gateway can
+   auto-detect a single likely ESP32 serial port if `--port` is omitted. Confirm
+   the terminal reports that readings are saved, and leave the gateway running.
+   Alternatively, from `server`, run `npm run usb-gateway -- --port COM5`.
 
 ## How control updates reach the ESP32
 
-When staff save Auto/Manual mode, thresholds, pump/backup-line controls, tank
-calibration, or pulse timing in the admin, the server stores those settings in
-local MongoDB. The ESP32 checks the local control route every five seconds,
-validates the response, applies it in the sensor/control loop, and reports the
-settings version in its next reading. The admin shows whether the ESP32 has
-confirmed the latest settings.
+When staff save Auto/Manual mode, dry/wet thresholds, pump/backup-line controls,
+tank calibration, or pulse timing in the admin, the server stores the settings
+in cloud MongoDB. The Python gateway polls the local API every five seconds;
+the server reads the cloud settings and sends them over USB. The ESP32 validates and saves them, then
+acknowledges the version. Its next reading reports the applied version, which
+the admin uses to show whether the settings reached the device.
 
-Wi-Fi and HTTP run in a separate ESP32 task. A slow laptop request does not
-hold up the main sensor and relay loop. The ESP32 keeps the last accepted
-automatic settings in its own memory, so Auto mode can continue when the
-gateway connection is temporarily lost. Soil and tank readings are considered
-stale after 12 seconds. If either becomes stale during watering, both outputs
+The ESP32 runs its sensor and relay safety loop without Wi-Fi. It keeps the
+last accepted settings in its own memory, so Auto mode continues when USB, the
+laptop gateway, or cloud is temporarily unavailable. New dashboard control
+changes require a working cloud connection. Soil and tank readings are
+considered stale after 12 seconds. If either becomes stale during watering, both outputs
 turn off and watering pauses for safety until an admin resets the pause after
 fresh readings return. The safety pause is saved on the ESP32 and remains after
 a restart. A reset is accepted only after fresh soil and tank readings return.
 
 Manual pump and backup-line commands expire after five minutes. If the ESP32
-cannot reach the laptop gateway for 15 seconds during manual watering, it
-switches both outputs off. After a restart, it clears any old manual-on
+does not receive a settings heartbeat from the laptop gateway for 15 seconds
+during manual watering, it switches both outputs off. After a restart, it clears any old manual-on
 command. After a gateway-loss stop, staff must clear the old manual command in
 the admin before turning it on again; the ESP32 reports this stop so the server
 clears the old command. Auto/Manual thresholds and timing remain
@@ -222,13 +191,14 @@ available without a cloud connection because they are stored locally.
 The ESP32 samples every two seconds and keeps up to 60 readings (about two
 minutes) in a RAM queue if the laptop gateway is briefly unreachable. It sends
 the oldest saved reading first and removes it only after the laptop confirms
-that the reading was saved in local MongoDB. The laptop time is included with
-each sample, so restored history keeps its approximate sampling time. The
+that the reading was saved or was already present in local MongoDB. The laptop
+time is included with each sample, so restored history keeps its approximate sampling time. The
 buffer is held in RAM, so an ESP32 restart clears queued readings. The device
 records when it restarts with unsent readings; a longer outage fills the queue
 and the admin dashboard reports how many later samples were skipped. Keep the
-ESP32 powered during a short network interruption. One device can create up to
-43,200 history records per day at the normal two-second rate, so back up the
+ESP32 powered and the USB cable connected during a short gateway interruption.
+One device can create up to 43,200 history records per day at the normal
+two-second rate, so back up the
 local database regularly. From the `server` folder, run:
 
 ```sh
@@ -263,26 +233,26 @@ The RS485 soil probe reports its own moisture, pH, EC, and NPK values. The setup
 page records that staff checked placement and readings against the probe's
 guide; it does not change the probe's built-in calibration. For watering
 history, the admin saves pump run time and compares soil wetness before watering
-with the next Auto reading when the cycle finishes. This confirms the soil response,
-but does not confirm water flow unless a flow sensor is installed.
+with the next Auto reading when the cycle finishes. This confirms the soil
+response, but does not confirm water flow unless a flow sensor is installed.
 
 ## Troubleshooting
 
-- **ESP32 joins Wi-Fi but cannot reach the API:** confirm the IP in the config
-  header, confirm both devices use the same Wi-Fi, turn off client isolation,
-  and allow Node.js on the laptop's private network firewall.
+- **No readings arrive:** check that the USB cable supports data, close Arduino
+  Serial Monitor, confirm the correct COM port, and keep the Python gateway open.
+- **Gateway reports HTTP 401 or 503:** set `IOT_DEVICE_TOKEN` in `server/.env`,
+  restart the server, and restart the Python gateway.
+- **Gateway cannot open the serial port:** close Arduino Serial Monitor or any
+  other program using that COM port, then restart the gateway.
 - **`plant` is disconnected:** start the MongoDB service/process and confirm
   `IOT_MONGODB_URI` uses `127.0.0.1:27017`.
-- **Login does not work after switching to the local database:** run
-  `npm run migrate:iot` to copy the old admin user, or use
-  `npm run seed:local-admin` if starting fresh.
+- **Admin login does not work:** admin accounts stay in Atlas. Confirm the
+  cloud database is connected and use the existing Atlas admin credentials. If
+  no admin exists, run `npm run seed:admin` from `server`.
 - **Shop pages show an unavailable message:** check the laptop's internet
   connection and cloud URI. The sensor and watering APIs remain local.
-- **Sensor history is empty:** live readings should update after the ESP32
-  reports HTTP 202. Migration copies past records; it does not create samples.
-- **ESP32 receives HTTP 401 or 503:** copy the same private device token into
-  `server/.env` and `ESP32/halamanhub_config.h`, restart the server, and upload
-  the sketch again.
+- **Sensor history is empty:** the gateway should report that readings were
+  saved. Migration copies past records; it does not create new samples.
 - **Manual watering stops:** it ends after five minutes or after 15 seconds
   without a successful local gateway response. Reconnect the ESP32, check fresh
   soil/tank readings, and clear any old manual-on switch before enabling it.
@@ -291,14 +261,15 @@ but does not confirm water flow unless a flow sensor is installed.
 
 ## Files changed for this workflow
 
-- `server/config/connections.js` assigns local, admin, and shop models to the
-  appropriate database connection.
-- `server/config/db.js` requires local MongoDB and reconnects to the optional
-  cloud shop database in the background.
-- `server/scripts/migrateIotData.js` copies plant/admin records without
+- `server/config/connections.js` keeps ESP32 readings and local plants on the
+  laptop and assigns accounts and application data to the cloud.
+- `server/config/db.js` requires local MongoDB and reconnects to the cloud
+  application database in the background.
+- `server/scripts/migrateIotData.js` copies ESP32 readings and local plant data without
   deleting or replacing records.
-- `ESP32/halamanhub_esp32_updated.ino` sends telemetry and receives controls
-  through local Wi-Fi, keeps network work off its safety loop, and applies
-  stale-reading and manual-command failsafes.
-- `ESP32/halamanhub_config.example.h` is a template for private Wi-Fi values.
+- `ESP32/halamanhub_esp32_updated.ino` sends acknowledged telemetry and receives
+  validated settings over USB serial; it does not use Wi-Fi.
+- `ESP32/halamanhub_config.example.h` contains the ESP32 device ID only.
+- `server/scripts/python_usb_gateway.py` relays readings and settings between
+  the USB serial port and the laptop API.
 - `server/scripts/backupLocalIot.js` creates compressed local MongoDB backups.

@@ -1647,8 +1647,8 @@ router.get(
 
       if (dataType === 'Orders & sales' && !isShopConnected()) {
         return res.status(503).json({
-          message: 'The online shop database is unavailable. Plant sensor reports are still available from the laptop.',
-          code: 'SHOP_DATABASE_UNAVAILABLE',
+          message: 'The cloud application database is unavailable. Local ESP32 sensor reports remain on the laptop.',
+          code: 'CLOUD_DATABASE_UNAVAILABLE',
         });
       }
 

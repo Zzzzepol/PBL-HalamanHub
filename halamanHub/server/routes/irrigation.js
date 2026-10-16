@@ -77,7 +77,7 @@ router.put('/settings', async (req, res) => {
     let settings = await IrrigationSettings.findOne();
     if (!settings) settings = await IrrigationSettings.create({});
 
-    const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid } = req.body;
+    const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid, wateringEnabled } = req.body;
 
     if (mode !== undefined && !['auto', 'manual'].includes(mode)) {
       return res.status(400).json({ message: 'Choose Auto or Manual mode.' });
@@ -87,6 +87,22 @@ router.put('/settings', async (req, res) => {
     }
     if (manualSolenoid !== undefined && typeof manualSolenoid !== 'boolean') {
       return res.status(400).json({ message: 'The backup water line setting must be on or off.' });
+    }
+    if (wateringEnabled !== undefined && typeof wateringEnabled !== 'boolean') {
+      return res.status(400).json({ message: 'The watering system setting must be on or off.' });
+    }
+
+    if (wateringEnabled !== undefined) {
+      settings.wateringEnabled = wateringEnabled;
+      if (!wateringEnabled) {
+        settings.manualPump = false;
+        settings.manualSolenoid = false;
+        settings.manualControlExpiresAt = null;
+      }
+    }
+
+    if (settings.wateringEnabled === false && (manualPump === true || manualSolenoid === true)) {
+      return res.status(409).json({ message: 'Turn the watering system back on before enabling a water output.' });
     }
 
     if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;

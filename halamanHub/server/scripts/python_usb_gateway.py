@@ -7,12 +7,11 @@ Run beside the HalamanHub server on the laptop:
 Install the one external dependency first:
     py -m pip install pyserial
 
-Telemetry uses the existing ESP32 `TELEMETRY:<json>` serial line and is
-forwarded to the local Express API. For two-way watering control, the future
-ESP32 firmware must also read `HH_CONTROL:<json>` lines and acknowledge them
-with `HH_CONTROL_ACK:<settingsVersion>`. The current sketch does not yet read
-serial control commands; this script alone therefore does not enable watering
-settings over USB.
+Telemetry uses the ESP32 `TELEMETRY:<json>` serial line and is forwarded to the
+local Express API. The gateway acknowledges a sample only after the API saves
+or recognizes it as a duplicate. Irrigation settings are sent over USB as
+`HH_CONTROL:<json>` and acknowledged by the ESP32 as
+`HH_CONTROL_ACK:<settingsVersion>`.
 """
 
 import argparse
@@ -167,6 +166,15 @@ def write_control(esp, settings):
     )
 
 
+def acknowledge_telemetry(esp, payload):
+    try:
+        sequence = int(payload.get("deviceSequence"))
+    except (TypeError, ValueError):
+        return
+    esp.write("HH_TELEMETRY_ACK:{}\n".format(sequence).encode("ascii"))
+    esp.flush()
+
+
 def run_gateway(args):
     env_values = read_server_env()
     token = os.environ.get("IOT_DEVICE_TOKEN") or env_values.get("IOT_DEVICE_TOKEN", "")
@@ -189,7 +197,6 @@ def run_gateway(args):
         active_boot_id = ""
         last_control_poll = 0.0
         last_control_sent_at = 0.0
-        sent_settings_version = None
         pending_control = None
 
         try:
@@ -210,22 +217,19 @@ def run_gateway(args):
 
                         boot_id = str(telemetry.get("deviceBootId") or "")
                         if boot_id and active_boot_id and boot_id != active_boot_id:
-                            sent_settings_version = None
                             pending_control = None
                             print("[usb-gateway] ESP32 boot session changed; refreshing settings.")
                         if boot_id:
                             active_boot_id = boot_id
 
                         if post_telemetry(api_base, token, telemetry):
+                            acknowledge_telemetry(esp, telemetry)
                             watering = telemetry.get("watering") or {}
                             applied_version = watering.get("appliedSettingsVersion")
                             try:
                                 if pending_control and int(applied_version) >= int(
                                     pending_control.get("settingsVersion", 0)
                                 ):
-                                    sent_settings_version = int(
-                                        pending_control.get("settingsVersion", 0)
-                                    )
                                     pending_control = None
                                     print("[usb-gateway] ESP32 confirmed the watering settings.")
                             except (TypeError, ValueError):
@@ -237,7 +241,6 @@ def run_gateway(args):
                             if pending_control and acknowledged >= int(
                                 pending_control.get("settingsVersion", 0)
                             ):
-                                sent_settings_version = acknowledged
                                 pending_control = None
                                 print("[usb-gateway] ESP32 acknowledged settings version {}.".format(acknowledged))
                         except ValueError:
@@ -259,17 +262,9 @@ def run_gateway(args):
                                 version = int(settings.get("settingsVersion", 0))
                             except (TypeError, ValueError):
                                 version = 0
-                            pending_version = None
-                            if pending_control:
-                                try:
-                                    pending_version = int(pending_control.get("settingsVersion", 0))
-                                except (TypeError, ValueError):
-                                    pending_version = None
-                            if (
-                                version > 0
-                                and version != sent_settings_version
-                                and version != pending_version
-                            ):
+                            if version > 0:
+                                # Send a settings heartbeat every poll. The ESP32
+                                # uses it to refresh its manual-control link lease.
                                 pending_control = settings
                                 write_control(esp, settings)
                                 last_control_sent_at = now

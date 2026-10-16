@@ -3,6 +3,13 @@ const crypto = require('crypto');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const User = require('../models/User');
 const log = require('../utils/logger');
+const { cacheAdminAccount, removeCachedAdminAccount } = require('../utils/accountCloudSync');
+
+async function refreshLocalAccount(account) {
+  await cacheAdminAccount(account).catch((error) => {
+    console.warn('[Account sync] Could not refresh the local admin account cache:', error.message);
+  });
+}
 
 const router = express.Router();
 router.use(requireAuth);
@@ -32,6 +39,7 @@ router.patch('/me/password', async (req, res) => {
 
     await user.setPassword(newPassword);
     await user.save();
+    await refreshLocalAccount(user);
 
     await log({
       user: req.user.name,
@@ -82,6 +90,7 @@ router.post('/', async (req, res) => {
     });
     await user.setPassword(password);
     await user.save();
+    await refreshLocalAccount(user);
 
     await log({
       user: req.user.name,
@@ -105,6 +114,7 @@ router.patch('/:id/role', async (req, res) => {
     }
     const user = await User.findByIdAndUpdate(req.params.id, { role }, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found.' });
+    await refreshLocalAccount(user);
 
     await log({
       user: req.user.name,
@@ -128,6 +138,7 @@ router.patch('/:id/status', async (req, res) => {
     }
     const user = await User.findByIdAndUpdate(req.params.id, { status }, { new: true });
     if (!user) return res.status(404).json({ message: 'User not found.' });
+    await refreshLocalAccount(user);
 
     await log({
       user: req.user.name,
@@ -151,6 +162,7 @@ router.post('/:id/reset-password', async (req, res) => {
     const tempPassword = crypto.randomBytes(6).toString('base64url');
     await user.setPassword(tempPassword);
     await user.save();
+    await refreshLocalAccount(user);
 
     const { sendPasswordReset } = require('../utils/email');
     sendPasswordReset(user, tempPassword).catch(() => {}); // non-blocking
@@ -176,6 +188,9 @@ router.delete('/:id', async (req, res) => {
     }
     const user = await User.findByIdAndDelete(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found.' });
+    await removeCachedAdminAccount(req.params.id).catch((error) => {
+      console.warn('[Account sync] Could not remove a deleted account from the local cache:', error.message);
+    });
 
     await log({
       user: req.user.name,

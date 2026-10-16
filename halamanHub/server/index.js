@@ -87,15 +87,15 @@ app.use('/api/plant-profiles', plantProfileRoutes);
 app.use('/api/monitoring-setup', monitoringSetupRoutes);
 app.use('/api/products', requireShopDatabase, productRoutes);
 app.use('/api/orders', requireShopDatabase, orderRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/users', requireShopDatabase, userRoutes);
 app.use('/api/sensors', sensorRoutes);
-app.use('/api/irrigation/control', irrigationControlRoutes);
-app.use('/api/irrigation', irrigationRoutes);
-app.use('/api/alerts', alertRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/logs', logRoutes);
+app.use('/api/irrigation/control', requireShopDatabase, irrigationControlRoutes);
+app.use('/api/irrigation', requireShopDatabase, irrigationRoutes);
+app.use('/api/alerts', requireShopDatabase, alertRoutes);
+app.use('/api/settings', requireShopDatabase, settingsRoutes);
+app.use('/api/logs', requireShopDatabase, logRoutes);
 app.use('/api/sensor-data', sensorDataRoutes);
-app.use('/api/reports', reportRoutes);
+app.use('/api/reports', requireShopDatabase, reportRoutes);
 
 // Customer Side Shop Routes
 app.use('/api/shop', requireShopDatabase);
@@ -126,7 +126,11 @@ connectDB().then(async () => {
   }
   const { checkSensorHealth } = require('./utils/sensorHealth');
   const { checkProductStock } = require('./utils/productHealth');
+  const { startSensorCloudSync } = require('./utils/sensorCloudSync');
+  const { startAccountCloudSync } = require('./utils/accountCloudSync');
   checkSensorHealth();
+  startSensorCloudSync();
+  startAccountCloudSync();
   setInterval(checkSensorHealth, 5 * 1000);  // surface a missing local device promptly
   setInterval(checkProductStock, 60 * 1000);  // check every minute
   server.listen(PORT, () => {

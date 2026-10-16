@@ -4,7 +4,7 @@
 // on every cycle to decide how to run the pump/solenoid.
 
 const mongoose = require('mongoose');
-const { localConnection } = require('../config/connections');
+const { shopConnection } = require('../config/connections');
 
 const irrigationSettingsSchema = new mongoose.Schema(
   {
@@ -16,6 +16,10 @@ const irrigationSettingsSchema = new mongoose.Schema(
     // 'auto'   → ESP32 decides pump/solenoid based on the thresholds above
     // 'manual' → ESP32 just obeys manualPump / manualSolenoid directly
     mode: { type: String, enum: ['auto', 'manual'], default: 'auto' },
+
+    // Master watering stop. The ESP32 persists this too, so a restart does
+    // not silently re-enable watering after an admin turns it off.
+    wateringEnabled: { type: Boolean, default: true },
 
     manualPump:     { type: Boolean, default: false },
     manualSolenoid: { type: Boolean, default: false },
@@ -47,4 +51,4 @@ const irrigationSettingsSchema = new mongoose.Schema(
 
 irrigationSettingsSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = localConnection.model('IrrigationSettings', irrigationSettingsSchema);
+module.exports = shopConnection.model('IrrigationSettings', irrigationSettingsSchema);

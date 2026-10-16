@@ -8,6 +8,7 @@ const { getIO } = require('../socket');
 const { setLiveReading, getLiveReading } = require('../utils/liveSensorState');
 const { getMonitoringStation } = require('../utils/monitoringStationState');
 const { requireIotDevice } = require('../middleware/iotDevice');
+const { isShopConnected } = require('../config/connections');
 
 const router = express.Router();
 const DEFAULT_DRY = 30;
@@ -59,12 +60,6 @@ async function saveTelemetry(payload, receivedAt) {
   const levelPercent = watering.levelPercent;
   const distanceCm = watering.distanceCm;
 
-  await IrrigationSettings.updateOne(
-    {},
-    { $set: { deviceBootId: bootId, deviceLastSeenAt: receivedAt } },
-    { upsert: true, setDefaultsOnInsert: true }
-  );
-
   if (sequence !== null && bootId) {
     const duplicate = await SensorReading.findOne({ device: deviceId, deviceBootId: bootId, deviceSequence: sequence }).select('_id').lean();
     if (duplicate) return { duplicate: true, sequence };
@@ -113,6 +108,7 @@ async function saveTelemetry(payload, receivedAt) {
     irrigationCycle: watering.cycle ?? 0,
     timeRemainingSec: watering.timeRemainingSec ?? 0,
     lockout: watering.lockout === true,
+    wateringEnabled: typeof watering.wateringEnabled === 'boolean' ? watering.wateringEnabled : null,
     deviceBootId: bootId,
     appliedSettingsVersion: watering.appliedSettingsVersion ?? 0,
     appliedLockoutResetVersion: watering.appliedLockoutResetVersion ?? 0,
@@ -123,7 +119,32 @@ async function saveTelemetry(payload, receivedAt) {
     recordedAt: sampledAt,
   });
 
-  const settings = await IrrigationSettings.findOne();
+  let settings = null;
+  if (isShopConnected()) {
+    try {
+      settings = await IrrigationSettings.findOne();
+      if (settings && bootId && settings.deviceBootId !== bootId) {
+        // A new boot invalidates any manual-on command from the previous session.
+        settings.deviceBootId = bootId;
+        settings.deviceLastSeenAt = receivedAt;
+        settings.manualPump = false;
+        settings.manualSolenoid = false;
+        settings.manualControlExpiresAt = null;
+        settings.settingsVersion = (settings.settingsVersion || 0) + 1;
+        await settings.save();
+      } else {
+        await IrrigationSettings.updateOne(
+          {},
+          { $set: { deviceBootId: bootId, deviceLastSeenAt: receivedAt } },
+          { upsert: true, setDefaultsOnInsert: true }
+        );
+      }
+    } catch (error) {
+      console.warn('[Sensor data] Cloud irrigation settings update skipped:', error.message);
+      settings = null;
+    }
+  }
+
   const dryThreshold = settings?.moistureDryThreshold ?? DEFAULT_DRY;
   const wetThreshold = settings?.moistureWetThreshold ?? DEFAULT_WET;
   const moisture = soil.moisture ?? null;
@@ -145,6 +166,10 @@ async function saveTelemetry(payload, receivedAt) {
     if (!solenoidActive && moisture !== null && moisture > wetThreshold) reason = 'auto_wet';
     events.push({ source: 'SOLENOID', action: solenoidActive ? 'ON' : 'OFF', reason });
   }
+
+  // Persist the sensor sample locally even if Atlas is offline. Cloud-only
+  // irrigation history, settings, and alerts are best-effort side effects.
+  if (!isShopConnected()) return { duplicate: false, sequence, readingId: reading._id };
 
   try {
     if ((watering.lockout === true || watering.manualCommandBlocked === true)

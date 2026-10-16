@@ -4,15 +4,20 @@ This guide installs MongoDB Community Server on the laptop that runs HalamanHub.
 
 ## How the current project connects
 
-The current server reads one setting named `MONGODB_URI` and uses it for every app collection: sensor readings, watering data, admin accounts, products, customer accounts, and orders.
+The server uses two MongoDB connections:
+
+- `IOT_MONGODB_URI` points to MongoDB on the laptop. Sensor records and local plant profiles are saved here so monitoring continues when the internet or cloud database is unavailable.
+- `SHOP_MONGODB_URI` points to the cloud database for accounts, products, orders, and other shop data. When this connection returns, the server automatically copies local sensor snapshots and sensor reading history to the cloud. Order data is not queued or copied.
+
+Admin and staff accounts are copied from the cloud database to the laptop as an offline login cache. Keep the server running while online so account changes can sync. Offline sign-in uses the last cached password and account status; order and other cloud-only actions still require internet access.
 
 For a local database, use:
 
 ```text
-mongodb://127.0.0.1:27017/halamanhub
+mongodb://127.0.0.1:27017/halamanhub_iot
 ```
 
-This keeps all server data on the laptop. A separate local sensor database and cloud shop database are not implemented in this checkout. For an internet-facing shop, host the API and its database where customers can reach them; a local-only API address is not a public shop URL.
+Keep `IOT_MONGODB_URI` pointed at the laptop database and set `SHOP_MONGODB_URI` to your MongoDB Atlas connection string. `MONGODB_URI` is also accepted as a legacy cloud URI. For an internet-facing shop, host the API and its database where customers can reach them; a local-only API address is not a public shop URL.
 
 ## macOS
 
@@ -65,7 +70,8 @@ brew services start mongodb-community@8.0
 2. Add the local URI and required application settings:
 
    ```env
-   MONGODB_URI=mongodb://127.0.0.1:27017/halamanhub
+   IOT_MONGODB_URI=mongodb://127.0.0.1:27017/halamanhub_iot
+   SHOP_MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<database>
    JWT_SECRET=replace-this-with-a-long-random-secret
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=replace-this-with-a-password
@@ -117,7 +123,8 @@ See MongoDB's [official Windows install guide](https://www.mongodb.com/docs/v8.0
 2. In Notepad, choose **Save as type: All files** and save the filename as `.env` (not `.env.txt`). Add:
 
    ```env
-   MONGODB_URI=mongodb://127.0.0.1:27017/halamanhub
+   IOT_MONGODB_URI=mongodb://127.0.0.1:27017/halamanhub_iot
+   SHOP_MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/<database>
    JWT_SECRET=replace-this-with-a-long-random-secret
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD=replace-this-with-a-password

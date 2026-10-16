@@ -7,6 +7,7 @@ const PlantProfile = require('../models/PlantProfile');
 const MonitoringStation = require('../models/MonitoringStation');
 const { getSoilRecommendations, getPlantRecommendations } = require('../utils/soilRecommendations');
 const { getWaterQualityCategory, getPhStatus, getTankStatusInfo, getWaterQualityRecommendation } = require('../utils/waterQuality');
+const { isShopConnected } = require('../config/connections');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -26,18 +27,22 @@ router.get('/summary', async (req, res) => {
     Sensor.find().select('type zone status value numericValue').lean(),
     SensorReading.findOne()
       .sort({ recordedAt: -1 })
-      .select('recordedAt tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
+      .select('recordedAt tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout wateringEnabled deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
       .lean(),
-    IrrigationSettings.findOne().select('mode settingsVersion lockoutResetVersion deviceLastSeenAt').lean(),
+    isShopConnected()
+      ? IrrigationSettings.findOne().select('mode wateringEnabled settingsVersion lockoutResetVersion deviceLastSeenAt').lean().catch(() => null)
+      : Promise.resolve(null),
     MonitoringStation.findOne({ key: 'main' }).lean(),
   ]);
 
   const readingAgeMs = latestReading?.recordedAt ? Date.now() - new Date(latestReading.recordedAt).getTime() : Infinity;
-  const deviceOnline = settings?.deviceLastSeenAt && Date.now() - new Date(settings.deviceLastSeenAt).getTime() <= 15000;
   const sensorDataFresh = readingAgeMs <= 15000;
-  const soilReadingFresh = deviceOnline && sensorDataFresh && latestReading?.soilReadingValid !== false;
-  const tankReadingFresh = deviceOnline && sensorDataFresh && latestReading?.tankReadingValid !== false;
-  const airReadingFresh = deviceOnline && sensorDataFresh && latestReading?.airReadingValid !== false;
+  // The latest locally saved ESP32 sample is the source of truth for sensor
+  // freshness. Cloud settings may be unavailable while the sensors are live.
+  const deviceOnline = sensorDataFresh;
+  const soilReadingFresh = sensorDataFresh && latestReading?.soilReadingValid !== false;
+  const tankReadingFresh = sensorDataFresh && latestReading?.tankReadingValid !== false;
+  const airReadingFresh = sensorDataFresh && latestReading?.airReadingValid !== false;
 
   const profiles = station?.plantProfileIds?.length
     ? await PlantProfile.find({ _id: { $in: station.plantProfileIds } }).sort({ name: 1 }).lean()
@@ -139,11 +144,13 @@ router.get('/summary', async (req, res) => {
       solenoidActive: latestReading?.solenoidActive ?? false,
       activeSource: latestReading?.activeSource ?? 'NONE',
       mode: settings?.mode ?? 'auto',
+      wateringEnabled: settings?.wateringEnabled !== false,
+      deviceWateringEnabled: latestReading?.wateringEnabled ?? null,
       lastUpdated: latestReading?.recordedAt ?? null,
       deviceOnline,
       deviceBootId: latestReading?.deviceBootId || '',
       readingAgeMs: Number.isFinite(readingAgeMs) ? readingAgeMs : null,
-      deviceLastSeenAt: settings?.deviceLastSeenAt ?? null,
+      deviceLastSeenAt: settings?.deviceLastSeenAt ?? latestReading?.recordedAt ?? null,
       deviceSequence: latestReading?.deviceSequence ?? null,
       bufferDroppedSamples: latestReading?.bufferDroppedSamples ?? 0,
       soilReadingFresh,

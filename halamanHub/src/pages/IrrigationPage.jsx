@@ -26,6 +26,7 @@ const IrrigationPage = () => {
   const [pendingToggle, setPendingToggle] = useState(null);
   const [pendingMode, setPendingMode] = useState(null);
   const [pendingLockoutReset, setPendingLockoutReset] = useState(false);
+  const [pendingWateringEnabled, setPendingWateringEnabled] = useState(null);
   const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
@@ -67,6 +68,12 @@ const IrrigationPage = () => {
     }
   };
 
+  const confirmWateringEnabledChange = async () => {
+    if (pendingWateringEnabled === null) return;
+    await applySettingsPatch({ wateringEnabled: pendingWateringEnabled });
+    setPendingWateringEnabled(null);
+  };
+
   const saveAdvanced = async () => {
     setSaving(true); setSaved(false); setSaveError('');
     try {
@@ -85,6 +92,13 @@ const IrrigationPage = () => {
     <div className="space-y-5">
       {(settingsError || logsError) && <ErrorState title="Watering information is not loading" description="Check your connection, then try again." onRetry={() => { refetchSettings(); refetchLogs(); }} />}
       {saveError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{saveError}</div>}
+
+      <section className={`rounded-2xl border p-4 sm:p-5 ${settings?.wateringEnabled === false ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'}`} aria-live="polite">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3"><i className={`ti ${settings?.wateringEnabled === false ? 'ti-player-pause text-red-700' : 'ti-shield-check text-amber-800'} mt-0.5 text-2xl`} aria-hidden="true" /><div><h2 className="font-semibold text-text-primary">{settings?.wateringEnabled === false ? 'Watering is disabled.' : 'Watering system kill switch'}</h2><p className="mt-1 text-sm text-text-secondary">Stops both the pump and backup water line in Auto and Manual modes. It stays off until you turn it back on.</p>{settings?.wateringEnabled === false && (!irrigation?.deviceOnline || irrigation?.deviceWateringEnabled !== false) && <p className="mt-1 text-sm font-medium text-red-800">Waiting for the ESP32 to receive and confirm the stop command.</p>}</div></div>
+          <Toggle id="watering-enabled" checked={settings?.wateringEnabled !== false} onChange={() => setPendingWateringEnabled(settings?.wateringEnabled === false)} label={settings?.wateringEnabled === false ? 'Watering disabled' : 'Watering enabled'} disabled={settingsLoading || changing || !settings} />
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-green-200 bg-green-50 p-4 sm:p-5" aria-live="polite">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -114,8 +128,8 @@ const IrrigationPage = () => {
             </div>
             <div className={`space-y-3 ${settings?.mode !== 'manual' ? 'opacity-60' : ''}`}>
               <h3 className="font-semibold text-text-primary">Manual controls</h3>
-              <Toggle id="manual-pump" checked={Boolean(settings?.manualPump)} onChange={() => setPendingToggle('pump')} label="Water pump" disabled={settingsLoading || changing || settings?.mode !== 'manual' || (!settings?.manualPump && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
-              <Toggle id="manual-backup" checked={Boolean(settings?.manualSolenoid)} onChange={() => setPendingToggle('backup')} label="Backup water line" disabled={settingsLoading || changing || settings?.mode !== 'manual' || (!settings?.manualSolenoid && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
+              <Toggle id="manual-pump" checked={Boolean(settings?.manualPump)} onChange={() => setPendingToggle('pump')} label="Water pump" disabled={settingsLoading || changing || settings?.wateringEnabled === false || settings?.mode !== 'manual' || (!settings?.manualPump && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
+              <Toggle id="manual-backup" checked={Boolean(settings?.manualSolenoid)} onChange={() => setPendingToggle('backup')} label="Backup water line" disabled={settingsLoading || changing || settings?.wateringEnabled === false || settings?.mode !== 'manual' || (!settings?.manualSolenoid && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
               {manualActive && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Manual controls turn off after five minutes. They also stop if the ESP32 loses its local connection.</p>{settings?.manualControlExpiresAt && <p className="mt-1">This command ends at {formatDateTime(settings.manualControlExpiresAt)}.</p>}<Button className="mt-2" size="sm" variant="outline" onClick={() => applySettingsPatch({ manualPump: Boolean(settings.manualPump), manualSolenoid: Boolean(settings.manualSolenoid) })} disabled={changing || !irrigation?.deviceOnline}>Extend for five minutes</Button></div>}
               {settings?.mode !== 'manual' && <p className="text-sm text-text-secondary">Choose Manual mode to use these controls.</p>}
             </div>
@@ -152,6 +166,7 @@ const IrrigationPage = () => {
         </CardBody>
       </Card>
 
+      <ConfirmDialog open={pendingWateringEnabled !== null} title={pendingWateringEnabled ? 'Turn watering back on?' : 'Stop all watering?'} message={pendingWateringEnabled ? 'The ESP32 may resume automatic watering if the soil needs it. Manual outputs remain off.' : 'This shuts off the pump and backup water line in both Auto and Manual modes. The ESP32 keeps watering disabled after a restart until you turn it back on.'} confirmLabel={pendingWateringEnabled ? 'Turn watering on' : 'Stop watering'} onConfirm={confirmWateringEnabledChange} onCancel={() => setPendingWateringEnabled(null)} variant={pendingWateringEnabled ? 'primary' : 'danger'} />
       <ConfirmDialog open={Boolean(pendingToggle)} title={pendingToggle === 'pump' ? `${settings?.manualPump ? 'Turn off' : 'Turn on'} the water pump?` : `${settings?.manualSolenoid ? 'Close' : 'Open'} the backup water line?`} message={pendingToggle === 'pump' ? 'The pump may start as soon as you confirm. Manual watering stops after five minutes or if the ESP32 loses its local connection.' : 'The backup water line may open as soon as you confirm. Manual watering stops after five minutes or if the ESP32 loses its local connection.'} confirmLabel="Confirm change" onConfirm={confirmToggle} onCancel={() => setPendingToggle(null)} variant="primary" />
       <ConfirmDialog open={Boolean(pendingMode)} title={`Change to ${pendingMode === 'auto' ? 'Auto' : 'Manual'} mode?`} message={pendingMode === 'auto' ? 'Auto mode may start watering as soon as the soil reading calls for it.' : 'Manual mode lets you control the water pump and backup water line yourself.'} confirmLabel="Change mode" onConfirm={() => { applySettingsPatch({ mode: pendingMode }); setPendingMode(null); }} onCancel={() => setPendingMode(null)} variant="primary" />
       <ConfirmDialog open={pendingLockoutReset} title="Reset the watering safety pause?" message="Only reset after the soil and tank readings are fresh and you have checked the cause. The ESP32 will confirm the reset." confirmLabel="Reset safety pause" onConfirm={requestLockoutReset} onCancel={() => setPendingLockoutReset(false)} variant="danger" />

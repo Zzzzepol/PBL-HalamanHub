@@ -4,16 +4,10 @@ const mongoose = require('mongoose');
 const sourceUri = process.env.SHOP_MONGODB_URI || process.env.MONGODB_URI;
 const destinationUri = process.env.IOT_MONGODB_URI;
 const collectionsToCopy = [
-  'users',
-  'settings',
-  'alerts',
-  'activitylogs',
   'sensors',
   'sensorreadings',
-  'irrigationsettings',
-  'irrigationlogs',
-  'irrigationzones',
-  'irrigationschedules',
+  'plantprofiles',
+  'monitoringstations',
 ];
 
 async function copyCollection(sourceDb, destinationDb, collectionName) {
@@ -62,7 +56,7 @@ async function migrate() {
   try {
     await source.openUri(sourceUri, options);
     await destination.openUri(destinationUri, options);
-    console.log('Copying plant and admin collections. Existing local records will be kept.');
+    console.log('Copying ESP32 sensor data and local plant profiles. Existing local records will be kept.');
     for (const collectionName of collectionsToCopy) {
       const count = await copyCollection(source.db, destination.db, collectionName);
       console.log(`${collectionName}: ${count} new records copied`);

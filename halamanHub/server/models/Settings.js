@@ -39,11 +39,20 @@ settingsSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return
 
 // Helper: fetch (or create) the single settings document
 settingsSchema.statics.getSingleton = async function () {
-  let settings = await this.findOne({ key: 'default' });
-  if (!settings) {
-    settings = await this.create({ key: 'default' });
+  try {
+    return await this.findOneAndUpdate(
+      { key: 'default' },
+      { $setOnInsert: { key: 'default' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    // Concurrent first requests may race to create the unique singleton.
+    if (error.code === 11000) {
+      const existing = await this.findOne({ key: 'default' });
+      if (existing) return existing;
+    }
+    throw error;
   }
-  return settings;
 };
 
 module.exports = adminConnection.model('Settings', settingsSchema);

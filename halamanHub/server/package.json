@@ -7,9 +7,11 @@
   "type": "commonjs",
   "scripts": {
     "serial-bridge": "node scripts/serialBridge.js",
+    "usb-gateway": "py scripts/python_usb_gateway.py",
     "start": "node index.js",
     "dev": "node --watch index.js",
     "seed": "node scripts/seed.js",
+    "seed:admin": "node scripts/seedLocalAdmin.js",
     "seed:local-admin": "node scripts/seedLocalAdmin.js",
     "migrate:iot": "node scripts/migrateIotData.js",
     "backup:iot": "node scripts/backupLocalIot.js"
