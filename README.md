@@ -441,3 +441,14 @@ Keep secret keys in `server/.env`. Do not place them in React frontend code.
 - [Local MongoDB setup for macOS and Windows](LOCAL_MONGODB_SETUP_GUIDE_MACOS_WINDOWS.md)
 - [Admin and shop UI guide](UI_GUIDE.md)
 - [Customer shop notes](mapili/README.md)
+
+## Start everything with one command (Windows)
+
+From the halamanHub project folder, start the admin dashboard, API server, customer shop, USB gateway, and configured ngrok tunnel with:
+
+```powershell
+py .\start_all.py --port COM4
+```
+
+Keep the terminal open while using HalamanHub. Press Ctrl+C to stop the services started by the script. The ESP32 must be connected on the selected COM port, and ngrok must be installed and configured for the tunnel to start.
+
