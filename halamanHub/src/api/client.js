@@ -38,7 +38,7 @@ export const dashboardApi = {
 export const sensorsApi = {
   getAll:     (token) => request('/sensors', { token }),
   getSummary: (token) => request('/sensors/summary', { token }),
-  getHistory: (token, hours, location) => request(`/sensors/history?hours=${hours || 24}${location ? `&location=${encodeURIComponent(location)}` : ''}`, { token }),
+  getHistory: (token, hours, location, plotId) => request(`/sensors/history?hours=${hours || 24}${plotId ? `&plotId=${encodeURIComponent(plotId)}` : location ? `&location=${encodeURIComponent(location)}` : ''}`, { token }),
   getLocations: (token) => request('/sensors/locations', { token }),
 };
 
@@ -76,7 +76,12 @@ export const plantProfilesApi = {
 export const monitoringSetupApi = {
   get: (token) => request('/monitoring-setup', { token }),
   update: (data, token) => request('/monitoring-setup', { method: 'PUT', body: data, token }),
-  completeCheck: (key, notes, token) => request(`/monitoring-setup/checks/${key}`, { method: 'POST', body: { notes }, token }),
+  getPlots: (token) => request('/monitoring-setup/plots', { token }),
+  getPlot: (id, token) => request(`/monitoring-setup/plots/${id}`, { token }),
+  getPlotReadings: (id, token) => request(`/monitoring-setup/plots/${id}/readings`, { token }),
+  createPlot: (data, token) => request('/monitoring-setup/plots', { method: 'POST', body: data, token }),
+  updatePlot: (id, data, token) => request(`/monitoring-setup/plots/${id}`, { method: 'PUT', body: data, token }),
+  activatePlot: (id, token) => request(`/monitoring-setup/plots/${id}/activate`, { method: 'POST', token }),
 };
 
 export const ordersApi = {

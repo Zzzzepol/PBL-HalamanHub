@@ -4,22 +4,24 @@ const { requireAuth } = require('../middleware/auth');
 const PlantProfile = require('../models/PlantProfile');
 const Product = require('../models/Product');
 const MonitoringStation = require('../models/MonitoringStation');
+const MonitoringPlot = require('../models/MonitoringPlot');
 const { isShopConnected } = require('../config/connections');
 const { syncLinkedPlantProfilesFromShop } = require('../services/plantProfileSync');
 const { syncPlantProfilesBothWays } = require('../services/cloudPlantProfileSync');
 const { plantIdentityKey } = require('../utils/plantIdentity');
 const { setMonitoringStation } = require('../utils/monitoringStationState');
+const { ensureMonitoringPlots, addAssignment } = require('../utils/monitoringPlots');
 
 const router = express.Router();
 router.use(requireAuth);
 
 async function refreshStationPlantNames() {
-  const station = await MonitoringStation.findOne({ key: 'main' }).lean();
-  if (!station) return;
-  const profiles = station.plantProfileIds?.length
-    ? await PlantProfile.find({ _id: { $in: station.plantProfileIds } }).select('name').sort({ name: 1 }).lean()
+  const { station, active } = await ensureMonitoringPlots();
+  const profiles = active.plantProfileIds?.length
+    ? await PlantProfile.find({ _id: { $in: active.plantProfileIds } }).select('name').sort({ name: 1 }).lean()
     : [];
   setMonitoringStation(station, profiles);
+  await addAssignment(active);
 }
 
 function numericTarget(value, label) {
@@ -112,6 +114,7 @@ router.delete('/:id', async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Choose a valid plant profile.' });
     const profile = await PlantProfile.findByIdAndDelete(req.params.id);
     if (!profile) return res.status(404).json({ message: 'Plant profile not found.' });
+    await MonitoringPlot.updateMany({}, { $pull: { plantProfileIds: profile._id } });
     await MonitoringStation.updateOne({ key: 'main' }, { $pull: { plantProfileIds: profile._id } });
     await refreshStationPlantNames();
     res.json({ message: 'Plant profile removed.', id: req.params.id });

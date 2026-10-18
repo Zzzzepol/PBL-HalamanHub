@@ -31,6 +31,7 @@ const irrigationLogSchema = new mongoose.Schema(
     moistureAfterRun: { type: Number, default: null },
     wateringResult: { type: String, enum: ['target_reached', 'improved', 'no_change', null], default: null },
     monitoringLocation: { type: String, default: '' },
+    plotId: { type: mongoose.Schema.Types.ObjectId, ref: 'MonitoringPlot', default: null },
 
     occurredAt: { type: Date, default: Date.now },
   },

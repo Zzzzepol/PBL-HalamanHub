@@ -111,17 +111,9 @@ app.use((req, res) => {
 });
 
 connectDB().then(async () => {
-  const MonitoringStation = require('./models/MonitoringStation');
-  const PlantProfile = require('./models/PlantProfile');
-  const { setMonitoringStation } = require('./utils/monitoringStationState');
+  const { ensureMonitoringPlots } = require('./utils/monitoringPlots');
   try {
-    const station = await MonitoringStation.findOne({ key: 'main' }).lean();
-    if (station) {
-      const profiles = station.plantProfileIds?.length
-        ? await PlantProfile.find({ _id: { $in: station.plantProfileIds } }).select('name').lean()
-        : [];
-      setMonitoringStation(station, profiles);
-    }
+    await ensureMonitoringPlots();
   } catch (error) {
     console.warn('[Monitoring setup] Could not load saved station details:', error.message);
   }

@@ -1,23 +1,14 @@
 const mongoose = require('mongoose');
 const { localConnection } = require('../config/connections');
 
-const checkSchema = new mongoose.Schema({
-  checkedAt: { type: Date, default: null },
-  checkedBy: { type: String, default: '' },
-  notes: { type: String, default: '', maxlength: 500 },
-}, { _id: false });
-
 const monitoringStationSchema = new mongoose.Schema({
   key: { type: String, default: 'main', unique: true },
   name: { type: String, default: 'Main System', trim: true, maxlength: 80 },
   location: { type: String, default: '', trim: true, maxlength: 120 },
   plantProfileIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'PlantProfile' }],
-  checks: {
-    probePlacement: { type: checkSchema, default: () => ({}) },
-    readingsVerified: { type: checkSchema, default: () => ({}) },
-    waterOutputsTested: { type: checkSchema, default: () => ({}) },
-    autoCycleTested: { type: checkSchema, default: () => ({}) },
-  },
+  activePlotId: { type: mongoose.Schema.Types.ObjectId, ref: 'MonitoringPlot', default: null },
+  wateredPlotId: { type: mongoose.Schema.Types.ObjectId, ref: 'MonitoringPlot', default: null },
+  activeSince: { type: Date, default: null },
 }, { timestamps: true });
 
 monitoringStationSchema.statics.getSingleton = async function () {

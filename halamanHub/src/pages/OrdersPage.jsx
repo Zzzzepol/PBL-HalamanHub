@@ -162,16 +162,6 @@ const OrdersPage = () => {
   const pickupReadyToday = list.filter(order => order.fulfillmentType === 'pickup'
     && order.status === 'ready'
     && (!order.pickupDate || manilaDateKey(order.pickupDate) <= todayKey));
-  const workQueue = list.filter(order => {
-    if (['completed', 'cancelled'].includes(order.status)) return false;
-    if (['pending', 'confirmed', 'processing'].includes(order.status)) return true;
-    return order.fulfillmentType === 'pickup' && order.status === 'ready'
-      && (!order.pickupDate || manilaDateKey(order.pickupDate) <= todayKey);
-  }).sort((a, b) => {
-    const orderRank = { pending: 0, confirmed: 1, processing: 2, ready: 3 };
-    return (orderRank[a.status] ?? 9) - (orderRank[b.status] ?? 9)
-      || new Date(a.pickupDate || a.orderDate) - new Date(b.pickupDate || b.orderDate);
-  });
 
   return (
     <div>
@@ -203,22 +193,6 @@ const OrdersPage = () => {
             <span className="block text-sm text-text-secondary">Ready for pickup today</span><strong className="mt-1 block text-2xl text-text-primary">{pickupReadyToday.length}</strong>
           </button>
         </div>
-        {workQueue.length ? <div className="divide-y divide-border border-t border-border px-4">
-          {workQueue.slice(0, 5).map(order => {
-            const flow = getStatusFlow(order)[order.status];
-            const isFuturePickup = order.status === 'ready' && order.fulfillmentType === 'pickup'
-              && order.pickupDate && manilaDateKey(order.pickupDate) > todayKey;
-            return <div key={order._id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <button type="button" className="min-w-0 text-left" onClick={() => setDetailOrder(order)}>
-                <span className="block font-semibold text-text-primary">{order.orderNumber} · {order.customer}</span>
-                <span className="block truncate text-sm text-text-secondary">{order.product} · {order.fulfillmentType === 'pickup' ? `Pickup${order.pickupDate ? ` ${formatDate(order.pickupDate)}` : ''}` : 'Delivery'} · {flow?.label}</span>
-              </button>
-              {isFuturePickup
-                ? <Button size="sm" variant="default" icon="ti-eye" onClick={() => setDetailOrder(order)}>View order</Button>
-                : flow?.next && <Button size="sm" variant="primary" icon="ti-arrow-right" onClick={() => advanceStatus(order, flow.next, `Staff updated order from the daily work queue: ${flow.nextLabel}.`)} disabled={actionLoading}>{flow.nextLabel}</Button>}
-            </div>;
-          })}
-        </div> : <p className="border-t border-border px-4 py-4 text-sm text-text-secondary">No orders need a staff step right now.</p>}
         </>}
       </Card>}
 

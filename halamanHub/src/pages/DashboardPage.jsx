@@ -63,17 +63,21 @@ const DashboardPage = () => {
   const [selectedPlant, setSelectedPlant] = useState(null);
   const { data: summary, error: summaryError, refetch: refetchSummary } = useApiData(dashboardApi.getSummary, [], 30000, 'admin:dashboard-summary');
   const { data: alerts } = useApiData(alertsApi.getAll, [4], 15000);
-  const monitoringLocation = summary?.monitoringStation?.location || '';
-  const { data: history } = useApiData((token) => sensorsApi.getHistory(token, RANGE_HOURS[range], monitoringLocation), [range, monitoringLocation], 20000);
+  const activePlotId = summary?.monitoringStation?.activePlotId || '';
+  const { data: historyResult } = useApiData(async (token) => ({
+    plotId: activePlotId,
+    range,
+    rows: activePlotId ? await sensorsApi.getHistory(token, RANGE_HOURS[range], '', activePlotId) : [],
+  }), [range, activePlotId], 20000);
   useLiveRefetch(['sensor:reading', 'sensor:status'], refetchSummary);
 
   const trend = useMemo(() => {
-    const points = history || [];
+    const points = historyResult?.plotId === activePlotId && historyResult?.range === range ? historyResult.rows : [];
     return {
       labels: points.map(point => new Date(point.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
       values: points.map(point => point.soilMoisture ?? null),
     };
-  }, [history]);
+  }, [historyResult, activePlotId, range]);
 
   const recommendations = [...(summary?.recommendations || [])].sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
   const defaultTargetChecks = MAIN_DEFAULT_TARGETS.map(target => {
@@ -141,7 +145,7 @@ const DashboardPage = () => {
               </p>
             </div>
           </div>
-          <Button variant={bannerStatus === 'action' ? 'danger' : 'primary'} onClick={() => !hasMonitoredPlants ? navigate('/settings') : document.getElementById(plantsNeedingAction || plantsToCheck ? 'your-plants-title' : 'soil-monitoring')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+          <Button variant={bannerStatus === 'action' ? 'danger' : 'primary'} onClick={() => !hasMonitoredPlants ? navigate('/growing-areas') : document.getElementById(plantsNeedingAction || plantsToCheck ? 'your-plants-title' : 'soil-monitoring')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             {!hasMonitoredPlants ? 'Set up monitored plants' : plantsNeedingAction || plantsToCheck ? 'Review plant checks' : 'View soil readings'}
           </Button>
         </div>
@@ -211,11 +215,11 @@ const DashboardPage = () => {
               <i className="ti ti-seeding text-base text-green-800" aria-hidden="true" />
               <h2 id="your-plants-title" className="text-lg font-semibold text-text-primary">Your plants</h2>
             </div>
-            <p className="mt-1 text-sm text-text-secondary">One probe at {monitoringStation.location || 'the main growing area'} represents the plants selected in Soil monitoring setup. Each plant does not have a separate sensor.</p>
+            <p className="mt-1 text-sm text-text-secondary">The shared probe is assigned to {monitoringStation.location || 'the main growing area'}. These plants share its soil reading; each plant does not have a separate sensor.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Button size="sm" variant="default" onClick={() => navigate('/plant-profiles')}>Manage profiles</Button>
-            <Button size="sm" variant="default" onClick={() => navigate('/settings')}>Monitoring setup</Button>
+            <Button size="sm" variant="default" onClick={() => navigate('/growing-areas')}>View growing areas</Button>
             {plantRecommendations.length > 0 && (
               <>
               <span className="rounded-full border border-border bg-white px-3 py-1.5 font-medium text-text-primary">{plantRecommendations.length} plants</span>
@@ -286,8 +290,8 @@ const DashboardPage = () => {
           </div>
         ) : (
           <div className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="font-medium text-text-primary">No plants are assigned to this probe yet.</p><p className="mt-1 text-sm text-text-secondary">Choose which plant profiles grow in this area in Soil monitoring setup.</p></div>
-            <Button variant="default" onClick={() => navigate('/settings')}>Choose monitored plants</Button>
+            <div><p className="font-medium text-text-primary">No plants are assigned to this probe yet.</p><p className="mt-1 text-sm text-text-secondary">Choose which plant profiles grow here in Growing areas.</p></div>
+            <Button variant="default" onClick={() => navigate('/growing-areas')}>Choose monitored plants</Button>
           </div>
         )}
       </section>

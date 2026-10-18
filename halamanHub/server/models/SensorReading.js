@@ -14,6 +14,7 @@ const sensorReadingSchema = new mongoose.Schema(
     bufferRestartLossCount: { type: Number, default: 0 },
     monitoringStation: { type: String, default: 'Main System' },
     monitoringLocation: { type: String, default: '' },
+    plotId: { type: mongoose.Schema.Types.ObjectId, ref: 'MonitoringPlot', default: null },
     monitoredPlantNames: { type: [String], default: [] },
 
     soilMoisture:   { type: Number },
@@ -57,6 +58,8 @@ const sensorReadingSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+sensorReadingSchema.index({ plotId: 1, recordedAt: -1 });
 
 // Speeds up "give me the last 24h of readings" queries for Analytics
 sensorReadingSchema.index({ recordedAt: -1 });

@@ -4,7 +4,7 @@ import {
   PHTrendChart, ECTrendChart, NPKTrendChart, IrrigationHistoryChart, TempHumidityChart,
 } from '../components/charts/Charts';
 import { useApiData } from '../hooks/useApiData';
-import { sensorsApi, irrigationApi, dashboardApi } from '../api/client';
+import { sensorsApi, irrigationApi, dashboardApi, monitoringSetupApi } from '../api/client';
 import * as s from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
 
@@ -28,20 +28,23 @@ const buildDayBuckets = (hours) => {
 
 const AnalyticsPage = () => {
   const [range, setRange] = useState('Weekly');
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  const [selectedPlotId, setSelectedPlotId] = useState(null);
   const hours = RANGE_HOURS[range];
   const { data: dashboard } = useApiData(dashboardApi.getSummary, [], 30000, 'admin:dashboard-summary');
-  const { data: locations } = useApiData(sensorsApi.getLocations, [], 60000);
-  const currentLocation = dashboard?.monitoringStation?.location || '';
-  const availableLocations = useMemo(() => [...new Set([...(locations || []), currentLocation].filter(Boolean))].sort((a, b) => a.localeCompare(b)), [locations, currentLocation]);
-  const effectiveLocation = selectedLocation === null ? currentLocation : selectedLocation;
+  const { data: plots } = useApiData(monitoringSetupApi.getPlots, [], 60000);
+  const currentPlotId = String(dashboard?.monitoringStation?.activePlotId || '');
+  const effectivePlotId = selectedPlotId === null ? currentPlotId : selectedPlotId;
+  const selectedPlot = plots?.find((plot) => String(plot._id) === effectivePlotId);
 
   useEffect(() => {
-    if (dashboard && selectedLocation === null) setSelectedLocation(currentLocation);
-  }, [dashboard, currentLocation, selectedLocation]);
+    if (dashboard && selectedPlotId === null) setSelectedPlotId(currentPlotId);
+  }, [dashboard, currentPlotId, selectedPlotId]);
 
-const { data: history, error: historyError, refetch: refetchHistory } =
-    useApiData((token) => sensorsApi.getHistory(token, hours, effectiveLocation), [hours, effectiveLocation], 60000);
+  const { data: historyResult, error: historyError, refetch: refetchHistory } =
+    useApiData(async (token) => ({
+      plotId: effectivePlotId, hours,
+      rows: effectivePlotId ? await sensorsApi.getHistory(token, hours, '', effectivePlotId) : [],
+    }), [hours, effectivePlotId], 60000);
   const { data: logs, error: logsError, refetch: refetchLogs } =
     useApiData((token) => irrigationApi.getLogs(token, 500, hours), [hours], 60000);
 
@@ -49,7 +52,8 @@ const { data: history, error: historyError, refetch: refetchHistory } =
   // refetches; irrigation:log is a rare discrete event so it stays instant.
   useLiveRefetch(['sensor:reading', 'sensor:status'], refetchHistory);
   useLiveRefetch('irrigation:log', refetchLogs, 0);
-  const points = useMemo(() => history || [], [history]);
+  const points = useMemo(() => historyResult?.plotId === effectivePlotId && historyResult?.hours === hours
+    ? historyResult.rows : [], [historyResult, effectivePlotId, hours]);
 
   const labels = useMemo(() => points.map(point => hours <= 24
     ? new Date(point.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -92,9 +96,9 @@ const { data: history, error: historyError, refetch: refetchHistory } =
 
       {/* Header actions */}
       <div className={s.filterBar}>
-        <Select aria-label="Monitoring area" value={effectiveLocation} onChange={event => setSelectedLocation(event.target.value)}>
-          <option value="">All monitoring areas</option>
-          {availableLocations.map(location => <option key={location} value={location}>{location}</option>)}
+        <Select aria-label="Growing area" value={effectivePlotId} onChange={event => setSelectedPlotId(event.target.value)}>
+          {!effectivePlotId && <option value="">Choose a growing area</option>}
+          {plots?.map(plot => <option key={plot._id} value={plot._id}>{plot.name}</option>)}
         </Select>
         <div className={s.btnRow}>
           {ranges.map(r => (
@@ -105,7 +109,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
         </div>
       </div>
 
-      {effectiveLocation && <p className="mb-3 text-sm text-text-secondary">Showing readings recorded at <strong className="font-medium text-text-primary">{effectiveLocation}</strong>. Each point is an average of samples in that time period.</p>}
+      {effectivePlotId && <p className="mb-3 text-sm text-text-secondary">Showing readings saved for <strong className="font-medium text-text-primary">{selectedPlot?.name || 'this growing area'}</strong>. Each point is an average of samples in that time period.</p>}
 
       {/* pH / EC */}
       <div className={s.grid.twoCol}>
@@ -133,7 +137,7 @@ const { data: history, error: historyError, refetch: refetchHistory } =
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Watering time" subtitle="Minutes per day for the water pump and backup water line." />
+          <CardHeader title="Watering time" subtitle="Shared pump and backup line at the original watered area. This chart does not change with the area filter." />
           <CardBody>
             <IrrigationHistoryChart labels={irrigationData.labels} pump={irrigationData.pump} solenoid={irrigationData.solenoid} />
           </CardBody>

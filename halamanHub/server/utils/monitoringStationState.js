@@ -3,6 +3,9 @@ let snapshot = {
   location: '',
   plantProfileIds: [],
   monitoredPlantNames: [],
+  activePlotId: null,
+  wateredPlotId: null,
+  activeSince: null,
 };
 
 function setMonitoringStation(station, plants = []) {
@@ -11,6 +14,9 @@ function setMonitoringStation(station, plants = []) {
     location: station?.location || '',
     plantProfileIds: (station?.plantProfileIds || []).map((id) => String(id?._id || id)),
     monitoredPlantNames: plants.map((plant) => plant.name).filter(Boolean),
+    activePlotId: station?.activePlotId ? String(station.activePlotId) : null,
+    wateredPlotId: station?.wateredPlotId ? String(station.wateredPlotId) : null,
+    activeSince: station?.activeSince || null,
   };
   return getMonitoringStation();
 }

@@ -7,6 +7,7 @@ const { createAlertIfEnabled } = require('../utils/alerts');
 const { getIO } = require('../socket');
 const { setLiveReading, getLiveReading } = require('../utils/liveSensorState');
 const { getMonitoringStation } = require('../utils/monitoringStationState');
+const { assignmentForSample } = require('../utils/monitoringPlots');
 const { requireIotDevice } = require('../middleware/iotDevice');
 const { isShopConnected } = require('../config/connections');
 
@@ -16,10 +17,12 @@ const DEFAULT_WET = 60;
 const ZONE = 'Main System';
 const TANK_ZONE = 'Tank 1';
 const MAX_SAMPLE_AGE_MS = 24 * 60 * 60 * 1000;
+const MAX_FUTURE_SKEW_MS = 5 * 1000;
 
 function sampleDateFromPayload(value) {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0 || Math.abs(Date.now() - parsed) > MAX_SAMPLE_AGE_MS) return new Date();
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed < Date.now() - MAX_SAMPLE_AGE_MS
+      || parsed > Date.now() + MAX_FUTURE_SKEW_MS) return new Date();
   return new Date(parsed);
 }
 
@@ -41,16 +44,19 @@ async function publishIrrigationLogs(rows) {
   }
 }
 
-async function saveTelemetry(payload, receivedAt) {
+async function saveTelemetry(payload, receivedAt, assignment, sampledAt) {
   const { soil = {}, air = {}, watering = {}, water = {}, device, deviceBootId } = payload;
   const deviceId = device || 'ESP32-01';
   const bootId = typeof deviceBootId === 'string' ? deviceBootId.slice(0, 80) : '';
   const sequence = Number.isFinite(Number(payload.deviceSequence)) ? Number(payload.deviceSequence) : null;
   const deviceUptimeMs = Number.isFinite(Number(payload.deviceUptimeMs)) ? Number(payload.deviceUptimeMs) : null;
-  const sampledAt = sampleDateFromPayload(payload.sampledAtMs);
   const bufferDroppedSamples = Math.max(0, Number(payload.bufferDroppedSamples) || 0);
   const bufferRestartLossCount = Math.max(0, Number(payload.bufferRestartLossCount) || 0);
-  const station = getMonitoringStation();
+  const station = {
+    name: getMonitoringStation().name,
+    location: assignment?.plotName || '',
+    monitoredPlantNames: assignment?.monitoredPlantNames || [],
+  };
   const soilReadingValid = watering.soilReadingValid !== false;
   const tankReadingValid = watering.tankReadingValid !== false;
   const airReadingValid = air.readingValid !== false;
@@ -85,6 +91,7 @@ async function saveTelemetry(payload, receivedAt) {
     bufferRestartLossCount,
     monitoringStation: station.name,
     monitoringLocation: station.location,
+    plotId: assignment?.plotId || null,
     monitoredPlantNames: station.monitoredPlantNames,
     soilMoisture: soil.moisture,
     soilTemp: soil.temperature,
@@ -189,6 +196,7 @@ async function saveTelemetry(payload, receivedAt) {
       event.device = deviceId;
       event.moistureAtEvent = moisture;
       event.monitoringLocation = station.location;
+      event.plotId = assignment?.plotId || null;
       event.occurredAt = sampledAt;
     }
 
@@ -258,6 +266,13 @@ router.post('/', requireIotDevice, async (req, res) => {
   const bootId = typeof req.body.deviceBootId === 'string' ? req.body.deviceBootId.slice(0, 80) : '';
   const sequence = Number.isFinite(Number(req.body.deviceSequence)) ? Number(req.body.deviceSequence) : null;
   const sampledAt = sampleDateFromPayload(req.body.sampledAtMs);
+  const trustedTime = Number.isFinite(Number(req.body.sampledAtMs))
+    && Number(req.body.sampledAtMs) > 0
+    && Number(req.body.sampledAtMs) >= Date.now() - MAX_SAMPLE_AGE_MS
+    && Number(req.body.sampledAtMs) <= Date.now() + MAX_FUTURE_SKEW_MS;
+  let assignment;
+  try { assignment = await assignmentForSample(sampledAt, trustedTime); }
+  catch (error) { return res.status(503).json({ message: 'The laptop could not identify the growing area yet.' }); }
   const station = getMonitoringStation();
   const livePayload = {
     device: deviceId,
@@ -270,8 +285,9 @@ router.post('/', requireIotDevice, async (req, res) => {
     bufferDroppedSamples: Math.max(0, Number(req.body.bufferDroppedSamples) || 0),
     bufferRestartLossCount: Math.max(0, Number(req.body.bufferRestartLossCount) || 0),
     monitoringStation: station.name,
-    monitoringLocation: station.location,
-    monitoredPlantNames: station.monitoredPlantNames,
+    monitoringLocation: assignment?.plotName || '',
+    monitoredPlantNames: assignment?.monitoredPlantNames || [],
+    plotId: assignment?.plotId || null,
     sampledAt: sampledAt.toISOString(),
     gatewayReceivedAt: receivedAt.toISOString(),
     recordedAt: sampledAt,
@@ -290,7 +306,7 @@ router.post('/', requireIotDevice, async (req, res) => {
   }
 
   try {
-    const result = await saveTelemetry(req.body, receivedAt);
+    const result = await saveTelemetry(req.body, receivedAt, assignment, sampledAt);
     res.status(202).json({ status: result.duplicate ? 'already-saved' : 'saved', deviceSequence: result.sequence });
   } catch (error) {
     console.error('[Sensor data] Local history save failed; the ESP32 will keep and retry this sample:', error.message);

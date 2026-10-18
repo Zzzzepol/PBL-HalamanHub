@@ -4,7 +4,7 @@ const Sensor = require('../models/Sensor');
 const SensorReading = require('../models/SensorReading');
 const IrrigationSettings = require('../models/IrrigationSettings');
 const PlantProfile = require('../models/PlantProfile');
-const MonitoringStation = require('../models/MonitoringStation');
+const { ensureMonitoringPlots } = require('../utils/monitoringPlots');
 const { getSoilRecommendations, getPlantRecommendations } = require('../utils/soilRecommendations');
 const { getWaterQualityCategory, getPhStatus, getTankStatusInfo, getWaterQualityRecommendation } = require('../utils/waterQuality');
 
@@ -26,10 +26,10 @@ router.get('/summary', async (req, res) => {
     Sensor.find().select('type zone status value numericValue').lean(),
     SensorReading.findOne()
       .sort({ recordedAt: -1 })
-      .select('recordedAt tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout wateringEnabled deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
+      .select('recordedAt plotId tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout wateringEnabled deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
       .lean(),
     IrrigationSettings.findOne().select('mode wateringEnabled settingsVersion lockoutResetVersion deviceLastSeenAt bootstrapFromCloudPending').lean(),
-    MonitoringStation.findOne({ key: 'main' }).lean(),
+    ensureMonitoringPlots().then(({ station }) => station),
   ]);
 
   const readingAgeMs = latestReading?.recordedAt ? Date.now() - new Date(latestReading.recordedAt).getTime() : Infinity;
@@ -37,7 +37,10 @@ router.get('/summary', async (req, res) => {
   // The latest locally saved ESP32 sample is the source of truth for sensor
   // freshness. Local watering settings stay available without cloud access.
   const deviceOnline = sensorDataFresh;
-  const soilReadingFresh = sensorDataFresh && latestReading?.soilReadingValid !== false;
+  const readingFromActivePlot = latestReading?.plotId
+    && String(latestReading.plotId) === String(station?.activePlotId)
+    && new Date(latestReading.recordedAt) >= new Date(station?.activeSince);
+  const soilReadingFresh = Boolean(sensorDataFresh && readingFromActivePlot && latestReading?.soilReadingValid !== false);
   const tankReadingFresh = sensorDataFresh && latestReading?.tankReadingValid !== false;
   const airReadingFresh = sensorDataFresh && latestReading?.airReadingValid !== false;
 
@@ -107,6 +110,9 @@ router.get('/summary', async (req, res) => {
     monitoringStation: {
       name: station?.name || 'Main System',
       location: station?.location || '',
+      activePlotId: station?.activePlotId || null,
+      wateredPlotId: station?.wateredPlotId || null,
+      activeSince: station?.activeSince || null,
       monitoredPlants: profiles.map((profile) => ({ _id: profile._id, name: profile.name, category: profile.category })),
       usesSharedProbe: true,
     },

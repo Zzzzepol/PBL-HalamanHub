@@ -6,6 +6,7 @@ const SensorReading = require('../models/SensorReading');
 const IrrigationLog = require('../models/IrrigationLog');
 const log = require('../utils/logger');
 const { getLocalIrrigationSettings } = require('../utils/irrigationCloudSync');
+const { ensureMonitoringPlots } = require('../utils/monitoringPlots');
 const { requireShopDatabase } = require('../middleware/shopDatabase');
 const MANUAL_CONTROL_LEASE_MS = 5 * 60 * 1000;
 const DEVICE_ONLINE_WINDOW_MS = 15 * 1000;
@@ -84,6 +85,22 @@ router.put('/settings', requireWateringOperator, async (req, res) => {
     const settings = await getLocalIrrigationSettings();
 
     const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid, wateringEnabled } = req.body;
+    if (wateringEnabled === true || manualPump === true || manualSolenoid === true) {
+      const { station } = await ensureMonitoringPlots();
+      if (String(station.activePlotId) !== String(station.wateredPlotId)) {
+        return res.status(409).json({ message: 'This probe is in another growing area. Move it back to the watered area before turning watering on.' });
+      }
+      if (wateringEnabled === true) {
+        const latest = await SensorReading.findOne().sort({ recordedAt: -1 })
+          .select('plotId recordedAt soilReadingValid tankReadingValid').lean();
+        if (!latest?.plotId || String(latest.plotId) !== String(station.activePlotId)
+            || new Date(latest.recordedAt) < new Date(station.activeSince)
+            || Date.now() - new Date(latest.recordedAt).getTime() > DEVICE_ONLINE_WINDOW_MS
+            || latest.soilReadingValid === false || latest.tankReadingValid === false) {
+          return res.status(409).json({ message: 'Wait for a fresh soil and tank reading from the watered area before turning watering on.' });
+        }
+      }
+    }
 
     if (mode !== undefined && !['auto', 'manual'].includes(mode)) {
       return res.status(400).json({ message: 'Choose Auto or Manual mode.' });

@@ -64,11 +64,22 @@ missing by plant name and category between local profiles and the separate
 `cloudplantprofiles` collection in the cloud database. Matching profiles are
 left unchanged, including their soil targets. This collection is separate from
 shop Products, so a synced plant profile does not become a customer listing.
-Local profiles remain available without internet. In **Settings → Soil
-monitoring setup**, staff name the growing area and choose the plant profiles
-represented by the one shared soil probe. Dashboard comparisons use only those
-selected profiles. The readings are a representative sample for that area,
-not separate measurements for every plant.
+Local profiles remain available without internet. In **Growing areas**, staff
+name each bed and choose the plant profiles represented by the one shared soil
+probe. Dashboard comparisons use the profiles in the active area. The readings
+are a representative sample for that area, not separate measurements for
+every plant.
+
+**Growing areas** stores multiple named beds locally. Staff assign plant
+profiles to each area, then mark which area physically holds the one soil
+probe. Only that area is live; other areas show their last measured values and
+saved history. Before moving the probe, staff turn watering off and wait for
+the ESP32 to confirm both water outputs are off. The shared pump remains linked
+to the original area, so watering cannot be enabled while the probe is in a
+different area. Delayed USB readings are assigned using the time they were
+sampled, when the ESP32 has a valid laptop-synced clock; readings without a
+trustworthy sample time remain unassigned rather than being attributed to the
+wrong bed.
 
 To sell a locally saved plant, open **Products**. The page lists local plants
 that do not already match a shop product. Choose **Set up shop listing**, then
@@ -275,17 +286,17 @@ does not delete old history automatically.
 
 ## Daily operation checks
 
-Before using Auto watering for a new bed, open **Settings → Soil monitoring
-setup**. Set the monitoring station name and bed, select the plant profiles
-that the one probe represents, then work through the four field checks. Add a
-short note and the staff member is recorded automatically with each check.
-Moving the probe to a different bed or changing the selected plants clears the
-soil placement and reading checks so the new area is checked before relying on
-it.
+Before moving the soil probe, open **Watering** and turn the shared system off.
+Wait for the ESP32 to confirm the pump and backup line are off. Physically
+place the probe in the new bed, then open **Growing areas** and choose **Probe
+is now here**. Wait for a fresh reading before using that area's values. The
+other beds keep their last measurements and history. Turn watering back on only
+after moving the probe to the original watered bed and receiving a fresh soil
+and tank reading.
 
-The RS485 soil probe reports its own moisture, pH, EC, and NPK values. The setup
-page records that staff checked placement and readings against the probe's
-guide; it does not change the probe's built-in calibration. For watering
+The RS485 soil probe reports its own moisture, pH, EC, and NPK values. Compare
+its readings with the probe maker's guide or a known reference before relying
+on them; assigning a growing area does not calibrate the probe. For watering
 history, the admin saves pump run time and compares soil wetness before watering
 with the next Auto reading when the cycle finishes. This confirms the soil
 response, but does not confirm water flow unless a flow sensor is installed.

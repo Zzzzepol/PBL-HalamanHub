@@ -1,7 +1,9 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { requireAuth } = require('../middleware/auth');
 const Sensor = require('../models/Sensor');
 const SensorReading = require('../models/SensorReading');
+const MonitoringPlot = require('../models/MonitoringPlot');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -39,8 +41,19 @@ router.get('/history', async (req, res) => {
     const hours = Math.max(1, Math.min(requestedHours, 24 * 30)); // cap at 30 days
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
     const location = String(req.query.location || '').trim().slice(0, 120);
+    const plotId = String(req.query.plotId || '');
     const match = { recordedAt: { $gte: since } };
-    if (location) match.monitoringLocation = location;
+    if (plotId && !mongoose.isValidObjectId(plotId)) {
+      return res.status(400).json({ message: 'Choose a valid growing area.' });
+    }
+    if (plotId) {
+      const plot = await MonitoringPlot.findById(plotId).select('legacyKey legacyLocation').lean();
+      if (!plot) return res.status(404).json({ message: 'Growing area not found.' });
+      const current = { plotId: new mongoose.Types.ObjectId(plotId) };
+      match.$or = plot.legacyKey === 'main' && plot.legacyLocation
+        ? [current, { plotId: null, monitoringLocation: plot.legacyLocation }]
+        : [current];
+    } else if (location) match.monitoringLocation = location;
     const bucketCount = 600;
     const bucketMs = Math.max(2000, Math.floor((hours * 60 * 60 * 1000) / bucketCount));
     const readings = await SensorReading.aggregate([

@@ -2,6 +2,7 @@
 const express = require('express');
 const { requireIotDevice } = require('../middleware/iotDevice');
 const { getLocalIrrigationSettings } = require('../utils/irrigationCloudSync');
+const MonitoringStation = require('../models/MonitoringStation');
 
 const router = express.Router();
 
@@ -9,6 +10,9 @@ const router = express.Router();
 router.get('/', requireIotDevice, async (req, res) => {
   try {
     const settings = await getLocalIrrigationSettings();
+    const station = await MonitoringStation.findOne({ key: 'main' }).select('activePlotId wateredPlotId').lean();
+    const probeAtWateredArea = Boolean(station?.activePlotId && station?.wateredPlotId
+      && String(station.activePlotId) === String(station.wateredPlotId));
     if (settings.bootstrapFromCloudPending) {
       return res.status(503).json({ message: 'Review and save the local watering settings before sending them to the ESP32.' });
     }
@@ -41,9 +45,9 @@ router.get('/', requireIotDevice, async (req, res) => {
       mode: settings.mode,
       moistureDryThreshold: settings.moistureDryThreshold,
       moistureWetThreshold: settings.moistureWetThreshold,
-      manualPump: settings.manualPump,
-      manualSolenoid: settings.manualSolenoid,
-      wateringEnabled: settings.wateringEnabled !== false,
+      manualPump: probeAtWateredArea && settings.manualPump,
+      manualSolenoid: probeAtWateredArea && settings.manualSolenoid,
+      wateringEnabled: probeAtWateredArea && settings.wateringEnabled !== false,
       tankEmptyDistanceCm: settings.tankEmptyDistanceCm,
       tankFullDistanceCm: settings.tankFullDistanceCm,
       tankLowThresholdPercent: settings.tankLowThresholdPercent,

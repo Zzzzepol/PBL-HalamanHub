@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardBody, Button, Badge, PulseDot, RangeInput, Toggle, ConfirmDialog, ErrorState, LoadingSkeleton } from '../components/ui/UI';
 import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
@@ -43,8 +44,8 @@ const IrrigationPage = () => {
       const updated = await irrigationApi.updateSettings(patch, token);
       setSettings(updated);
       refetchSummary();
-    } catch {
-      setSaveError('We could not update the watering system. Please try again.');
+    } catch (error) {
+      setSaveError(error.message || 'We could not update the watering system. Please try again.');
     } finally { setChanging(false); }
   };
 
@@ -84,6 +85,9 @@ const IrrigationPage = () => {
   };
 
   const irrigation = summary?.irrigation;
+  const probeOutsideWateredArea = Boolean(summary?.monitoringStation?.activePlotId
+    && summary?.monitoringStation?.wateredPlotId
+    && String(summary.monitoringStation.activePlotId) !== String(summary.monitoringStation.wateredPlotId));
   const active = Boolean(irrigation?.deviceOnline && (irrigation?.pumpActive || irrigation?.solenoidActive));
   const manualActive = Boolean(settings?.manualPump || settings?.manualSolenoid);
   const stateLabel = !irrigation?.deviceOnline ? 'Waiting for the ESP32' : ({ IDLE: 'Watching the soil', WATERING: 'Watering', SOAKING: 'Letting water soak in', SAFETY_LOCKOUT: 'Paused for safety' })[irrigation?.state] || 'Waiting for the ESP32';
@@ -92,12 +96,13 @@ const IrrigationPage = () => {
     <div className="space-y-5">
       {(settingsError || logsError) && <ErrorState title="Watering information is not loading" description="Check your connection, then try again." onRetry={() => { refetchSettings(); refetchLogs(); }} />}
       {saveError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{saveError}</div>}
+      {probeOutsideWateredArea && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">The probe is assigned to another growing area. The shared pump and backup line stay off until the probe is back in the watered area. <Link className="font-medium underline" to="/growing-areas">View growing areas</Link>.</p>}
       {settings?.bootstrapFromCloudPending && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">This laptop has not imported older watering settings yet. Review the values below and save them to use local control now, or reconnect to import the cloud settings. The ESP32 keeps its last saved settings until then.</div>}
 
       <section className={`rounded-2xl border p-4 sm:p-5 ${settings?.wateringEnabled === false ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'}`} aria-live="polite">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3"><i className={`ti ${settings?.wateringEnabled === false ? 'ti-player-pause text-red-700' : 'ti-shield-check text-amber-800'} mt-0.5 text-2xl`} aria-hidden="true" /><div><h2 className="font-semibold text-text-primary">{settings?.wateringEnabled === false ? 'Watering is disabled.' : 'Watering system kill switch'}</h2><p className="mt-1 text-sm text-text-secondary">Stops both the pump and backup water line in Auto and Manual modes. It stays off until you turn it back on.</p>{settings?.wateringEnabled === false && (!irrigation?.deviceOnline || irrigation?.deviceWateringEnabled !== false) && <p className="mt-1 text-sm font-medium text-red-800">Waiting for the ESP32 to receive and confirm the stop command.</p>}</div></div>
-          <Toggle id="watering-enabled" checked={settings?.wateringEnabled !== false} onChange={() => setPendingWateringEnabled(settings?.wateringEnabled === false)} label={settings?.wateringEnabled === false ? 'Watering disabled' : 'Watering enabled'} disabled={settingsLoading || changing || !settings} />
+          <Toggle id="watering-enabled" checked={settings?.wateringEnabled !== false} onChange={() => setPendingWateringEnabled(settings?.wateringEnabled === false)} label={settings?.wateringEnabled === false ? 'Watering disabled' : 'Watering enabled'} disabled={settingsLoading || changing || !settings || (probeOutsideWateredArea && settings?.wateringEnabled === false)} />
         </div>
       </section>
 
@@ -129,9 +134,9 @@ const IrrigationPage = () => {
             </div>
             <div className={`space-y-3 ${settings?.mode !== 'manual' ? 'opacity-60' : ''}`}>
               <h3 className="font-semibold text-text-primary">Manual controls</h3>
-              <Toggle id="manual-pump" checked={Boolean(settings?.manualPump)} onChange={() => setPendingToggle('pump')} label="Water pump" disabled={settingsLoading || changing || settings?.wateringEnabled === false || settings?.mode !== 'manual' || (!settings?.manualPump && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
-              <Toggle id="manual-backup" checked={Boolean(settings?.manualSolenoid)} onChange={() => setPendingToggle('backup')} label="Backup water line" disabled={settingsLoading || changing || settings?.wateringEnabled === false || settings?.mode !== 'manual' || (!settings?.manualSolenoid && (!irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
-              {manualActive && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Manual controls turn off after five minutes. They also stop if the ESP32 loses its local connection.</p>{settings?.manualControlExpiresAt && <p className="mt-1">This command ends at {formatDateTime(settings.manualControlExpiresAt)}.</p>}<Button className="mt-2" size="sm" variant="outline" onClick={() => applySettingsPatch({ manualPump: Boolean(settings.manualPump), manualSolenoid: Boolean(settings.manualSolenoid) })} disabled={changing || !irrigation?.deviceOnline}>Extend for five minutes</Button></div>}
+              <Toggle id="manual-pump" checked={Boolean(settings?.manualPump)} onChange={() => setPendingToggle('pump')} label="Water pump" disabled={settingsLoading || changing || (!settings?.manualPump && (probeOutsideWateredArea || settings?.wateringEnabled === false || settings?.mode !== 'manual' || !irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
+              <Toggle id="manual-backup" checked={Boolean(settings?.manualSolenoid)} onChange={() => setPendingToggle('backup')} label="Backup water line" disabled={settingsLoading || changing || (!settings?.manualSolenoid && (probeOutsideWateredArea || settings?.wateringEnabled === false || settings?.mode !== 'manual' || !irrigation?.deviceOnline || !irrigation?.tankReadingFresh || irrigation?.lockout))} />
+              {manualActive && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p>Manual controls turn off after five minutes. They also stop if the ESP32 loses its local connection.</p>{settings?.manualControlExpiresAt && <p className="mt-1">This command ends at {formatDateTime(settings.manualControlExpiresAt)}.</p>}{!probeOutsideWateredArea && <Button className="mt-2" size="sm" variant="outline" onClick={() => applySettingsPatch({ manualPump: Boolean(settings.manualPump), manualSolenoid: Boolean(settings.manualSolenoid) })} disabled={changing || !irrigation?.deviceOnline}>Extend for five minutes</Button>}</div>}
               {settings?.mode !== 'manual' && <p className="text-sm text-text-secondary">Choose Manual mode to use these controls.</p>}
             </div>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><i className="ti ti-shield-check mr-1" aria-hidden="true" />The low-water safety switch still works in Manual mode. It stops the pump when the tank is empty.</p>
