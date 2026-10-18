@@ -703,9 +703,8 @@ void enterState(IrrigationState newState) {
   Serial.printf(">> Irrigation state -> %s (cycle %d/%d)\n", stateName(newState), g_currentCycle, MAX_CYCLES);
 }
 
-// Global safety switch — applies in BOTH auto and manual mode. Tank empty
-// mid-pump always forces the pump off and falls back to the solenoid line,
-// regardless of what the state machine or manual overrides want.
+// Stale tank readings stop both modes. Only Auto mode switches from the
+// pump to the backup line when the measured tank level is low.
 void enforceTankSafety() {
   if (!g_wateringEnabled) {
     if (pumpOn) { digitalWrite(RELAY_PUMP, RELAY_OFF); pumpOn = false; }
@@ -724,7 +723,7 @@ void enforceTankSafety() {
     return;
   }
 
-  if (pumpOn && !g_waterAvailable) {
+  if (g_mode == "auto" && pumpOn && !g_waterAvailable) {
     digitalWrite(RELAY_PUMP, RELAY_OFF);
     pumpOn = false;
     digitalWrite(RELAY_SOLENOID, RELAY_ON);
@@ -755,8 +754,8 @@ void updateManualIrrigation() {
   }
 
   const bool controlsAllowed = tankReadingFresh() && g_irrigationState != SAFETY_LOCKOUT;
-  bool wantPump     = controlsAllowed && g_manualPump && g_waterAvailable;
-  bool wantSolenoid = controlsAllowed && (g_manualSolenoid || (g_manualPump && !g_waterAvailable));
+  bool wantPump     = controlsAllowed && g_manualPump;
+  bool wantSolenoid = controlsAllowed && g_manualSolenoid;
 
   if (wantPump != pumpOn) {
     digitalWrite(RELAY_PUMP, wantPump ? RELAY_ON : RELAY_OFF);
