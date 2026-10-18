@@ -4,7 +4,7 @@
 // on every cycle to decide how to run the pump/solenoid.
 
 const mongoose = require('mongoose');
-const { shopConnection } = require('../config/connections');
+const { localConnection } = require('../config/connections');
 
 const irrigationSettingsSchema = new mongoose.Schema(
   {
@@ -45,10 +45,13 @@ const irrigationSettingsSchema = new mongoose.Schema(
     soakTimeSec:   { type: Number, default: 300, min: 30, max: 3600 }, // 30s–1hr wait
 
     updatedBy: { type: String, default: '' }, // admin name, for the activity log
+    // A first offline start may use local defaults. Import the old cloud
+    // settings on reconnection only if staff have not changed them locally.
+    bootstrapFromCloudPending: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
 irrigationSettingsSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = shopConnection.model('IrrigationSettings', irrigationSettingsSchema);
+module.exports = localConnection.model('IrrigationSettings', irrigationSettingsSchema);

@@ -6,10 +6,12 @@ This guide installs MongoDB Community Server on the laptop that runs HalamanHub.
 
 The server uses two MongoDB connections:
 
-- `IOT_MONGODB_URI` points to MongoDB on the laptop. Sensor records and local plant profiles are saved here so monitoring continues when the internet or cloud database is unavailable.
-- `SHOP_MONGODB_URI` points to the cloud database for accounts, products, orders, and other shop data. When this connection returns, the server automatically copies local sensor snapshots and sensor reading history to the cloud. Order data is not queued or copied.
+- `IOT_MONGODB_URI` points to MongoDB on the laptop. Sensor records, local plant profiles, watering settings, and watering history are saved here so monitoring and controls continue when the internet or cloud database is unavailable.
+- `SHOP_MONGODB_URI` points to the cloud database for accounts, products, orders, and other shop data. When this connection returns, the server automatically copies local sensor snapshots, sensor reading history, watering settings, and watering history to the cloud. Order data is not queued or copied.
 
 Admin and staff accounts are copied from the cloud database to the laptop as an offline login cache. Keep the server running while online so account changes can sync. Offline sign-in uses the last cached password and account status; order and other cloud-only actions still require internet access.
+
+The **Watering** and rain-tank calibration controls use local settings. A cached admin or staff account can change them while the internet is down, provided the local MongoDB, server, USB gateway, and ESP32 are running. On a new laptop, connect once to import older cloud watering settings. If the first start is offline, review and save the displayed local defaults before they are sent to the ESP32. The offline viewer account remains read-only.
 
 For a local database, use:
 
@@ -44,7 +46,7 @@ Keep `IOT_MONGODB_URI` pointed at the laptop database and set `SHOP_MONGODB_URI`
 4. Connect to the local database:
 
    ```sh
-   mongosh "mongodb://127.0.0.1:27017/halamanhub"
+   mongosh "mongodb://127.0.0.1:27017/halamanhub_iot"
    ```
 
    At the `mongosh` prompt, run:
@@ -110,7 +112,7 @@ brew services start mongodb-community@8.0
 5. Connect to MongoDB:
 
    ```powershell
-   mongosh "mongodb://127.0.0.1:27017/halamanhub"
+   mongosh "mongodb://127.0.0.1:27017/halamanhub_iot"
    ```
 
    At the `mongosh` prompt, run `db.runCommand({ ping: 1 })`. Look for `ok: 1`, then type `exit`.
@@ -164,7 +166,7 @@ The same command works in PowerShell. It skips collections that already contain 
 
    PowerShell uses the same command.
 
-3. Open <http://localhost:4000/api/health>. The API returns JSON with `"status":"ok"` when running. This endpoint confirms the API process is responding; it does not report the MongoDB connection state.
+3. Open <http://localhost:4000/api/health>. Check `databases.plant` for `connected`. The `databases.shop` value can be `unavailable` while local monitoring and watering still work.
 
 Use MongoDB Compass with `mongodb://127.0.0.1:27017` to browse the database and collections. Collections appear after seed data is added or the app first saves records.
 
@@ -175,7 +177,7 @@ Use MongoDB Compass with `mongodb://127.0.0.1:27017` to browse the database and 
 | Check MongoDB service | `brew services list` | `Get-Service MongoDB` |
 | Start MongoDB | `brew services start mongodb-community@8.0` | `Start-Service MongoDB` (Administrator) |
 | Stop MongoDB | `brew services stop mongodb-community@8.0` | `Stop-Service MongoDB` (Administrator) |
-| Connect with shell | `mongosh "mongodb://127.0.0.1:27017/halamanhub"` | `mongosh "mongodb://127.0.0.1:27017/halamanhub"` |
+| Connect with shell | `mongosh "mongodb://127.0.0.1:27017/halamanhub_iot"` | `mongosh "mongodb://127.0.0.1:27017/halamanhub_iot"` |
 
 Keep MongoDB connection strings and passwords in `server/.env`. Do not put them in `src/`, `mapili/`, or any other browser code.
 

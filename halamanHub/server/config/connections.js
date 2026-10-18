@@ -13,8 +13,8 @@ const shopConnection = shopUri && shopUri === localUri
   ? localConnection
   : mongoose.createConnection();
 
-// Keep application accounts, settings, alerts, and logs in the cloud. The
-// laptop database is reserved for ESP32 readings and local plant profiles.
+// Keep accounts, shop data, general settings, and alerts in the cloud.
+// The laptop owns ESP32 readings, plant profiles, and watering controls/history.
 const adminConnection = shopConnection;
 
 function isLocalConnected() {

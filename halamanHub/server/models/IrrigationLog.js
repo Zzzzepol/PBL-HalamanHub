@@ -4,7 +4,7 @@
 // actually turned on/off, and why.
 
 const mongoose = require('mongoose');
-const { shopConnection } = require('../config/connections');
+const { localConnection } = require('../config/connections');
 
 const irrigationLogSchema = new mongoose.Schema(
   {
@@ -42,4 +42,4 @@ irrigationLogSchema.index({ occurredAt: -1 });
 
 irrigationLogSchema.set('toJSON', { transform: (doc, ret) => { delete ret.__v; return ret; } });
 
-module.exports = shopConnection.model('IrrigationLog', irrigationLogSchema);
+module.exports = localConnection.model('IrrigationLog', irrigationLogSchema);

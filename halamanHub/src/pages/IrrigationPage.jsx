@@ -92,6 +92,7 @@ const IrrigationPage = () => {
     <div className="space-y-5">
       {(settingsError || logsError) && <ErrorState title="Watering information is not loading" description="Check your connection, then try again." onRetry={() => { refetchSettings(); refetchLogs(); }} />}
       {saveError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{saveError}</div>}
+      {settings?.bootstrapFromCloudPending && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">This laptop has not imported older watering settings yet. Review the values below and save them to use local control now, or reconnect to import the cloud settings. The ESP32 keeps its last saved settings until then.</div>}
 
       <section className={`rounded-2xl border p-4 sm:p-5 ${settings?.wateringEnabled === false ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'}`} aria-live="polite">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

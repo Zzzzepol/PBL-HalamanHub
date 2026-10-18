@@ -120,29 +120,26 @@ async function saveTelemetry(payload, receivedAt) {
   });
 
   let settings = null;
-  if (isShopConnected()) {
-    try {
-      settings = await IrrigationSettings.findOne();
-      if (settings && bootId && settings.deviceBootId !== bootId) {
-        // A new boot invalidates any manual-on command from the previous session.
-        settings.deviceBootId = bootId;
-        settings.deviceLastSeenAt = receivedAt;
-        settings.manualPump = false;
-        settings.manualSolenoid = false;
-        settings.manualControlExpiresAt = null;
-        settings.settingsVersion = (settings.settingsVersion || 0) + 1;
-        await settings.save();
-      } else {
-        await IrrigationSettings.updateOne(
-          {},
-          { $set: { deviceBootId: bootId, deviceLastSeenAt: receivedAt } },
-          { upsert: true, setDefaultsOnInsert: true }
-        );
-      }
-    } catch (error) {
-      console.warn('[Sensor data] Cloud irrigation settings update skipped:', error.message);
-      settings = null;
+  try {
+    settings = await IrrigationSettings.findOne();
+    if (settings && bootId && settings.deviceBootId !== bootId) {
+      // A new boot invalidates any manual-on command from the previous session.
+      settings.deviceBootId = bootId;
+      settings.deviceLastSeenAt = receivedAt;
+      settings.manualPump = false;
+      settings.manualSolenoid = false;
+      settings.manualControlExpiresAt = null;
+      settings.settingsVersion = (settings.settingsVersion || 0) + 1;
+      await settings.save();
+    } else if (settings) {
+      await IrrigationSettings.updateOne(
+        { _id: settings._id },
+        { $set: { deviceLastSeenAt: receivedAt } }
+      );
     }
+  } catch (error) {
+    console.warn('[Sensor data] Local irrigation settings update skipped:', error.message);
+    settings = null;
   }
 
   const dryThreshold = settings?.moistureDryThreshold ?? DEFAULT_DRY;
@@ -167,10 +164,8 @@ async function saveTelemetry(payload, receivedAt) {
     events.push({ source: 'SOLENOID', action: solenoidActive ? 'ON' : 'OFF', reason });
   }
 
-  // Persist the sensor sample locally even if Atlas is offline. Cloud-only
-  // irrigation history, settings, and alerts are best-effort side effects.
-  if (!isShopConnected()) return { duplicate: false, sequence, readingId: reading._id };
-
+  // Watering history and safety state stay local so the admin can control and
+  // review watering without the cloud. Alerts remain cloud-only.
   try {
     if ((watering.lockout === true || watering.manualCommandBlocked === true)
         && settings && (settings.manualPump || settings.manualSolenoid)) {
@@ -216,6 +211,8 @@ async function saveTelemetry(payload, receivedAt) {
         await publishIrrigationLogs([pendingPulse.toJSON()]);
       }
     }
+
+    if (!isShopConnected()) return { duplicate: false, sequence, readingId: reading._id };
 
     for (const event of events) {
       if (event.action !== 'ON') continue;

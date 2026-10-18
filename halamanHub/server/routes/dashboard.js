@@ -7,7 +7,6 @@ const PlantProfile = require('../models/PlantProfile');
 const MonitoringStation = require('../models/MonitoringStation');
 const { getSoilRecommendations, getPlantRecommendations } = require('../utils/soilRecommendations');
 const { getWaterQualityCategory, getPhStatus, getTankStatusInfo, getWaterQualityRecommendation } = require('../utils/waterQuality');
-const { isShopConnected } = require('../config/connections');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -29,16 +28,14 @@ router.get('/summary', async (req, res) => {
       .sort({ recordedAt: -1 })
       .select('recordedAt tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout wateringEnabled deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
       .lean(),
-    isShopConnected()
-      ? IrrigationSettings.findOne().select('mode wateringEnabled settingsVersion lockoutResetVersion deviceLastSeenAt').lean().catch(() => null)
-      : Promise.resolve(null),
+    IrrigationSettings.findOne().select('mode wateringEnabled settingsVersion lockoutResetVersion deviceLastSeenAt bootstrapFromCloudPending').lean(),
     MonitoringStation.findOne({ key: 'main' }).lean(),
   ]);
 
   const readingAgeMs = latestReading?.recordedAt ? Date.now() - new Date(latestReading.recordedAt).getTime() : Infinity;
   const sensorDataFresh = readingAgeMs <= 15000;
   // The latest locally saved ESP32 sample is the source of truth for sensor
-  // freshness. Cloud settings may be unavailable while the sensors are live.
+  // freshness. Local watering settings stay available without cloud access.
   const deviceOnline = sensorDataFresh;
   const soilReadingFresh = sensorDataFresh && latestReading?.soilReadingValid !== false;
   const tankReadingFresh = sensorDataFresh && latestReading?.tankReadingValid !== false;
@@ -162,7 +159,7 @@ router.get('/summary', async (req, res) => {
       lockout: latestReading?.lockout ?? false,
       settingsVersion: settings?.settingsVersion ?? 1,
       appliedSettingsVersion: latestReading?.appliedSettingsVersion ?? 0,
-      settingsApplied: deviceOnline && latestReading?.appliedSettingsVersion === (settings?.settingsVersion ?? 1),
+      settingsApplied: deviceOnline && !settings?.bootstrapFromCloudPending && latestReading?.appliedSettingsVersion === (settings?.settingsVersion ?? 1),
       lockoutResetVersion: settings?.lockoutResetVersion ?? 0,
       appliedLockoutResetVersion: latestReading?.appliedLockoutResetVersion ?? 0,
       lockoutResetApplied: deviceOnline && latestReading?.appliedLockoutResetVersion === (settings?.lockoutResetVersion ?? 0),

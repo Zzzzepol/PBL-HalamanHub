@@ -30,6 +30,7 @@ const reportRoutes = require('./routes/reports');
 
 const http = require('http');
 const { initSocket } = require('./socket');
+const { startIrrigationCloudSync } = require('./utils/irrigationCloudSync');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -89,8 +90,8 @@ app.use('/api/products', requireShopDatabase, productRoutes);
 app.use('/api/orders', requireShopDatabase, orderRoutes);
 app.use('/api/users', requireShopDatabase, userRoutes);
 app.use('/api/sensors', sensorRoutes);
-app.use('/api/irrigation/control', requireShopDatabase, irrigationControlRoutes);
-app.use('/api/irrigation', requireShopDatabase, irrigationRoutes);
+app.use('/api/irrigation/control', irrigationControlRoutes);
+app.use('/api/irrigation', irrigationRoutes);
 app.use('/api/alerts', requireShopDatabase, alertRoutes);
 app.use('/api/settings', requireShopDatabase, settingsRoutes);
 app.use('/api/logs', requireShopDatabase, logRoutes);
@@ -131,6 +132,7 @@ connectDB().then(async () => {
   checkSensorHealth();
   startSensorCloudSync();
   startAccountCloudSync();
+  startIrrigationCloudSync();
   setInterval(checkSensorHealth, 5 * 1000);  // surface a missing local device promptly
   setInterval(checkProductStock, 60 * 1000);  // check every minute
   server.listen(PORT, () => {

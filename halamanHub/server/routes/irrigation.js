@@ -5,16 +5,24 @@ const IrrigationSettings = require('../models/IrrigationSettings');
 const SensorReading = require('../models/SensorReading');
 const IrrigationLog = require('../models/IrrigationLog');
 const log = require('../utils/logger');
+const { getLocalIrrigationSettings } = require('../utils/irrigationCloudSync');
+const { requireShopDatabase } = require('../middleware/shopDatabase');
 const MANUAL_CONTROL_LEASE_MS = 5 * 60 * 1000;
 const DEVICE_ONLINE_WINDOW_MS = 15 * 1000;
 
 const router = express.Router();
 router.use(requireAuth);
+const requireWateringOperator = (req, res, next) => {
+  if (!['admin', 'staff'].includes(req.user?.role)) {
+    return res.status(403).json({ message: 'This account can view readings but cannot change watering.' });
+  }
+  next();
+};
 
 // ---- Zones ----
 
 // GET /api/irrigation/zones
-router.get('/zones', async (req, res) => {
+router.get('/zones', requireShopDatabase, async (req, res) => {
   try {
     const zones = await IrrigationZone.find().sort({ zoneId: 1 });
     res.json(zones);
@@ -24,7 +32,7 @@ router.get('/zones', async (req, res) => {
 });
 
 // PATCH /api/irrigation/zones/:zoneId/toggle
-router.patch('/zones/:zoneId/toggle', async (req, res) => {
+router.patch('/zones/:zoneId/toggle', requireWateringOperator, requireShopDatabase, async (req, res) => {
   try {
     const zone = await IrrigationZone.findOne({ zoneId: req.params.zoneId });
     if (!zone) return res.status(404).json({ message: 'Zone not found.' });
@@ -63,8 +71,7 @@ router.patch('/zones/:zoneId/toggle', async (req, res) => {
 // GET /api/irrigation/settings
 router.get('/settings', async (req, res) => {
   try {
-    let settings = await IrrigationSettings.findOne();
-    if (!settings) settings = await IrrigationSettings.create({});
+    const settings = await getLocalIrrigationSettings();
     res.json(settings);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -72,10 +79,9 @@ router.get('/settings', async (req, res) => {
 });
 
 // PUT /api/irrigation/settings
-router.put('/settings', async (req, res) => {
+router.put('/settings', requireWateringOperator, async (req, res) => {
   try {
-    let settings = await IrrigationSettings.findOne();
-    if (!settings) settings = await IrrigationSettings.create({});
+    const settings = await getLocalIrrigationSettings();
 
     const { moistureDryThreshold, moistureWetThreshold, mode, manualPump, manualSolenoid, wateringEnabled } = req.body;
 
@@ -107,6 +113,13 @@ router.put('/settings', async (req, res) => {
 
     if (moistureDryThreshold !== undefined) settings.moistureDryThreshold = moistureDryThreshold;
     if (moistureWetThreshold !== undefined) settings.moistureWetThreshold = moistureWetThreshold;
+    if (!Number.isFinite(Number(settings.moistureDryThreshold))
+        || !Number.isFinite(Number(settings.moistureWetThreshold))
+        || settings.moistureDryThreshold < 0
+        || settings.moistureDryThreshold >= settings.moistureWetThreshold
+        || settings.moistureWetThreshold > 100) {
+      return res.status(400).json({ message: 'Set the start wetness lower than the stop wetness.' });
+    }
     if (mode !== undefined) settings.mode = mode;
     if (manualPump !== undefined) settings.manualPump = manualPump;
     if (manualSolenoid !== undefined) settings.manualSolenoid = manualSolenoid;
@@ -143,12 +156,19 @@ router.put('/settings', async (req, res) => {
     if (tankEmptyDistanceCm !== undefined) settings.tankEmptyDistanceCm = tankEmptyDistanceCm;
     if (tankFullDistanceCm !== undefined) settings.tankFullDistanceCm = tankFullDistanceCm;
     if (tankLowThresholdPercent !== undefined) settings.tankLowThresholdPercent = tankLowThresholdPercent;
+    if (!Number.isFinite(Number(settings.tankEmptyDistanceCm))
+        || !Number.isFinite(Number(settings.tankFullDistanceCm))
+        || settings.tankFullDistanceCm < 0
+        || settings.tankEmptyDistanceCm <= settings.tankFullDistanceCm) {
+      return res.status(400).json({ message: 'The empty-tank distance must be greater than the full-tank distance.' });
+    }
 
     const { pumpOnTimeSec, soakTimeSec } = req.body;
     if (pumpOnTimeSec !== undefined) settings.pumpOnTimeSec = pumpOnTimeSec;
     if (soakTimeSec !== undefined) settings.soakTimeSec = soakTimeSec;
 
     settings.updatedBy = req.user.name;
+    settings.bootstrapFromCloudPending = false;
 
     await settings.save();
 
@@ -166,12 +186,13 @@ router.put('/settings', async (req, res) => {
 });
 
 // POST /api/irrigation/reset-lockout — one-shot command acknowledged by ESP32 telemetry.
-router.post('/reset-lockout', async (req, res) => {
+router.post('/reset-lockout', requireWateringOperator, async (req, res) => {
   try {
+    const current = await getLocalIrrigationSettings();
     const settings = await IrrigationSettings.findOneAndUpdate(
-      {},
-      { $inc: { lockoutResetVersion: 1, settingsVersion: 1 }, $set: { updatedBy: req.user.name } },
-      { new: true, upsert: true, runValidators: true }
+      { _id: current._id },
+      { $inc: { lockoutResetVersion: 1, settingsVersion: 1 }, $set: { updatedBy: req.user.name, bootstrapFromCloudPending: false } },
+      { new: true, runValidators: true }
     );
     await log({
       user: req.user.name,

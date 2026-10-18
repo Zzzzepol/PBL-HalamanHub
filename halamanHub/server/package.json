@@ -7,7 +7,7 @@
   "type": "commonjs",
   "scripts": {
     "serial-bridge": "node scripts/serialBridge.js",
-    "usb-gateway": "py scripts/python_usb_gateway.py",
+    "usb-gateway": "node scripts/runUsbGateway.js",
     "start": "node index.js",
     "dev": "node --watch index.js",
     "seed": "node scripts/seed.js",

@@ -1,15 +1,17 @@
 
 const express = require('express');
-const IrrigationSettings = require('../models/IrrigationSettings');
 const { requireIotDevice } = require('../middleware/iotDevice');
+const { getLocalIrrigationSettings } = require('../utils/irrigationCloudSync');
 
 const router = express.Router();
 
 // GET /api/irrigation/control
 router.get('/', requireIotDevice, async (req, res) => {
   try {
-    let settings = await IrrigationSettings.findOne();
-    if (!settings) settings = await IrrigationSettings.create({});
+    const settings = await getLocalIrrigationSettings();
+    if (settings.bootstrapFromCloudPending) {
+      return res.status(503).json({ message: 'Review and save the local watering settings before sending them to the ESP32.' });
+    }
 
     const bootId = String(req.get('x-device-boot-id') || '').slice(0, 80);
     let changed = false;

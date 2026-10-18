@@ -4,7 +4,7 @@ const { closeDBs, connectShopDatabase } = require('../config/db');
 const { isShopConnected } = require('../config/connections');
 const User = require('../models/User');
 const Settings = require('../models/Settings');
-const IrrigationSettings = require('../models/IrrigationSettings');
+const { getLocalIrrigationSettings, syncIrrigationData } = require('../utils/irrigationCloudSync');
 
 async function seedCloudAdmin() {
   await connectDB();
@@ -35,8 +35,9 @@ async function seedCloudAdmin() {
   }
 
   if (!(await Settings.findOne())) await Settings.create({});
-  if (!(await IrrigationSettings.findOne())) await IrrigationSettings.create({});
-  console.log('Cloud admin and irrigation settings are ready.');
+  await getLocalIrrigationSettings();
+  await syncIrrigationData();
+  console.log('Cloud admin and local watering settings are ready.');
 }
 
 seedCloudAdmin()
