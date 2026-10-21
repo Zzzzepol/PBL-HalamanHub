@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useApiData } from '../hooks/useApiData';
 import { irrigationApi, dashboardApi } from '../api/client';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
+import { formatTankDistance } from '../utils/tankDistance';
 
 const formatDateTime = (value) => value ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
 const reasonLabel = { auto_dry: 'Auto — soil is dry', auto_wet: 'Auto — soil is wet', manual: 'Manual', safety_tank_empty: 'Stopped — tank is empty' };
@@ -149,7 +150,7 @@ const IrrigationPage = () => {
             <p className="mt-1 text-sm text-text-secondary">Check the soil wetness and tank before changing the settings.</p>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border bg-bg-secondary p-4"><div className="text-sm text-text-secondary">Soil wetness</div><div className="mt-1 text-2xl font-semibold">{summary?.soilMoisture?.value ?? '—'}{summary?.soilMoisture?.value != null ? '%' : ''}</div></div>
-              <div className="rounded-xl border border-border bg-bg-secondary p-4"><div className="text-sm text-text-secondary">Water tank</div><div className="mt-1 text-2xl font-semibold">{summary?.waterTank?.percent != null ? `${summary.waterTank.percent}%` : summary?.waterTank?.tankStatus3Info?.label || '—'}</div></div>
+              <div className="rounded-xl border border-border bg-bg-secondary p-4"><div className="text-sm text-text-secondary">Distance to water</div><div className="mt-1 text-2xl font-semibold">{formatTankDistance(summary?.waterTank?.distanceCm) ?? '—'}</div><p className="mt-1 text-xs text-text-secondary">Measured from the sensor; smaller means fuller.</p></div>
             </div>
             <p className="mt-auto pt-5 text-sm text-text-secondary">{stateLabel}{irrigation?.deviceOnline && irrigation?.timeRemainingSec > 0 ? ` · ${irrigation.timeRemainingSec} seconds left` : ''}{irrigation?.deviceOnline && irrigation?.cycle > 0 ? ` · cycle ${irrigation.cycle}` : ''}</p>
           </CardBody>

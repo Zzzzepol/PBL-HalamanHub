@@ -26,7 +26,7 @@ router.get('/summary', async (req, res) => {
     Sensor.find().select('type zone status value numericValue').lean(),
     SensorReading.findOne()
       .sort({ recordedAt: -1 })
-      .select('recordedAt plotId tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout wateringEnabled deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
+      .select('recordedAt plotId distanceCm levelPercent waterAvailable tds tdsStable waterPh tankStatus pumpActive solenoidActive activeSource soilReadingValid tankReadingValid airReadingValid irrigationState irrigationCycle timeRemainingSec lockout wateringEnabled deviceBootId appliedSettingsVersion appliedLockoutResetVersion deviceSequence bufferDroppedSamples bufferRestartLossCount monitoringStation monitoringLocation monitoredPlantNames')
       .lean(),
     IrrigationSettings.findOne().select('mode wateringEnabled settingsVersion lockoutResetVersion deviceLastSeenAt bootstrapFromCloudPending').lean(),
     ensureMonitoringPlots().then(({ station }) => station),
@@ -125,8 +125,9 @@ router.get('/summary', async (req, res) => {
     temperature: { value: soilReadingFresh ? temperature?.numericValue ?? null : null, unit: '°C', status: soilReadingFresh ? temperature?.status : deviceOnline ? 'warning' : 'offline' },
     humidity: { value: airReadingFresh ? humidity?.numericValue ?? null : null, unit: '%', status: airReadingFresh ? humidity?.status : deviceOnline ? 'warning' : 'offline' },
     waterTank: {
-      available: tankReadingFresh && waterLevel?.status === 'ok',
-      percent: tankReadingFresh ? waterLevel?.numericValue ?? null : null,
+      available: tankReadingFresh && latestReading?.waterAvailable === true,
+      percent: tankReadingFresh ? latestReading?.levelPercent ?? null : null,
+      distanceCm: tankReadingFresh ? latestReading?.distanceCm ?? null : null,
       raw: tankReadingFresh ? waterLevel?.value ?? null : null,
       status: tankReadingFresh ? waterLevel?.status ?? 'offline' : deviceOnline ? 'warning' : 'offline',
       // Rainwater Harvesting additions

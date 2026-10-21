@@ -410,16 +410,14 @@ async function buildReportData(dataType, from, to) {
 
     const dataRows = rows.map((r) => [
       isoDate(r.recordedAt),
-      r.distanceCm,
-      r.levelPercent,
+      r.tankReadingValid !== false ? r.distanceCm : null,
       r.waterAvailable ? 'Yes' : 'No',
     ]);
 
     return {
       columns: [
         'Date/Time',
-        'Distance (cm)',
-        'Fill level (%)',
+        'Distance to water (cm)',
         'Water available',
       ],
       rows: dataRows,
@@ -447,7 +445,7 @@ async function buildReportData(dataType, from, to) {
     r.potassium,
     r.airTemp,
     r.airHumidity,
-    r.levelPercent,
+    r.tankReadingValid !== false ? r.distanceCm : null,
     r.pumpActive ? 'ON' : 'OFF',
     r.solenoidActive ? 'ON' : 'OFF',
   ]);
@@ -464,7 +462,7 @@ async function buildReportData(dataType, from, to) {
       'K',
       'Air temp (°C)',
       'Humidity (%)',
-      'Tank fill (%)',
+      'Distance to water (cm)',
       'Pump',
       'Solenoid',
     ],

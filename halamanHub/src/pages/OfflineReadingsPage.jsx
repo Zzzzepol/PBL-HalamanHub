@@ -6,6 +6,7 @@ import { socket } from '../socket';
 import { getSoilRecommendations } from '../utils/soilRecommendations';
 import { getWaterQualityCategory, getTankStatusInfo, getWaterQualityRecommendation } from '../utils/waterQuality';
 import { timeAgo } from '../utils/timeAgo';
+import { formatTankDistance } from '../utils/tankDistance';
 
 const PAGE_HOST = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const API_HOST = /^(localhost|127\.0\.0\.1|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|[a-z0-9-]+\.local)$/i.test(PAGE_HOST) ? PAGE_HOST : 'localhost';
@@ -70,7 +71,7 @@ const OfflineReadingsPage = () => {
 
   const needsAction = recommendations.filter(item => item.severity === 'high').length;
   const needsCheck = recommendations.filter(item => item.severity === 'medium').length;
-  const hasReadings = Boolean(reading && ((soilReadingValid && soil.moisture != null) || (tankReadingValid && watering.levelPercent != null) || (airReadingValid && air.temperature != null)));
+  const hasReadings = Boolean(reading && ((soilReadingValid && soil.moisture != null) || (tankReadingValid && formatTankDistance(watering.distanceCm) != null) || (airReadingValid && air.temperature != null)));
   const overallStatus = !hasReadings ? 'none' : needsAction ? 'action' : needsCheck ? 'check' : 'good';
   const wateringNow = Boolean(deviceOnline && (watering.pumpActive || watering.solenoidActive));
 
@@ -100,7 +101,7 @@ const OfflineReadingsPage = () => {
         <section aria-label="Key readings">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <BigStat icon="ti-droplet" label="Soil wetness" value={!soilReadingValid ? 'Not updated' : soil.moisture ?? '—'} unit={soilReadingValid && soil.moisture != null ? '%' : ''} status={!soilReadingValid ? 'check' : soil.moisture == null ? 'none' : 'good'} />
-            <BigStat icon="ti-glass-full" label="Water tank" value={!tankReadingValid ? 'Not updated' : watering.levelPercent != null ? watering.levelPercent : tankStatus.label} unit={tankReadingValid && watering.levelPercent != null ? '%' : ''} status={!tankReadingValid ? 'check' : watering.levelPercent == null ? 'none' : statusFromSeverity(tankStatus.tone === 'ok' ? 'ok' : tankStatus.tone === 'warning' ? 'medium' : tankStatus.tone === 'error' ? 'high' : 'low')} />
+            <BigStat icon="ti-glass-full" label="Distance to water" value={!tankReadingValid ? 'Not updated' : formatTankDistance(watering.distanceCm) ?? '—'} status={!tankReadingValid ? 'check' : formatTankDistance(watering.distanceCm) == null ? 'none' : statusFromSeverity(tankStatus.tone === 'ok' ? 'ok' : tankStatus.tone === 'warning' ? 'medium' : tankStatus.tone === 'error' ? 'high' : 'low')} />
             <BigStat icon="ti-droplet" label="Watering now" value={!deviceOnline ? 'No signal' : wateringNow ? 'On' : 'Off'} status={!deviceOnline ? 'none' : 'good'} />
             <BigStat icon="ti-temperature" label="Temperature & humidity" value={!airReadingValid ? 'Not updated' : `${air.temperature ?? '—'}${air.temperature != null ? '°C' : ''} · ${air.humidity ?? '—'}${air.humidity != null ? '%' : ''}`} status={!airReadingValid ? 'check' : air.temperature == null && air.humidity == null ? 'none' : 'good'} />
           </div>

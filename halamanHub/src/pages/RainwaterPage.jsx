@@ -8,6 +8,7 @@ import * as ps from './pageStyles';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
 import { getWaterQualityRecommendation } from '../utils/waterQuality';
 import { timeAgo } from '../utils/timeAgo';
+import { formatTankDistance } from '../utils/tankDistance';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 
@@ -38,7 +39,7 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
 
   const [emptyDist, setEmptyDist] = useState(100);
   const [fullDist, setFullDist] = useState(10);
-  const [lowThreshold, setLowThreshold] = useState(20);
+  const [lowThresholdCm, setLowThresholdCm] = useState(82);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -46,7 +47,8 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
     if (settings) {
       setEmptyDist(settings.tankEmptyDistanceCm);
       setFullDist(settings.tankFullDistanceCm);
-      setLowThreshold(settings.tankLowThresholdPercent);
+      setLowThresholdCm(Math.round((settings.tankEmptyDistanceCm
+        - (settings.tankLowThresholdPercent / 100) * (settings.tankEmptyDistanceCm - settings.tankFullDistanceCm)) * 10) / 10);
     }
   }, [settings]);
 
@@ -58,23 +60,23 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         ? new Date(p.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : new Date(p.recordedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
     ),
-    values: points.map(p => p.levelPercent ?? null),
+    values: points.map(p => p.distanceCm == null ? null : Number(p.distanceCm.toFixed(1))),
   }), [points, hours]);
 
-  const availablePct = useMemo(() => {
-    if (points.length === 0) return null;
-    const availableCount = points.filter(p => p.waterAvailable).length;
-    return Math.round((availableCount / points.length) * 100);
-  }, [points]);
-
   const saveCalibration = async () => {
+    if (emptyDist <= fullDist) {
+      alert('The empty distance must be greater than the full distance.');
+      return;
+    }
     setSaving(true);
     setSaved(false);
     try {
+      const tankLowThresholdPercent = Number(Math.max(0, Math.min(100,
+        ((emptyDist - lowThresholdCm) / (emptyDist - fullDist)) * 100)).toFixed(2));
       const updated = await irrigationApi.updateSettings({
         tankEmptyDistanceCm: emptyDist,
         tankFullDistanceCm: fullDist,
-        tankLowThresholdPercent: lowThreshold,
+        tankLowThresholdPercent,
       }, token);
       setSettings(updated);
       setSaved(true);
@@ -107,8 +109,8 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
 
       {/* Stats */}
       <div className={ps.grid.stats4}>
-        <StatCard icon="ti-gauge" iconVariant="blue" value={summary?.waterTank.percent != null ? `${summary.waterTank.percent}%` : '—'} label="Tank level" />
-        <StatCard icon="ti-chart-line" iconVariant="teal" value={availablePct != null ? `${availablePct}%` : '—'} label={`Water available (${range})`} />
+        <StatCard icon="ti-gauge" iconVariant="blue" value={formatTankDistance(summary?.waterTank?.distanceCm) ?? '—'} label="Distance to water" />
+        <StatCard icon="ti-chart-line" iconVariant="teal" value={summary?.irrigation?.tankReadingFresh ? summary?.waterTank?.available ? 'Yes' : 'No' : '—'} label="Tank above low-water point" />
         <StatCard icon="ti-clock" iconVariant="amber" value={timeAgo(summary?.irrigation?.lastUpdated)} label="Last updated" />
       </div>
 
@@ -133,7 +135,7 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         </Card>
 
         <Card>
-          <CardHeader title="Tank level" subtitle="The level is Low, Medium, or Full." />
+          <CardHeader title="Estimated tank status" subtitle="Low, Medium, or Full based on the saved tank settings." />
           <CardBody>
             <div className="mb-3 flex flex-wrap items-center gap-2"><StatusBadge status={summary?.waterTank.tankStatus3Info?.tone === 'ok' ? 'good' : summary?.waterTank.tankStatus3Info?.tone === 'warning' ? 'check' : summary?.waterTank.tankStatus3Info?.tone === 'error' ? 'action' : 'none'} /><span className="text-sm text-text-secondary">Tank level: {summary?.waterTank.tankStatus3Info?.label || 'No data'}</span></div>
             <div className="flex gap-1.5">
@@ -188,8 +190,8 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         {/* Trend */}
         <Card>
           <CardHeader
-            title="Tank fill level trend"
-            subtitle="Shows how full the tank is based on its sensor readings."
+            title="Distance to water over time"
+            subtitle="Measured from the sensor in cm. A smaller distance means a fuller tank."
             actions={
               <div className={ps.btnRow}>
               {['24h', '7d', '30d'].map((r, index) => (
@@ -209,35 +211,35 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
         <details className="overflow-hidden rounded-xl border border-border bg-bg-primary">
           <summary className="min-h-12 cursor-pointer px-4 py-3 font-semibold text-text-primary">Advanced tank settings</summary>
           <div className="border-t border-border p-4">
-            <p className="mb-4 text-sm text-text-secondary">Adjust these only if the sensor is moved or the tank changes.</p>
+            <p className="mb-4 text-sm text-text-secondary">Set the measured distances and the point where tank water is too low for the pump.</p>
             <RangeInput
               label="Distance reading when tank is EMPTY"
-              min={0} max={300} unit="cm"
+              min={Number((fullDist + 0.1).toFixed(1))} max={300} step={0.1} unit="cm"
               value={emptyDist}
-              onChange={setEmptyDist}
+              onChange={value => { setEmptyDist(value); setLowThresholdCm(current => Math.min(value, Math.max(fullDist, current))); }}
             />
             <RangeInput
               label="Distance reading when tank is FULL"
-              min={0} max={300} unit="cm"
+              min={0} max={Number((emptyDist - 0.1).toFixed(1))} step={0.1} unit="cm"
               value={fullDist}
-              onChange={setFullDist}
+              onChange={value => { setFullDist(value); setLowThresholdCm(current => Math.max(value, Math.min(emptyDist, current))); }}
             />
             <RangeInput
-              label="Low-water safety threshold"
-              min={0} max={100} unit="%"
-              value={lowThreshold}
-              onChange={setLowThreshold}
+              label="Use backup line when distance reaches"
+              min={fullDist} max={emptyDist} step={0.1} unit="cm"
+              value={lowThresholdCm}
+              onChange={setLowThresholdCm}
             />
             <Button variant="primary" className="w-full justify-center mt-2" onClick={saveCalibration} disabled={saving}>
               {saving ? 'Saving…' : 'Save tank settings'}
             </Button>
             {saved && (
               <div className="mt-2 text-sm text-green-800 flex items-center gap-1.5" role="status">
-                <i className="ti ti-check" aria-hidden="true" /> Saved. New tank readings will use these settings.
+                <i className="ti ti-check" aria-hidden="true" /> Saved. Tank safety and estimated status will use these settings.
               </div>
             )}
             <div className="text-sm text-text-secondary mt-3">
-              Measure from the sensor to the tank bottom when it is empty. Then measure to the water surface when the tank is full.
+              Measure from the sensor to the tank bottom when it is empty, then to the water surface when full. The measured distance shown above does not depend on these settings.
             </div>
           </div>
         </details>
@@ -246,7 +248,7 @@ const { data: summary, error: summaryError, refetch: refetchSummary } = useApiDa
       <div className="text-sm text-text-secondary mt-2 flex items-start gap-1.5">
         <i className="ti ti-info-circle flex-shrink-0 mt-0.5" aria-hidden="true" />
         <span>
-          The tank level is an estimate based on the sensor.
+          The distance in cm is measured from the ultrasonic sensor to the water surface. A smaller number means more water. Low, Medium, and Full are estimates based on the saved tank settings.
         </span>
       </div>
     </div>

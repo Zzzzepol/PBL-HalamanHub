@@ -258,7 +258,7 @@ export const EmptyState = ({ icon = 'ti-inbox', title, description, action }) =>
 );
 
 /* ── Range input with label ── */
-export const RangeInput = ({ label, min, max, value, onChange, unit = '' }) => (
+export const RangeInput = ({ label, min, max, value, onChange, unit = '', step = 1 }) => (
   <div className="flex flex-col gap-1.5 mb-3.5">
     <div className="flex justify-between items-center">
       <span className="text-sm text-text-secondary">{label}</span>
@@ -270,6 +270,7 @@ export const RangeInput = ({ label, min, max, value, onChange, unit = '' }) => (
         type="range"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
         className="flex-1 accent-green-600"

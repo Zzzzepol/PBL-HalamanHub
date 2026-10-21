@@ -6,6 +6,7 @@ import { useApiData } from '../hooks/useApiData';
 import { dashboardApi, sensorsApi, alertsApi } from '../api/client';
 import { useLiveRefetch } from '../hooks/useLiveRefetch';
 import { timeAgo } from '../utils/timeAgo';
+import { formatTankDistance } from '../utils/tankDistance';
 
 const RANGE_HOURS = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
 const severityOrder = { high: 0, medium: 1, low: 2, ok: 3 };
@@ -341,7 +342,7 @@ const DashboardPage = () => {
       <section aria-labelledby="other-readings-title">
         <div className="mb-3"><h2 id="other-readings-title" className="text-lg font-semibold text-text-primary">Water and air</h2><p className="text-sm text-text-secondary">Other readings for your nursery.</p></div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <BigStat icon="ti-glass-full" label="Water tank" value={summary?.waterTank?.percent ?? summary?.waterTank?.tankStatus3Info?.label ?? '—'} unit={summary?.waterTank?.percent != null ? '%' : ''} status={tankStatus} />
+          <BigStat icon="ti-glass-full" label="Distance to water" value={formatTankDistance(summary?.waterTank?.distanceCm) ?? '—'} status={tankStatus} />
           <BigStat icon="ti-droplet" label="Watering now" value={!irrigation?.deviceOnline ? 'No signal' : wateringActive ? 'On' : 'Off'} status={!irrigation?.deviceOnline ? 'none' : 'good'} />
           <BigStat icon="ti-temperature" label="Temperature & humidity" value={`${summary?.temperature?.value ?? '—'}${summary?.temperature?.value != null ? '°C' : ''} · ${summary?.humidity?.value ?? '—'}${summary?.humidity?.value != null ? '%' : ''}`} status={statusFromTone(summary?.temperature?.status || summary?.humidity?.status)} />
         </div>

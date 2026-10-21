@@ -65,6 +65,8 @@ async function saveTelemetry(payload, receivedAt, assignment, sampledAt) {
   const waterAvailable = tankReadingValid && watering.tankWaterLevel === 'OK';
   const levelPercent = watering.levelPercent;
   const distanceCm = watering.distanceCm;
+  const validDistanceCm = tankReadingValid && Number.isFinite(Number(distanceCm)) && Number(distanceCm) > 0
+    ? Number(distanceCm) : null;
 
   if (sequence !== null && bootId) {
     const duplicate = await SensorReading.findOne({ device: deviceId, deviceBootId: bootId, deviceSequence: sequence }).select('_id').lean();
@@ -80,7 +82,7 @@ async function saveTelemetry(payload, receivedAt, assignment, sampledAt) {
     upsertSensor('LIVE-004', 'pH', ZONE, `${soil.ph ?? 0}`, soil.ph, deviceId, soilReadingValid ? 'ok' : 'warning', sampledAt),
     upsertSensor('LIVE-005', 'NPK', ZONE, `N:${soil.nitrogen ?? 0} P:${soil.phosphorus ?? 0} K:${soil.potassium ?? 0}`, undefined, deviceId, soilReadingValid ? 'ok' : 'warning', sampledAt),
     upsertSensor('LIVE-006', 'Humidity', ZONE, `${air.humidity ?? 0}%`, air.humidity, deviceId, airReadingValid ? 'ok' : 'warning', sampledAt),
-    upsertSensor('LIVE-007', 'Water level', TANK_ZONE, `${levelPercent ?? 0}%`, levelPercent, deviceId, !tankReadingValid || !waterAvailable ? 'warning' : 'ok', sampledAt),
+    upsertSensor('LIVE-007', 'Water level', TANK_ZONE, validDistanceCm === null ? '—' : `${validDistanceCm.toFixed(1)} cm`, validDistanceCm, deviceId, validDistanceCm === null || !waterAvailable ? 'warning' : 'ok', sampledAt),
   ]);
 
   const reading = await SensorReading.create({
@@ -242,7 +244,7 @@ async function saveTelemetry(payload, receivedAt, assignment, sampledAt) {
     if (!waterAvailable && (prevWaterAvailable == null || prevWaterAvailable === true)) {
       createAlertIfEnabled('waterTank', {
         type: 'error', icon: 'ti-alert-triangle',
-        message: `Water tank level is low${levelPercent != null ? ` (${levelPercent}%)` : ''} — watering may use the backup line.`,
+        message: `Water tank level is low${validDistanceCm != null ? ` (sensor-to-water distance ${validDistanceCm.toFixed(1)} cm)` : ''} — watering may use the backup line.`,
       }).catch((error) => console.warn('[Sensor alerts] Tank alert skipped:', error.message));
     }
   } catch (error) {

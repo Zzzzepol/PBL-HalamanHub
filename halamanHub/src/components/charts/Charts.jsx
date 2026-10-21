@@ -114,12 +114,12 @@ export const ECTrendChart = ({ labels, values, height = 110 }) => (
 );
 
 
-/* ── Water Tank Level (fill %) ── */
+/* ── Ultrasonic distance from sensor to water (cm) ── */
 export const WaterLevelTrendChart = ({ labels, values, height = 160 }) => (
   <div style={{ height, position: 'relative' }}>
     <Line
-      data={{ labels, datasets: [lineDataset('Tank fill level', values, COLORS.blue, true)] }}
-      options={baseOptions(null, 0, 100, v => v + '%')}
+      data={{ labels, datasets: [lineDataset('Distance to water (cm)', values, COLORS.blue, true)] }}
+      options={baseOptions('Distance (cm)', 0, undefined, v => `${v} cm`)}
     />
   </div>
 );
